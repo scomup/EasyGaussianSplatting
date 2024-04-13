@@ -1,4 +1,4 @@
-# Simple gaussian splatting
+# Simple Gaussian Splatting
 
 ## What is this? 
 
@@ -9,12 +9,12 @@ for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-ga
 ## Overview 
 
 * Detailed documentation to demonstrate the mathematical principles of 3D Gaussian Splatting
-    - [x] [Documentation for forward (render iamge)](docs/forward.pdf)
+    - [x] [Documentation for forward (render image)](docs/forward.pdf)
     - [ ] Documentation for backword (training)
 
 - Based on our the documentation, re-implement 3D Gaussian Splatting.
-    - [x] forward process
-    - [ ] backword process
+    - [x] forward (render image)
+    - [ ] backword (training)
 
 - Provide tools for learning 3D Gaussian Splatting.
     - [x] a simple viewer based on pyqtgraph for showing 3D Gaussian data (trained model). 
