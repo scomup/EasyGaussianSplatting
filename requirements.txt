@@ -1,0 +1,6 @@
+numpy
+matplotlib
+pyqt5
+pyqtgraph
+pyopengl
+plyfile

@@ -1,0 +1,5 @@
+*.pyc
+*.egg-info
+*.so
+*/build/*
+.vscode/settings.json

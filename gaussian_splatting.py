@@ -1,0 +1,223 @@
+from read_ply import *
+import matplotlib.pyplot as plt
+import numpy as np
+import time
+import math
+
+
+BLOCK = 16
+# https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
+SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
+SH_C1_0 = -0.4886025119029199  # Y1,-1: sqrt(3/(4*pi))       minus
+SH_C1_1 = 0.4886025119029199   # Y1,0:  sqrt(3/(4*pi))       plus
+SH_C1_2 = -0.4886025119029199  # Y1,1:  sqrt(3/(4*pi))       minus
+SH_C2_0 = 1.0925484305920792   # Y2,-2: 1/2 * sqrt(15/pi)    plus
+SH_C2_1 = -1.0925484305920792  # Y2,-1: 1/2 * sqrt(15/pi)    minus
+SH_C2_2 = 0.31539156525252005  # Y2,0:  1/4*sqrt(5/pi)       plus
+SH_C2_3 = -1.0925484305920792  # Y2,1:  1/4*sqrt(5/pi)       minus
+SH_C2_4 = 0.5462742152960396   # Y2,2:  1/4*sqrt(5/pi)       plus
+SH_C3_0 = -0.5900435899266435  # Y3,-3: 1/4*sqrt(5/pi)       minus
+SH_C3_1 = 2.890611442640554    # Y3,-2: 1/2*sqrt(105/pi)     plus
+SH_C3_2 = -0.4570457994644658  # Y3,-1: 1/4*sqrt(21/(2*pi))  minus
+SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
+SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
+SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
+SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(5/pi)       minus
+
+def sh2color(sh, ray_dir):
+    sh_dim = sh.shape[1]
+    color = SH_C0_0 * sh[:, 0:3]
+
+    if (sh_dim > 3):
+        x = ray_dir[:, 0][:, np.newaxis]
+        y = ray_dir[:, 1][:, np.newaxis]
+        z = ray_dir[:, 2][:, np.newaxis]
+        color = color + \
+            SH_C1_0 * y * sh[:, 3:6] + \
+            SH_C1_1 * z * sh[:, 6:9] + \
+            SH_C1_2 * x * sh[:, 9:12]
+
+        if (sh_dim > 12):
+            xx = x * x
+            yy = y * y
+            zz = z * z
+            xy = x * y
+            yz = y * z
+            xz = x * z
+            color = color + \
+                SH_C2_0 * xy * sh[:, 12:15] + \
+                SH_C2_1 * yz * sh[:, 15:18] + \
+                SH_C2_2 * (2.0 * zz - xx - yy) * sh[:, 18:21] + \
+                SH_C2_3 * xz * sh[:, 21:24] + \
+                SH_C2_4 * (xx - yy) * sh[:, 24:27]
+            if (sh_dim > 27):
+                color = color +  \
+                    SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
+                    SH_C3_1 * xy * z * sh[:, 30:33] + \
+                    SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
+                    SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
+                    SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
+                    SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
+                    SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
+        color = color + 0.5
+    return color
+
+
+def compute_cov_3d(scale, rot):
+    # Create scaling matrix
+    S = np.zeros([scale.shape[0], 3, 3])
+    S[:, 0, 0] = scale[:, 0]
+    S[:, 1, 1] = scale[:, 1]
+    S[:, 2, 2] = scale[:, 2]
+
+    # Normalize quaternion to get valid rotation
+    q = rot
+    w = q[:, 0]
+    x = q[:, 1]
+    y = q[:, 2]
+    z = q[:, 3]
+
+    # Compute rotation matrix from quaternion
+    R = np.array([
+        [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
+        [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
+        [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
+    ]).transpose(2, 0, 1)
+    M = R @ S
+
+    # Compute 3D world covariance matrix Sigma
+    Sigma = M @ M.transpose(0, 2, 1)
+
+    return Sigma
+
+
+def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
+    x = pc[:, 0]
+    y = pc[:, 1]
+    z = pc[:, 2]
+
+    J = np.zeros([pc.shape[0], 3, 3])
+    z2 = z * z
+    J[:, 0, 0] = focal_x / z
+    J[:, 0, 2] = -(focal_x * x) / z2
+    J[:, 1, 1] = focal_y / z
+    J[:, 1, 2] = -(focal_y * y) / z2
+
+    W = Rcw
+    T = J @ W
+
+    cov2d = T @ cov3d @ T.transpose(0, 2, 1)
+    cov2d[:, 0, 0] += 0.3
+    cov2d[:, 1, 1] += 0.3
+    return cov2d[:, 0:2, 0:2]
+
+
+def focal2fov(focal, pixels):
+    return 2*math.atan(pixels/(2*focal))
+
+
+def get_splatting_info(pc, K, cov2d, grid):
+    pc_proj = (K @ pc.T).T
+    pc_proj /= pc_proj[:, 2][:, np.newaxis]
+
+    det_inv = 1. / (cov2d[:, 0, 0] * cov2d[:, 1, 1] - cov2d[:, 0, 1] * cov2d[:, 0, 1] + 0.000001)
+    cov2d_inv = np.array([cov2d[:, 1, 1] * det_inv, -cov2d[:, 0, 1] * det_inv, cov2d[:, 0, 0] * det_inv]).T
+
+    areas = 3 * np.sqrt(np.vstack([cov2d[:, 0, 0], cov2d[:, 1, 1]])).T
+    u = pc_proj[:, :2]
+    return u, areas, cov2d_inv
+
+
+def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
+    image = np.zeros([H, W, 3])
+    image_T = np.ones([H, W])
+
+    start = time.time()
+
+    # sort by depth
+    sort_idx = np.argsort(depth)
+
+    idx_map = np.array((np.meshgrid(np.arange(0, W), np.arange(0, H))))
+    win_size = np.array([W, H])
+
+    for j, i in enumerate(sort_idx):
+        if (j % 100000 == 0):
+            print("processing... %3.f%%" % (j / float(us.shape[0]) * 100.))
+
+        if (depth[i] < 0.2 or depth[i] > 100):
+            continue
+
+        u = us[i]
+        if (np.any(np.abs(u / win_size) > 1.3)):
+            continue
+
+        r = areas[i]
+        x0 = int(np.maximum(np.minimum(u[0] - r[0], W), 0))
+        x1 = int(np.maximum(np.minimum(u[0] + r[0], W), 0))
+        y0 = int(np.maximum(np.minimum(u[1] - r[1], H), 0))
+        y1 = int(np.maximum(np.minimum(u[1] + r[1], H), 0))
+
+        if ((x1 - x0) * (y1 - y0) == 0):
+            continue
+
+        cinv = cov2d_inv[i]
+        opa = opacity[i]
+        patch_color = color[i]
+
+        d = u[:, np.newaxis, np.newaxis] - idx_map[:, y0:y1, x0:x1]
+        # mahalanobis distance
+        maha_dist = cinv[0] * d[0] * d[0] + cinv[2] * d[1] * d[1] + 2 * cinv[1] * d[0] * d[1]
+        patch_alpha = np.exp(-0.5 * maha_dist) * opa
+        patch_alpha[patch_alpha > 0.99] = 0.99
+
+        # draw inverse gaussian
+        # th = 0.7
+        # patch_alpha = np.exp(power)
+        # patch_alpha[patch_alpha <= th] = 0
+        # patch_alpha[patch_alpha > th] = (1 - patch_alpha[patch_alpha > th])
+
+        T = image_T[y0:y1, x0:x1]
+        image[y0:y1, x0:x1, :] += (patch_alpha * T)[:, :, np.newaxis] * patch_color
+        image_T[y0:y1, x0:x1] = T * (1 - patch_alpha)
+
+        # from matplotlib import pyplot as plt
+        # plt.imshow(image)
+        # plt.savefig('foo%d.png' % j)
+
+    end = time.time()
+    time_diff = end - start
+    print("add patch time %f\n" % time_diff)
+
+    return image
+
+
+def splat_gpu(u, areas, cov2d_inv, opacity, depth, color, H, W):
+    import torch
+    import simple_gaussian_reasterization as sgr
+    u = torch.from_numpy(u).type(torch.float32).to('cuda')
+    areas = torch.from_numpy(areas).type(torch.float32).to('cuda')
+    cov2d_inv = torch.from_numpy(cov2d_inv).type(torch.float32).to('cuda')
+    opacity = torch.from_numpy(opacity).type(torch.float32).to('cuda')
+    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
+    color = torch.from_numpy(color).type(torch.float32).to('cuda')
+    res = sgr.rasterize(u, areas, cov2d_inv, opacity, depth, color, H, W)
+    image = res[0].to('cpu').detach().numpy().copy()
+    image = image.transpose(1, 2, 0)
+    # exit()
+    return image
+
+
+def blend(color, opacity, pc, K, cov2d, H, W):
+    grid = np.array([(W + BLOCK - 1) / BLOCK, (H + BLOCK - 1) / BLOCK]).astype(int)
+    u, areas, cov2d_inv = get_splatting_info(pc, K, cov2d, grid)
+    depth = pc[:, 2]
+    try:
+        import torch
+        import simple_gaussian_reasterization as sgr
+        print("use CUDA")
+        image = splat_gpu(u, areas, cov2d_inv, opacity, depth, color, H, W)
+    except ImportError:
+        print("cannot find simple_gaussian_reasterization, using CPU mode.")
+        print("try install it by 'pip install simple_gaussian_reasterization/.'")
+        image = splat(u, areas, cov2d_inv, opacity, depth, color, H, W)
+    return image
