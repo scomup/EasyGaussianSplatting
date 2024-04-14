@@ -26,40 +26,42 @@ SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(5/pi)       minus
 
 def sh2color(sh, ray_dir):
     sh_dim = sh.shape[1]
-    color = SH_C0_0 * sh[:, 0:3]
+    color = SH_C0_0 * sh[:, 0:3] + 0.5
 
-    if (sh_dim > 3):
-        x = ray_dir[:, 0][:, np.newaxis]
-        y = ray_dir[:, 1][:, np.newaxis]
-        z = ray_dir[:, 2][:, np.newaxis]
-        color = color + \
-            SH_C1_0 * y * sh[:, 3:6] + \
-            SH_C1_1 * z * sh[:, 6:9] + \
-            SH_C1_2 * x * sh[:, 9:12]
+    if (sh_dim <= 3):
+        return color
+    x = ray_dir[:, 0][:, np.newaxis]
+    y = ray_dir[:, 1][:, np.newaxis]
+    z = ray_dir[:, 2][:, np.newaxis]
+    color = color + \
+        SH_C1_0 * y * sh[:, 3:6] + \
+        SH_C1_1 * z * sh[:, 6:9] + \
+        SH_C1_2 * x * sh[:, 9:12]
 
-        if (sh_dim > 12):
-            xx = x * x
-            yy = y * y
-            zz = z * z
-            xy = x * y
-            yz = y * z
-            xz = x * z
-            color = color + \
-                SH_C2_0 * xy * sh[:, 12:15] + \
-                SH_C2_1 * yz * sh[:, 15:18] + \
-                SH_C2_2 * (2.0 * zz - xx - yy) * sh[:, 18:21] + \
-                SH_C2_3 * xz * sh[:, 21:24] + \
-                SH_C2_4 * (xx - yy) * sh[:, 24:27]
-            if (sh_dim > 27):
-                color = color +  \
-                    SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
-                    SH_C3_1 * xy * z * sh[:, 30:33] + \
-                    SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
-                    SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
-                    SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
-                    SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
-                    SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
-        color = color + 0.5
+    if (sh_dim <= 12):
+        return color
+    xx = x * x
+    yy = y * y
+    zz = z * z
+    xy = x * y
+    yz = y * z
+    xz = x * z
+    color = color + \
+        SH_C2_0 * xy * sh[:, 12:15] + \
+        SH_C2_1 * yz * sh[:, 15:18] + \
+        SH_C2_2 * (2.0 * zz - xx - yy) * sh[:, 18:21] + \
+        SH_C2_3 * xz * sh[:, 21:24] + \
+        SH_C2_4 * (xx - yy) * sh[:, 24:27]
+
+    if (sh_dim <= 27):
+        color = color +  \
+            SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
+            SH_C3_1 * xy * z * sh[:, 30:33] + \
+            SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
+            SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
+            SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
+            SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
+            SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
     return color
 
 
@@ -212,7 +214,7 @@ def blend(color, opacity, pc, K, cov2d, H, W):
     u, areas, cov2d_inv = get_splatting_info(pc, K, cov2d, grid)
     depth = pc[:, 2]
     try:
-        import torch
+        import torchx
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
         image = splat_gpu(u, areas, cov2d_inv, opacity, depth, color, H, W)
