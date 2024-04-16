@@ -3,11 +3,50 @@
 from viewer import *
 import numpy as np
 from custom_items import *
-
+import time
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from sh_demo import sh2color
+import threading
+
+
+def _rotation_matrix_from_axis_angle(axis, angle):
+        c = np.cos(angle)
+        s = np.sin(angle)
+        t = 1 - c
+        x, y, z = axis / np.linalg.norm(axis)
+        rotation_matrix = np.array([
+            [t*x*x + c, t*x*y - s*z, t*x*z + s*y, 0],
+            [t*x*y + s*z, t*y*y + c, t*y*z - s*x, 0],
+            [t*x*z - s*y, t*y*z + s*x, t*z*z + c, 0],
+            [0, 0, 0, 1]
+        ])
+        return rotation_matrix
+
+
+def _create_rotation_matrix(angle):
+        axis = np.array([0, 0, 1]) 
+        rotation_matrix = _rotation_matrix_from_axis_angle(axis, angle)
+        return rotation_matrix
+
+
+def rotate(sphere, angle_increment=0.01):
+    rotation_angle = 0
+
+    def updateTransform():
+        nonlocal rotation_angle
+        while True:
+            T = _create_rotation_matrix(rotation_angle)
+            for i, s in enumerate(sphere.values()):
+                T[0, 3] = 2.5 * i
+                s.setTransform(T)
+            rotation_angle += angle_increment
+            time.sleep(0.02)  # Adjust the sleep duration as needed
+
+    rotation_thread = threading.Thread(target=updateTransform)
+    rotation_thread.daemon = True
+    rotation_thread.start()
 
 
 sh = np.array([[-0.8756, -0.6117, -0.1774],
@@ -51,13 +90,13 @@ if __name__ == '__main__':
     app = QApplication([])
     gt = SphereItem()
     sh1 = SphereItem()
-    c1, _ = sh2color(sh, sh1.vertices, dim=4)
+    c1, _ = sh2color(sh, sh1.vertices, dim=1)  # level1
     sh2 = SphereItem()
-    c2, _ = sh2color(sh, sh2.vertices, dim=9)
+    c2, _ = sh2color(sh, sh2.vertices, dim=9)  # level3
     sh3 = SphereItem()
-    c3, _ = sh2color(sh, sh3.vertices, dim=16)
+    c3, _ = sh2color(sh, sh3.vertices, dim=16)  # level4
     sh4 = SphereItem()
-    c4, _ = sh2color(sh, sh4.vertices, dim=25)
+    c4, _ = sh2color(sh, sh4.vertices, dim=36)  # level5
 
     gt.set_colors_from_image('imgs/Solarsystemscope_texture_8k_earth_daymap.jpg')
     sh1.set_colors(c1.T)
@@ -82,7 +121,9 @@ if __name__ == '__main__':
     a4[0, 3] = 4 * s
     sh4.setTransform(a4)
 
-    items = {"gt": gt, "sh1": sh1, "sh2": sh2, "sh3": sh3, "sh4": sh4}
+    items = {"sh1": sh1, "sh2": sh2, "sh3": sh3, "sh4": sh4, "gt": gt}
+    # items = {"gt": gt}
+    rotate(items)
     viewer = Viewer(items)
     viewer.show()
     app.exec_()

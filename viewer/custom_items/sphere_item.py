@@ -26,10 +26,10 @@ class SphereItem(gl.GLGraphicsItem.GLGraphicsItem):
     def _calculate_vertices(self):
         phi = np.linspace(0, np.pi * 2, self.slices)
         theta = np.linspace(0, np.pi, self.stacks)
-        angle = np.stack(np.meshgrid(theta, phi), axis=2)
-        x = np.sin(angle[:, :, 0]) * np.cos(angle[:, :, 1])
-        y = np.sin(angle[:, :, 0]) * np.sin(angle[:, :, 1])
-        z = np.cos(angle[:, :, 0])
+        self.angle = np.stack(np.meshgrid(theta, phi), axis=2).reshape(-1, 2)
+        x = np.sin(self.angle[:, 0]) * np.cos(self.angle[:, 1])
+        y = np.sin(self.angle[:, 0]) * np.sin(self.angle[:, 1])
+        z = np.cos(self.angle[:, 0])
         xyz = np.dstack((x, y, z)).reshape(-1, 3)
         return xyz
 
@@ -48,6 +48,7 @@ class SphereItem(gl.GLGraphicsItem.GLGraphicsItem):
         glEnableClientState(GL_COLOR_ARRAY)
         glVertexPointerf(self.vertices)
         glColorPointerf(self.colors)
+        # glDrawArrays(GL_POINTS, 0, len(self.vertices))
         glDrawElements(GL_TRIANGLES, len(self.indices), GL_UNSIGNED_INT, self.indices)
         glDisableClientState(GL_VERTEX_ARRAY)
         glDisableClientState(GL_COLOR_ARRAY)
@@ -57,13 +58,10 @@ class SphereItem(gl.GLGraphicsItem.GLGraphicsItem):
             img = Image.open(image_path)
             img = img.convert("RGBA")
             img = np.array(img) / 255.
-            x = self.vertices[:, 0]
-            y = self.vertices[:, 1]
-            z = self.vertices[:, 2]
-            theta = np.arccos(z)  # y
-            phi = np.arctan2(y, x)
+            theta = self.angle[:, 0]
+            phi = self.angle[:, 1]
             yn = theta / np.pi * img.shape[0] - 0.5
-            xn = phi / (2 * np.pi) * img.shape[1] + img.shape[1]/2 - 0.5
+            xn = phi / (2 * np.pi) * img.shape[1] - 0.5
             self.colors = img[yn.astype(int), xn.astype(int)]
         else:
             return [(1, 0, 0, 1)] * (self.slices * self.stacks * 4)
