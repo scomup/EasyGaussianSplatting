@@ -42,7 +42,9 @@ A 3D Gaussian splatting viewer for showing 3D Gaussian data.
 ```bash
 python3 gaussian_viewer.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 ```
-![viewer demo](imgs/viewer.gif)
+
+<img src="imgs/viewer.gif" width="640px">
+
 
 
 ## Spherical harmonics demo
