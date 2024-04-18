@@ -14,52 +14,55 @@ SH_C1_2 = -0.4886025119029199  # Y1,1:  sqrt(3/(4*pi))       minus
 SH_C2_0 = 1.0925484305920792   # Y2,-2: 1/2 * sqrt(15/pi)    plus
 SH_C2_1 = -1.0925484305920792  # Y2,-1: 1/2 * sqrt(15/pi)    minus
 SH_C2_2 = 0.31539156525252005  # Y2,0:  1/4*sqrt(5/pi)       plus
-SH_C2_3 = -1.0925484305920792  # Y2,1:  1/4*sqrt(5/pi)       minus
-SH_C2_4 = 0.5462742152960396   # Y2,2:  1/4*sqrt(5/pi)       plus
-SH_C3_0 = -0.5900435899266435  # Y3,-3: 1/4*sqrt(5/pi)       minus
+SH_C2_3 = -1.0925484305920792  # Y2,1:  1/2*sqrt(15/pi)      minus
+SH_C2_4 = 0.5462742152960396   # Y2,2:  1/4*sqrt(15/pi)      plus
+SH_C3_0 = -0.5900435899266435  # Y3,-3: 1/4*sqrt(35/(2*pi))  minus
 SH_C3_1 = 2.890611442640554    # Y3,-2: 1/2*sqrt(105/pi)     plus
 SH_C3_2 = -0.4570457994644658  # Y3,-1: 1/4*sqrt(21/(2*pi))  minus
 SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
 SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
 SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
-SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(5/pi)       minus
+SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(35/(2*pi))  minus
+
 
 def sh2color(sh, ray_dir):
     sh_dim = sh.shape[1]
-    color = SH_C0_0 * sh[:, 0:3]
+    color = SH_C0_0 * sh[:, 0:3] + 0.5
 
-    if (sh_dim > 3):
-        x = ray_dir[:, 0][:, np.newaxis]
-        y = ray_dir[:, 1][:, np.newaxis]
-        z = ray_dir[:, 2][:, np.newaxis]
-        color = color + \
-            SH_C1_0 * y * sh[:, 3:6] + \
-            SH_C1_1 * z * sh[:, 6:9] + \
-            SH_C1_2 * x * sh[:, 9:12]
+    if (sh_dim <= 3):
+        return color
+    x = ray_dir[:, 0][:, np.newaxis]
+    y = ray_dir[:, 1][:, np.newaxis]
+    z = ray_dir[:, 2][:, np.newaxis]
+    color = color + \
+        SH_C1_0 * y * sh[:, 3:6] + \
+        SH_C1_1 * z * sh[:, 6:9] + \
+        SH_C1_2 * x * sh[:, 9:12]
 
-        if (sh_dim > 12):
-            xx = x * x
-            yy = y * y
-            zz = z * z
-            xy = x * y
-            yz = y * z
-            xz = x * z
-            color = color + \
-                SH_C2_0 * xy * sh[:, 12:15] + \
-                SH_C2_1 * yz * sh[:, 15:18] + \
-                SH_C2_2 * (2.0 * zz - xx - yy) * sh[:, 18:21] + \
-                SH_C2_3 * xz * sh[:, 21:24] + \
-                SH_C2_4 * (xx - yy) * sh[:, 24:27]
-            if (sh_dim > 27):
-                color = color +  \
-                    SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
-                    SH_C3_1 * xy * z * sh[:, 30:33] + \
-                    SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
-                    SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
-                    SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
-                    SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
-                    SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
-        color = color + 0.5
+    if (sh_dim <= 12):
+        return color
+    xx = x * x
+    yy = y * y
+    zz = z * z
+    xy = x * y
+    yz = y * z
+    xz = x * z
+    color = color + \
+        SH_C2_0 * xy * sh[:, 12:15] + \
+        SH_C2_1 * yz * sh[:, 15:18] + \
+        SH_C2_2 * (2.0 * zz - xx - yy) * sh[:, 18:21] + \
+        SH_C2_3 * xz * sh[:, 21:24] + \
+        SH_C2_4 * (xx - yy) * sh[:, 24:27]
+
+    if (sh_dim <= 27):
+        color = color +  \
+            SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
+            SH_C3_1 * xy * z * sh[:, 30:33] + \
+            SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
+            SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
+            SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
+            SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
+            SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
     return color
 
 
@@ -143,6 +146,9 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
     for j, i in enumerate(sort_idx):
         if (j % 100000 == 0):
             print("processing... %3.f%%" % (j / float(us.shape[0]) * 100.))
+            # from matplotlib import pyplot as plt
+            # plt.imshow(image)
+            # plt.savefig('foo%d.png' % j)
 
         if (depth[i] < 0.2 or depth[i] > 100):
             continue
@@ -172,7 +178,7 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
 
         # draw inverse gaussian
         # th = 0.7
-        # patch_alpha = np.exp(power)
+        # patch_alpha = np.exp(-0.5 * maha_dist) * opa
         # patch_alpha[patch_alpha <= th] = 0
         # patch_alpha[patch_alpha > th] = (1 - patch_alpha[patch_alpha > th])
 
@@ -180,9 +186,6 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
         image[y0:y1, x0:x1, :] += (patch_alpha * T)[:, :, np.newaxis] * patch_color
         image_T[y0:y1, x0:x1] = T * (1 - patch_alpha)
 
-        # from matplotlib import pyplot as plt
-        # plt.imshow(image)
-        # plt.savefig('foo%d.png' % j)
 
     end = time.time()
     time_diff = end - start
@@ -212,7 +215,7 @@ def blend(color, opacity, pc, K, cov2d, H, W):
     u, areas, cov2d_inv = get_splatting_info(pc, K, cov2d, grid)
     depth = pc[:, 2]
     try:
-        import torch
+        import torchx
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
         image = splat_gpu(u, areas, cov2d_inv, opacity, depth, color, H, W)
