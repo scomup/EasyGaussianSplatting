@@ -156,7 +156,7 @@ class Viewer(QMainWindow):
         timer.setInterval(20)  # period, in milliseconds
         timer.timeout.connect(self.update)
 
-        self.viewer.setCameraPosition(distance=40)
+        self.viewer.setCameraPosition(distance=5)
 
         g = gl.GLGridItem()
         g.setSize(50, 50)

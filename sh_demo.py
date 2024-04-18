@@ -9,10 +9,18 @@ import torch.nn as nn
 import torch.optim as optim
 
 
-device='cuda'
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), 'viewer'))
 
+from viewer import *
+from custom_items import *
+
+
+# More information about real spherical harmonics can be obtained from:
 # https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
-# https://github.com/NVlabs/tiny-cuda-nn/blob/8e6e242f36dd197134c9b9275a8e5108a8e3af78/scripts/gen_sh.py
+# https://github.com/NVlabs/tiny-cuda-nn/blob/master/scripts/gen_sh.py
+
 SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
 
 SH_C1_0 = -0.4886025119029199  # Y1,-1: sqrt(3/(4*pi))       minus
@@ -54,6 +62,47 @@ SH_C5_7 = 2.3967683924866621
 SH_C5_8 = -0.48923829943525038
 SH_C5_9 = 2.0756623148810411
 SH_C5_10 = -0.65638205684017015
+
+
+def rotation_matrix_from_axis_angle(axis, angle):
+        c = np.cos(angle)
+        s = np.sin(angle)
+        t = 1 - c
+        x, y, z = axis / np.linalg.norm(axis)
+        rotation_matrix = np.array([
+            [t*x*x + c, t*x*y - s*z, t*x*z + s*y, 0],
+            [t*x*y + s*z, t*y*y + c, t*y*z - s*x, 0],
+            [t*x*z - s*y, t*y*z + s*x, t*z*z + c, 0],
+            [0, 0, 0, 1]
+        ])
+        return rotation_matrix
+
+
+def create_rotation_matrix(angle):
+        axis = np.array([0, 0, 1])
+        rotation_matrix = rotation_matrix_from_axis_angle(axis, angle)
+        return rotation_matrix
+
+
+def rotate(sphere, angle_increment=0.01):
+    rotation_angle = 0
+
+    def updateTransform():
+        nonlocal rotation_angle
+        while True:
+            T = create_rotation_matrix(rotation_angle)
+            for i, s in enumerate(sphere.values()):
+                T[0, 3] = 2.5 * i
+                s.setTransform(T)
+            rotation_angle += angle_increment
+            time.sleep(0.02)  # Adjust the sleep duration as needed
+
+    rotation_thread = threading.Thread(target=updateTransform)
+    rotation_thread.daemon = True
+    rotation_thread.start()
+
+
+device='cuda'
 
 
 def sh2color(sh, ray_dir, dim=36):
@@ -190,7 +239,7 @@ class SHNet(torch.autograd.Function):
         return color.reshape(3, H, W)
 
     @staticmethod
-    def backward(ctx, dL_dC):  # dL_dy = dL/dy
+    def backward(ctx, dL_dC):
         dCdSH,  = ctx.saved_tensors
         dLdSH = dL_dC.reshape(3, -1) @ dCdSH
         return dLdSH.T
@@ -227,13 +276,59 @@ if __name__ == "__main__":
         optimizer.step()
         print(loss.item())
 
-    # Display the ground truth image
-    fig, ax = plt.subplots(2, 3)
-    ax[0, 0].imshow(image_gt.to('cpu').detach().permute(1, 2, 0).numpy())
     sh = sh.to('cpu').detach().numpy()
-    xyz = xyz.to('cpu').detach().numpy()
+
+    # Display the ground truth image
+    image_gt = image_gt.to('cpu').detach().permute(1, 2, 0).numpy()
+
+    # create QT application and sphere items
+    app = QApplication([])
+    gt = SphereItem()
+    sh1 = SphereItem()
+    c1, _ = sh2color(sh, sh1.vertices, dim=1)  # level1
+    sh2 = SphereItem()
+    c2, _ = sh2color(sh, sh2.vertices, dim=9)  # level3
+    sh3 = SphereItem()
+    c3, _ = sh2color(sh, sh3.vertices, dim=16)  # level4
+    sh4 = SphereItem()
+    c4, _ = sh2color(sh, sh4.vertices, dim=36)  # level5
+
+    gt.set_colors_from_image(image_gt)
+    sh1.set_colors(c1.T)
+    sh2.set_colors(c2.T)
+    sh3.set_colors(c3.T)
+    sh4.set_colors(c4.T)
+
+    s = 3.
+    a1 = np.eye(4)
+    a1[0, 3] = 1 * s
+    sh1.setTransform(a1)
+
+    a2 = np.eye(4)
+    a2[0, 3] = 2 * s
+    sh2.setTransform(a2)
+
+    a3 = np.eye(4)
+    a3[0, 3] = 3 * s
+    sh3.setTransform(a3)
+
+    a4 = np.eye(4)
+    a4[0, 3] = 4 * s
+    sh4.setTransform(a4)
+
+    items = {"sh1": sh1, "sh2": sh2, "sh3": sh3, "sh4": sh4, "gt": gt}
+
+    rotate(items)
+    viewer = Viewer(items)
+    viewer.show()
+    app.exec_()
 
     # Display the sh image
+    """
+    fig, ax = plt.subplots(2, 3)
+    ax[0, 0].imshow(image_gt.to('cpu').detach().permute(1, 2, 0).numpy())
+    xyz = xyz.to('cpu').detach().numpy()
+
     image, _ = sh2color(sh, xyz, 1)
     image = image.reshape(3, H, W)
     ax[0, 1].imshow(image.transpose(1, 2, 0))
@@ -255,4 +350,4 @@ if __name__ == "__main__":
     ax[1, 2].imshow(image.transpose(1, 2, 0))
 
     plt.show()
-
+    """

@@ -146,6 +146,9 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
     for j, i in enumerate(sort_idx):
         if (j % 100000 == 0):
             print("processing... %3.f%%" % (j / float(us.shape[0]) * 100.))
+            # from matplotlib import pyplot as plt
+            # plt.imshow(image)
+            # plt.savefig('foo%d.png' % j)
 
         if (depth[i] < 0.2 or depth[i] > 100):
             continue
@@ -175,7 +178,7 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
 
         # draw inverse gaussian
         # th = 0.7
-        # patch_alpha = np.exp(power)
+        # patch_alpha = np.exp(-0.5 * maha_dist) * opa
         # patch_alpha[patch_alpha <= th] = 0
         # patch_alpha[patch_alpha > th] = (1 - patch_alpha[patch_alpha > th])
 
@@ -183,9 +186,6 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
         image[y0:y1, x0:x1, :] += (patch_alpha * T)[:, :, np.newaxis] * patch_color
         image_T[y0:y1, x0:x1] = T * (1 - patch_alpha)
 
-        # from matplotlib import pyplot as plt
-        # plt.imshow(image)
-        # plt.savefig('foo%d.png' % j)
 
     end = time.time()
     time_diff = end - start

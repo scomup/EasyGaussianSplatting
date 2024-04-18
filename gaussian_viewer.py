@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-from viewer import *
 import numpy as np
-from custom_items import CloudPlotItem, GLAxisItem, GaussianItem, GLCameraFrameItem
+from read_ply import *
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from read_ply import *
+sys.path.append(os.path.join(os.path.dirname(__file__), 'viewer'))
+
+from viewer import *
+from custom_items import *
 
 
 if __name__ == '__main__':

@@ -53,18 +53,12 @@ class SphereItem(gl.GLGraphicsItem.GLGraphicsItem):
         glDisableClientState(GL_VERTEX_ARRAY)
         glDisableClientState(GL_COLOR_ARRAY)
 
-    def set_colors_from_image(self, image_path):
-        if image_path:
-            img = Image.open(image_path)
-            img = img.convert("RGBA")
-            img = np.array(img) / 255.
-            theta = self.angle[:, 0]
-            phi = self.angle[:, 1]
-            yn = theta / np.pi * img.shape[0] - 0.5
-            xn = phi / (2 * np.pi) * img.shape[1] - 0.5
-            self.colors = img[yn.astype(int), xn.astype(int)]
-        else:
-            return [(1, 0, 0, 1)] * (self.slices * self.stacks * 4)
+    def set_colors_from_image(self, img):
+        theta = self.angle[:, 0]
+        phi = self.angle[:, 1]
+        y = theta / np.pi * img.shape[0] - 0.5
+        x = phi / (2 * np.pi) * img.shape[1] - 0.5
+        self.colors = img[y.astype(int), x.astype(int)]
 
     def set_colors(self, colors):
         self.colors = colors
