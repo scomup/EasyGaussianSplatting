@@ -91,20 +91,24 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
 
         faces = np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32)
 
-        vbo = glGenBuffers(1)
+        # rect data
+        self.vbo = glGenBuffers(1)
         glBindVertexArray(self.vao)
-        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
         glBufferData(GL_ARRAY_BUFFER, rect.nbytes, rect, GL_STATIC_DRAW)
         pos = glGetAttribLocation(self.program, 'position')
         glVertexAttribPointer(pos, 2, GL_FLOAT, False, 0, None)
         glEnableVertexAttribArray(pos)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
 
         # indices info from draw a rect.
-        ebo = glGenBuffers(1)
+        self.ebo = glGenBuffers(1)
         glBindVertexArray(self.vao)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
         glBufferData(GL_ELEMENT_ARRAY_BUFFER,
                      faces.nbytes, faces, GL_STATIC_DRAW)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
+        glBindVertexArray(0)
 
         # add SSBO for gaussian data
         self.ssbo_gs = glGenBuffers(1)
@@ -152,12 +156,20 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
     def paint(self):
         self.view_matrix = np.array(self._GLGraphicsItem__view.viewMatrix().data(), np.float32).reshape([4, 4]).T
         glUseProgram(self.program)
+        glBindVertexArray(self.vao)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ebo)
+
         self.update_gs()
         # set new view to shader
         set_uniform_mat4(self.program, self.view_matrix, 'view_matrix')
         set_uniform_v3(self.program, np.linalg.inv(self.view_matrix)[:3, 3], "cam_pos")
         # draw rect (2 triangles with 6 points)
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, None, self.gs_data.shape[0])
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glBindVertexArray(0)
         glUseProgram(0)
 
     def setData(self, **kwds):
