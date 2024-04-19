@@ -4,7 +4,7 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore
 from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QSizePolicy,\
-      QSpacerItem, QLabel, QLineEdit, QMainWindow, QApplication
+      QSpacerItem, QLabel, QLineEdit, QMainWindow, QApplication, QDoubleSpinBox
 from OpenGL.GL import *
 from PyQt5.QtGui import QKeyEvent, QIntValidator, QDoubleValidator, QVector3D
 
@@ -36,25 +36,7 @@ class SettingWindow(QWidget):
         self.tmpWidgets = []
 
         key = list(self.items.keys())
-        try:
-            settings = self.items[key[index]].settings
-            for setting in settings:
-                label = QLabel(setting["name"])
-                self.layout.addWidget(label)
-                line_edit = QLineEdit()
-                self.layout.addWidget(label)
-                self.layout.addWidget(line_edit)
-                self.tmpWidgets.append(label)
-                self.tmpWidgets.append(line_edit)
-                line_edit.textChanged.connect(lambda txt, setting=setting: self.on_change_setting(txt, setting))
-                line_edit.setText(str(setting["get"]()))
-                if(setting["type"] == np.int32 or setting["type"] == np.int64 or setting["type"] == int):
-                    line_edit.setValidator(QIntValidator())
-                elif(setting["type"] == np.float32 or setting["type"] == np.float64 or setting["type"] == float):
-                    line_edit.setValidator(QDoubleValidator())
-        except:
-            print("No settings")
-        self.layout.addItem(self.stretch)
+        self.items[key[index]].addSetting(self.layout)
 
     def on_change_setting(self, text, setting):
         try:
