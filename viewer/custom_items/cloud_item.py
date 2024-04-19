@@ -76,7 +76,6 @@ def set_uniform_mat4(shader, content, name):
         content.astype(np.float32)
     )
 
-
 # draw points with intensity (x, y, z, intensity)
 class CloudPlotItem(gl.GLGraphicsItem.GLGraphicsItem):
     def __init__(self, **kwds):
