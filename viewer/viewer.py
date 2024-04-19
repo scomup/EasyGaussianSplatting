@@ -103,15 +103,17 @@ class MyViewWidget(gl.GLViewWidget):
     def keyPressEvent(self, event: QKeyEvent):
 
         if event.key() == QtCore.Qt.Key_M:  # setting meun
-            print("Open setting windows")
             self.open_setting_window()
 
         else:
             super().keyPressEvent(event)
 
     def open_setting_window(self):
-        self.setting_window.show()
+        if self.setting_window.isVisible():
+            self.setting_window.raise_()
 
+        else:
+            self.setting_window.show()
 
 class Viewer(QMainWindow):
     def __init__(self, items):
