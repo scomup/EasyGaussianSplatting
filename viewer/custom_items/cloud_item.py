@@ -9,7 +9,8 @@ import numpy as np
 import threading
 import time
 from PyQt5 import QtGui, QtCore
-
+from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QSizePolicy,\
+      QSpacerItem, QLabel, QLineEdit, QMainWindow, QApplication, QDoubleSpinBox, QSpinBox
 
 vertex_shader = """
 #version 330 core
@@ -88,15 +89,37 @@ class CloudPlotItem(gl.GLGraphicsItem.GLGraphicsItem):
         self.alpha = 0.1
         self.size = 1.
         self.settings = []
-        self.settings.append({"name": "Set Points size:", "type": int, "set": self.setSize, "get": self.getSize})
+        self.settings.append({"name": "alpha", "type": QDoubleSpinBox()})
         self.need_init_buffer = True
         self.setData(**kwds)
 
+    def addSetting(self, layout):
+        label1 = QLabel("set alpha.")
+        layout.addWidget(label1)
+        box1 = QDoubleSpinBox()
+        box1.setSingleStep(0.1)
+        layout.addWidget(box1)
+        box1.setValue(self.alpha)
+        box1.valueChanged.connect(self.setAlpha)
+        box1.setRange(0, 1.0)
+
+        label2 = QLabel("set size.")
+        layout.addWidget(label2)
+        box2 = QSpinBox()
+        layout.addWidget(box2)
+        box2.setValue(self.size)
+        box2.valueChanged.connect(self.setSize)
+        box2.setRange(1, 100)
+
+
+    def setAlpha(self, alpha):
+        self.alpha = alpha
+        glUseProgram(self.program)
+        glUniform1f(glGetUniformLocation(self.program, "alpha"), self.alpha)
+        glUseProgram(0)
+
     def setSize(self, size):
         self.size = size
-
-    def getSize(self):
-        return self.size
 
     def setData(self, **kwds):
         if 'pos' in kwds:
@@ -150,6 +173,7 @@ class CloudPlotItem(gl.GLGraphicsItem.GLGraphicsItem):
         glEnableVertexAttribArray(1)        
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(0))
         glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(12))
+        glPointSize(self.size)
         glDrawArrays(GL_POINTS, 0, len(self.pos))
         
         # Disable vertex attribute 
