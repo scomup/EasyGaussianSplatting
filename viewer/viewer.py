@@ -22,7 +22,7 @@ class SettingWindow(QWidget):
         self.setWindowTitle("Setting Window")
         self.setGeometry(200, 200, 300, 200)
         self.items = None
-        self.tmpWidgets = []
+        self.tmp_widgets = []
 
     def addComboItems(self, items):
         self.items = items
@@ -31,12 +31,17 @@ class SettingWindow(QWidget):
 
     def on_combobox_selection(self, index):
         self.layout.removeItem(self.stretch)
-        for w in self.tmpWidgets:
+        for w in self.tmp_widgets:
             self.layout.removeWidget(w)
-        self.tmpWidgets = []
-
+            w.deleteLater()
+        self.tmp_widgets = []
         key = list(self.items.keys())
-        self.items[key[index]].addSetting(self.layout)
+        try:
+            item = self.items[key[index]]
+            self.tmp_widgets = item.addSetting(self.layout)
+            self.layout.addItem(self.stretch)
+        except AttributeError:
+            print("%s: No setting." % (item.__class__.__name__))
 
     def on_change_setting(self, text, setting):
         try:
@@ -141,11 +146,6 @@ class Viewer(QMainWindow):
         timer.timeout.connect(self.update)
 
         self.viewer.setCameraPosition(distance=5)
-
-        g = gl.GLGridItem()
-        g.setSize(50, 50)
-        g.setSpacing(1, 1)
-        self.viewer.addItem(g)
 
         self.viewer.addPluginItems(self.items)
 

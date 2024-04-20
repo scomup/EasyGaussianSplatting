@@ -17,8 +17,9 @@ if __name__ == '__main__':
     pcd = pypcd.PointCloud.from_path(pcd_fn)
     points = np.array([pcd.pc_data["x"], pcd.pc_data["y"], pcd.pc_data["z"], pcd.pc_data['intensity']/100.], dtype=np.float32).T
     app = QApplication([])
-    cloud = CloudPlotItem()
-    items = {"cloud": cloud}
+    cloud_item = CloudItem()
+    grid_item = GridItem()
+    items = {"cloud": cloud_item, "grid": grid_item}
     viewer = Viewer(items)
     viewer.items["cloud"].setData(pos=points)
     viewer.show()

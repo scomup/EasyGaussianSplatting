@@ -21,7 +21,7 @@ layout (location = 1) in float intensity;
 uniform mat4 view_matrix;
 uniform mat4 projection_matrix;
 uniform float alpha;
-out vec4 FragColor;
+out vec4 color;
 
 vec3 getRainbowColor(float value) {
     // Normalize value to [0, 1]
@@ -50,21 +50,21 @@ void main()
     vec4 pw = vec4(position, 1.0);
     vec4 pc = view_matrix * pw;
     gl_Position = projection_matrix * pc;
-    vec3 color = getRainbowColor(intensity);
-    FragColor = vec4(color, alpha);
+    vec3 c = getRainbowColor(intensity);
+    color = vec4(c, alpha);
 }
 """
 
 fragment_shader = """
 #version 330 core
 
-in vec4 FragColor;
+in vec4 color;
 
 out vec4 finalColor;
 
 void main()
 {
-    finalColor = FragColor;
+    finalColor = color;
 }
 """
 
@@ -78,7 +78,7 @@ def set_uniform_mat4(shader, content, name):
     )
 
 # draw points with intensity (x, y, z, intensity)
-class CloudPlotItem(gl.GLGraphicsItem.GLGraphicsItem):
+class CloudItem(gl.GLGraphicsItem.GLGraphicsItem):
     def __init__(self, **kwds):
         super().__init__()
         glopts = kwds.pop('glOptions', 'additive')
@@ -102,7 +102,6 @@ class CloudPlotItem(gl.GLGraphicsItem.GLGraphicsItem):
         box1.setValue(self.alpha)
         box1.valueChanged.connect(self.setAlpha)
         box1.setRange(0, 1.0)
-
         label2 = QLabel("set size.")
         layout.addWidget(label2)
         box2 = QSpinBox()
@@ -110,6 +109,14 @@ class CloudPlotItem(gl.GLGraphicsItem.GLGraphicsItem):
         box2.setValue(self.size)
         box2.valueChanged.connect(self.setSize)
         box2.setRange(1, 100)
+
+        weights = []
+        weights.append(label1)
+        weights.append(box1)
+
+        weights.append(label2)
+        weights.append(box2)
+        return weights
 
 
     def setAlpha(self, alpha):

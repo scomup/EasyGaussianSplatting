@@ -46,8 +46,11 @@ if __name__ == '__main__':
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
     app = QApplication([])
-    gsItem = GaussianItem()
-    items = {"gs": gsItem}
+    gs_item = GaussianItem()
+    grid_item = GridItem()
+
+    items = {"gs": gs_item, "grid": grid_item}
+    
     viewer = Viewer(items)
     viewer.items["gs"].setData(gs_data=gs_data)
     viewer.show()
