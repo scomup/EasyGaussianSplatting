@@ -140,6 +140,10 @@ class CloudItem(gl.GLGraphicsItem.GLGraphicsItem):
         if self.need_init_buffer:
             glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
             glBufferData(GL_ARRAY_BUFFER, self.pos.nbytes, self.pos, GL_STATIC_DRAW)
+            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(0))
+            glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(12))
+            glEnableVertexAttribArray(0)
+            glEnableVertexAttribArray(1)
             self.valid_point_num = self.pos.shape[0]
             glBindBuffer(GL_ARRAY_BUFFER, 0)
             self.need_init_buffer = False
@@ -152,9 +156,7 @@ class CloudItem(gl.GLGraphicsItem.GLGraphicsItem):
         )
         # Bind attribute locations
         glUseProgram(self.program)
-        glBindAttribLocation(self.program, 0, "position")
-        glBindAttribLocation(self.program, 1, "intensity")
-        # set constant parameter for gaussian shader
+        # set constant parameter for cloud shader
         project_matrix = np.array(self._GLGraphicsItem__view.projectionMatrix().data(), np.float32).reshape([4, 4]).T
         set_uniform_mat4(self.program, project_matrix, 'projection_matrix')
         glUniform1f(glGetUniformLocation(self.program, "alpha"), self.alpha)
@@ -176,19 +178,11 @@ class CloudItem(gl.GLGraphicsItem.GLGraphicsItem):
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
 
         set_uniform_mat4(self.program, self.view_matrix, 'view_matrix')
-        glEnableVertexAttribArray(0)
-        glEnableVertexAttribArray(1)        
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(0))
-        glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 16, ctypes.c_void_p(12))
         glPointSize(self.size)
         glDrawArrays(GL_POINTS, 0, len(self.pos))
         
-        # Disable vertex attribute 
-        glDisableVertexAttribArray(0)
-        glDisableVertexAttribArray(1)        
         # unbind VBO
         glBindBuffer(GL_ARRAY_BUFFER, 0)
-        # unbind VBO
         glUseProgram(0)
 
 
