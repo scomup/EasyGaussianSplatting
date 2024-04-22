@@ -185,8 +185,6 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
         T = image_T[y0:y1, x0:x1]
         image[y0:y1, x0:x1, :] += (patch_alpha * T)[:, :, np.newaxis] * patch_color
         image_T[y0:y1, x0:x1] = T * (1 - patch_alpha)
-
-
     end = time.time()
     time_diff = end - start
     print("add patch time %f\n" % time_diff)

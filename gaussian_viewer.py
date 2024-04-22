@@ -16,13 +16,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--ply", help="the ply path")
     args = parser.parse_args()
+    cam_2_world = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
     if args.ply:
-        # "/home/liu/workspace/gaussian-splatting/output/fb15ba66-e/point_cloud/iteration_30000/point_cloud.ply
         ply_fn = args.ply
         print("Try to load %s ..." % ply_fn)
-        cam_2_world = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-        gs = load_ply(ply_fn, cam_2_world)
-        gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
     else:
         gs_data = np.array([[0.,  0.,  0.,  # xyz
                             1.,  0.,  0., 0.,  # rot
@@ -45,12 +42,16 @@ if __name__ == '__main__':
                             1.,
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/fb15ba66-e/point_cloud/iteration_30000/point_cloud.ply"
+    gs = load_ply(ply_fn, cam_2_world)
+    gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
+
     app = QApplication([])
     gs_item = GaussianItem()
     grid_item = GridItem()
 
     items = {"gs": gs_item, "grid": grid_item}
-    
+
     viewer = Viewer(items)
     viewer.items["gs"].setData(gs_data=gs_data)
     viewer.show()
