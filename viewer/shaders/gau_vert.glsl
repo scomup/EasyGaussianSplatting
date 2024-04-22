@@ -36,6 +36,9 @@ layout (std430, binding=0) buffer gaussian_data {
 layout (std430, binding=1) buffer gaussian_order {
 	int gs_index[];
 };
+layout (std430, binding=2) buffer gaussian_depth {
+	float depth[];
+};
 
 uniform mat4 view_matrix;
 uniform mat4 projection_matrix;
@@ -153,6 +156,7 @@ void main()
 
 	gl_Position = vec4(-100, -100, 0, 0);
 	alpha = 0;
+	depth[gs_id] = pc.z;
 
 	u = u / u.w;
 

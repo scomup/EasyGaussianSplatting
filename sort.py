@@ -37,7 +37,7 @@ def init():
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_buffer)
     glBufferData(GL_SHADER_STORAGE_BUFFER, indices.nbytes, indices, GL_DYNAMIC_COPY)
 
-    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, input_buffer)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, input_buffer)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, output_buffer)
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)

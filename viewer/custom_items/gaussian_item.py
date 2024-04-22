@@ -15,6 +15,10 @@ import os
 path = os.path.dirname(__file__)
 
 
+def div_round_up(x, y):
+    return int((x + y - 1) / y)
+
+
 def set_uniform_mat4(shader, content, name):
     content = content.T
     glUniformMatrix4fv(
@@ -24,11 +28,13 @@ def set_uniform_mat4(shader, content, name):
         content.astype(np.float32)
     )
 
+
 def set_uniform_1int(shader, content, name):
     glUniform1i(
         glGetUniformLocation(shader, name),
         content
     )
+
 
 def set_uniform_v2(shader, contents, name):
     glUniform2f(
@@ -36,12 +42,14 @@ def set_uniform_v2(shader, contents, name):
         *contents
     )
 
+
 def set_uniform_v3(shader, contents, name):
     glUniform3f(
         glGetUniformLocation(shader, name),
         *contents
     )
-        
+
+
 class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
 
     def sort_by_torch(self, gaus, Rz):
@@ -78,6 +86,10 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
     def initializeGL(self):
         fragment_shader = open(path + '/../shaders/gau_frag.glsl', 'r').read()
         vertex_shader = open(path + '/../shaders/gau_vert.glsl', 'r').read()
+        sort_shader = open(path + '/../shaders/sort.glsl', 'r').read()
+        self.sort_program = shaders.compileProgram(
+            shaders.compileShader(sort_shader, GL_COMPUTE_SHADER))
+
         self.program = shaders.compileProgram(
             shaders.compileShader(vertex_shader, GL_VERTEX_SHADER),
             shaders.compileShader(fragment_shader, GL_FRAGMENT_SHADER),
@@ -113,6 +125,7 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         # add SSBO for gaussian data
         self.ssbo_gs = glGenBuffers(1)
         self.ssbo_gi = glGenBuffers(1)
+        self.ssbo_dp = glGenBuffers(1)
 
         W = self._GLGraphicsItem__view.deviceWidth()
         H = self._GLGraphicsItem__view.deviceHeight()
@@ -139,19 +152,20 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
             glBufferData(GL_SHADER_STORAGE_BUFFER, self.gs_data.nbytes, self.gs_data.reshape(-1), GL_STATIC_DRAW)
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, self.ssbo_gs)
             glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_dp)
+            glBufferData(GL_SHADER_STORAGE_BUFFER, self.gs_data.shape[0] * 4, None, GL_STATIC_DRAW)
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, self.ssbo_dp)
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+            gi = np.arange(self.gs_data.shape[0], dtype=np.uint32)
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_gi)
+            glBufferData(GL_SHADER_STORAGE_BUFFER, self.gs_data.shape[0] * 4, gi, GL_STATIC_DRAW)
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, self.ssbo_gi)
+            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
             set_uniform_1int(self.program, self.sh_dim, "sh_dim")
             self.need_update_gs = False
-        # sort by depth
-        if (self.gs_data.shape[0] != 0):
-            Rz = self.view_matrix[2, :3]
-            if (np.linalg.norm(self.prev_Rz - Rz) > 0.2):
-                Rz = self.view_matrix[2, :3]
-                index = self.sort(self.gs_data, Rz)
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_gi)
-                glBufferData(GL_SHADER_STORAGE_BUFFER, index.nbytes, index, GL_STATIC_DRAW)
-                glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, self.ssbo_gi)
-                glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
-                self.prev_Rz = Rz
+
 
     def paint(self):
         self.view_matrix = np.array(self._GLGraphicsItem__view.viewMatrix().data(), np.float32).reshape([4, 4]).T
@@ -170,6 +184,39 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
         glBindBuffer(GL_ARRAY_BUFFER, 0)
         glBindVertexArray(0)
+        glUseProgram(0)
+
+        # glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_dp)
+        # depth_data = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, self.gs_data.shape[0] * 4)
+        # depth_data = np.frombuffer(depth_data, dtype=np.float32)
+        # print(depth_data)
+        # glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+        NUM_ELEMENTS = 4
+        glUseProgram(self.sort_program)
+        k = 2
+        j = k >> 1
+        while (k <= NUM_ELEMENTS):
+            while (j > 0):
+                glUniform1i(glGetUniformLocation(self.sort_program, "k"), k)
+                glUniform1i(glGetUniformLocation(self.sort_program, "j"), j)
+                glDispatchCompute(div_round_up(NUM_ELEMENTS, 4), 1, 1)
+                glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
+                j = j >> 1
+            k = k*2
+            j = k >> 1
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_gi)
+        inds = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, self.gs_data.shape[0] * 4)
+        inds = np.frombuffer(inds, dtype=np.uint32)
+        print(inds)
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_dp)
+        dp = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, self.gs_data.shape[0] * 4)
+        dp = np.frombuffer(dp, dtype=np.float32)
+        print(dp)
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+        print("----")
+
         glUseProgram(0)
 
     def setData(self, **kwds):
