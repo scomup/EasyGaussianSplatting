@@ -18,27 +18,23 @@ layout(std430, binding = 1) buffer index_buffer {
 };
 
 
+// bitonic sort
 void main() {
-    uint b = gl_GlobalInvocationID.x ^ j;
-    uint a = gl_GlobalInvocationID.x;
+    uint a = (gl_GlobalInvocationID.x / j) * (j * 2) + gl_GlobalInvocationID.x % j;
+    uint b = a ^ j;
     uint idx_a = index[a];
     uint idx_b = index[b];
 
-    // bitonic sort
-    if (b > a) {
-        if ((a & k) == 0) {
-            if (data[idx_a] > data[idx_b]) {
-                uint temp = index[a];
-                index[a] = index[b];
-                index[b] = temp;
-            }
-        } else {
-        if (data[idx_a] < data[idx_b]) {
-                uint temp = index[a];
-                index[a] = index[b];
-                index[b] = temp;
-            }
+    if ((a & k) == 0) {
+        if (data[idx_a] > data[idx_b]) {
+            //uint temp = index[a];
+            index[a] = idx_b;
+            index[b] = idx_a;
         }
+    } else if(data[idx_a] < data[idx_b]) {
+            //uint temp = index[a];
+            index[a] = idx_b;
+            index[b] = idx_a;
     }
 }
 

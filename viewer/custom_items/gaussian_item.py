@@ -189,7 +189,7 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
             while (j > 0):
                 glUniform1i(glGetUniformLocation(self.sort_program, "k"), k)
                 glUniform1i(glGetUniformLocation(self.sort_program, "j"), j)
-                glDispatchCompute(div_round_up(self.num_sort, 256), 1, 1)
+                glDispatchCompute(div_round_up(self.num_sort//2, 256), 1, 1)
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
                 j = j >> 1
             k = k*2
