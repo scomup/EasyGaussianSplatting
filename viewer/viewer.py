@@ -4,18 +4,9 @@ import numpy as np
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore
 from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QSizePolicy,\
-      QSpacerItem, QLabel, QLineEdit, QMainWindow, QApplication
+      QSpacerItem, QLabel, QLineEdit, QMainWindow, QApplication, QDoubleSpinBox
 from OpenGL.GL import *
 from PyQt5.QtGui import QKeyEvent, QIntValidator, QDoubleValidator, QVector3D
-
-import numpy as np
-from custom_items import CloudPlotItem, GLAxisItem, GaussianItem, GLCameraFrameItem
-
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-from read_ply import *
 
 
 class SettingWindow(QWidget):
@@ -31,7 +22,7 @@ class SettingWindow(QWidget):
         self.setWindowTitle("Setting Window")
         self.setGeometry(200, 200, 300, 200)
         self.items = None
-        self.tmpWidgets = []
+        self.tmp_widgets = []
 
     def addComboItems(self, items):
         self.items = items
@@ -40,30 +31,17 @@ class SettingWindow(QWidget):
 
     def on_combobox_selection(self, index):
         self.layout.removeItem(self.stretch)
-        for w in self.tmpWidgets:
+        for w in self.tmp_widgets:
             self.layout.removeWidget(w)
-        self.tmpWidgets = []
-
+            w.deleteLater()
+        self.tmp_widgets = []
         key = list(self.items.keys())
         try:
-            settings = self.items[key[index]].settings
-            for setting in settings:
-                label = QLabel(setting["name"])
-                self.layout.addWidget(label)
-                line_edit = QLineEdit()
-                self.layout.addWidget(label)
-                self.layout.addWidget(line_edit)
-                self.tmpWidgets.append(label)
-                self.tmpWidgets.append(line_edit)
-                line_edit.textChanged.connect(lambda txt, setting=setting: self.on_change_setting(txt, setting))
-                line_edit.setText(str(setting["get"]()))
-                if(setting["type"] == np.int32 or setting["type"] == np.int64 or setting["type"] == int):
-                    line_edit.setValidator(QIntValidator())
-                elif(setting["type"] == np.float32 or setting["type"] == np.float64 or setting["type"] == float):
-                    line_edit.setValidator(QDoubleValidator())
-        except:
-            print("No settings")
-        self.layout.addItem(self.stretch)
+            item = self.items[key[index]]
+            self.tmp_widgets = item.addSetting(self.layout)
+            self.layout.addItem(self.stretch)
+        except AttributeError:
+            print("%s: No setting." % (item.__class__.__name__))
 
     def on_change_setting(self, text, setting):
         try:
@@ -130,15 +108,17 @@ class MyViewWidget(gl.GLViewWidget):
     def keyPressEvent(self, event: QKeyEvent):
 
         if event.key() == QtCore.Qt.Key_M:  # setting meun
-            print("Open setting windows")
             self.open_setting_window()
 
         else:
             super().keyPressEvent(event)
 
     def open_setting_window(self):
-        self.setting_window.show()
+        if self.setting_window.isVisible():
+            self.setting_window.raise_()
 
+        else:
+            self.setting_window.show()
 
 class Viewer(QMainWindow):
     def __init__(self, items):
@@ -165,12 +145,7 @@ class Viewer(QMainWindow):
         timer.setInterval(20)  # period, in milliseconds
         timer.timeout.connect(self.update)
 
-        self.viewer.setCameraPosition(distance=40)
-
-        g = gl.GLGridItem()
-        g.setSize(50, 50)
-        g.setSpacing(1, 1)
-        self.viewer.addItem(g)
+        self.viewer.setCameraPosition(distance=5)
 
         self.viewer.addPluginItems(self.items)
 
@@ -181,47 +156,7 @@ class Viewer(QMainWindow):
 
 
 if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--ply", help="the ply path")
-    args = parser.parse_args()
-    if args.ply:
-        # "/home/liu/workspace/gaussian-splatting/output/fb15ba66-e/point_cloud/iteration_30000/point_cloud.ply
-        ply_fn = args.ply
-        print("Try to load %s ..." % ply_fn)
-        cam_2_world = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-        gs = load_ply(ply_fn, cam_2_world)
-        gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
-    else:
-        gs_data = np.array([[0.,  0.,  0.,  # xyz
-                            1.,  0.,  0., 0.,  # rot
-                            0.05,  0.05,  0.05,  # size
-                            1.,
-                            1.772484,  -1.772484,  1.772484],
-                            [1.,  0.,  0.,
-                            1.,  0.,  0., 0.,
-                            0.2,  0.05,  0.05,
-                            1.,
-                            1.772484,  -1.772484, -1.772484],
-                            [0.,  1.,  0.,
-                            1.,  0.,  0., 0.,
-                            0.05,  0.2,  0.05,
-                            1.,
-                            -1.772484, 1.772484, -1.772484],
-                            [0.,  0.,  1.,
-                            1.,  0.,  0., 0.,
-                            0.05,  0.05,  0.2,
-                            1.,
-                            -1.772484, -1.772484,  1.772484]
-                            ], dtype=np.float32)
     app = QApplication([])
-    mapItem = GaussianItem()
-    odomItem = GLAxisItem(size=0.5, width=5)
-    cam1 = GLCameraFrameItem(size=1, width=2)
-    cam2 = GLCameraFrameItem(size=1, width=2)
-    cam3 = GLCameraFrameItem(size=1, width=2)
-    items = {"map": mapItem}
-    viewer = Viewer(items)
-    viewer.items["map"].setData(gs_data=gs_data)
+    viewer = Viewer({})
     viewer.show()
     app.exec_()

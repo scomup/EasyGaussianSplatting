@@ -35,12 +35,25 @@ python3 forword --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 ```
 ![forword demo](imgs/forword.png)
 
-## Viewer 
+## 3D Gaussian Viewer 
 
 A 3D Gaussian splatting viewer for showing 3D Gaussian data. 
 
 ```bash
-python3 viewer/viewer --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
+python3 gaussian_viewer.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 ```
-![viewer demo](imgs/viewer.gif)
 
+<img src="imgs/viewer.gif" width="640px">
+
+
+
+## Spherical harmonics demo
+
+A demo shows how spherical harmonics work.
+
+```bash
+python3 sh_demo.py
+```
+
+![sh demo](imgs/sh_demo.gif)
+<span style="font-size: 80%; color: Gray;">"The ground truth Earth image is modified from [URL](https://commons.wikimedia.org/wiki/File:Solarsystemscope_texture_8k_earth_daymap.jpg). By Solar System Scope. Licensed under CC-BY-4.0"</span>

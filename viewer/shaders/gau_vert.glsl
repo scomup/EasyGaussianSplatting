@@ -12,15 +12,15 @@ see https://github.com/limacv/GaussianSplattingViewer/blob/main/shaders/gau_vert
 #define SH_C2_0  1.0925484305920792   // Y2,-2: 1/2 * sqrt(15/pi)    plus
 #define SH_C2_1  -1.0925484305920792  // Y2,-1: 1/2 * sqrt(15/pi)    minus
 #define SH_C2_2  0.31539156525252005  // Y2,0:  1/4*sqrt(5/pi)       plus
-#define SH_C2_3  -1.0925484305920792  // Y2,1:  1/4*sqrt(5/pi)       minus
-#define SH_C2_4  0.5462742152960396   // Y2,2:  1/4*sqrt(5/pi)       plus
-#define SH_C3_0  -0.5900435899266435  // Y3,-3: 1/4*sqrt(5/pi)       minus
+#define SH_C2_3  -1.0925484305920792  // Y2,1:  1/2*sqrt(15/pi)      minus
+#define SH_C2_4  0.5462742152960396   // Y2,2:  1/4*sqrt(15/pi)      plus
+#define SH_C3_0  -0.5900435899266435  // Y3,-3: 1/4*sqrt(35/(2*pi))  minus
 #define SH_C3_1  2.890611442640554    // Y3,-2: 1/2*sqrt(105/pi)     plus
 #define SH_C3_2  -0.4570457994644658  // Y3,-1: 1/4*sqrt(21/(2*pi))  minus
 #define SH_C3_3  0.3731763325901154   // Y3,0:  1/4*sqrt(7/pi)       plus
 #define SH_C3_4  -0.4570457994644658  // Y3,1:  1/4*sqrt(21/(2*pi))  minus
 #define SH_C3_5  1.445305721320277    // Y3,2:  1/4*sqrt(105/pi)     plus
-#define SH_C3_6  -0.5900435899266435  // Y3,3:  1/4*sqrt(5/pi)       minus
+#define SH_C3_6  -0.5900435899266435  // Y3,3:  1/4*sqrt(35/(2*pi))  minus
 
 layout(location = 0) in vec2 position;
 
@@ -35,6 +35,9 @@ layout (std430, binding=0) buffer gaussian_data {
 };
 layout (std430, binding=1) buffer gaussian_order {
 	int gs_index[];
+};
+layout (std430, binding=2) buffer gaussian_depth {
+	float depth[];
 };
 
 uniform mat4 view_matrix;
@@ -153,6 +156,7 @@ void main()
 
 	gl_Position = vec4(-100, -100, 0, 0);
 	alpha = 0;
+	depth[gs_id] = pc.z;
 
 	u = u / u.w;
 
