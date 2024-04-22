@@ -24,8 +24,8 @@ void main() {
     uint idx_a = index[a];
     uint idx_b = index[b];
 
-    
-    if ((b) > a) {
+    // bitonic sort
+    if (b > a) {
         if ((a & k) == 0) {
             if (data[idx_a] > data[idx_b]) {
                 uint temp = index[a];
@@ -40,7 +40,5 @@ void main() {
             }
         }
     }
-    
-    
 }
 
