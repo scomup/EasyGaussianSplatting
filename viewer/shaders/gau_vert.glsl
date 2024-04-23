@@ -44,7 +44,6 @@ uniform mat4 view_matrix;
 uniform mat4 projection_matrix;
 uniform vec2 win_size;
 uniform vec2 focal;
-uniform vec3 cam_pos;
 uniform int  sh_dim;
 
 out vec3 color;
@@ -199,6 +198,7 @@ void main()
     gl_Position = u;
     
 	// Covert SH to color
+	vec3 cam_pos = inverse(view_matrix)[3].xyz;
 	int sh_offset = gs_offset + SH_IDX;
 	vec3 ray_dir = pw.xyz - cam_pos;
 

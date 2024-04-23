@@ -44,9 +44,9 @@ if __name__ == '__main__':
                             1.,
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
-    # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
-    # gs = load_ply(ply_fn, cam_2_world)
-    # gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
+    gs = load_ply(ply_fn, cam_2_world)
+    gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
 
     app = QApplication([])
     gs_item = GaussianItem()

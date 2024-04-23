@@ -149,6 +149,7 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
 
     def paint(self):
         self.view_matrix = np.array(self._GLGraphicsItem__view.viewMatrix().data(), np.float32).reshape([4, 4]).T
+
         glUseProgram(self.program)
         glBindVertexArray(self.vao)
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
@@ -157,23 +158,23 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         self.update_gs()
         # set new view to shader
         set_uniform_mat4(self.program, self.view_matrix, 'view_matrix')
-        set_uniform_v3(self.program, np.linalg.inv(self.view_matrix)[:3, 3], "cam_pos")
         # draw rect (2 triangles with 6 points)
         glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, None, self.gs_data.shape[0])
 
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0)
         glBindBuffer(GL_ARRAY_BUFFER, 0)
         glBindVertexArray(0)
+
         glUseProgram(0)
 
         self.try_sort()
 
     def try_sort(self):
-        # sort by depth
+        # don't sort is the depth a not change.
         if (self.gs_data.shape[0] != 0):
             Rz = self.view_matrix[2, :3]
             if (np.linalg.norm(self.prev_Rz - Rz) > 0.1):
-                start = time.time()
+                # start = time.time()
                 self.opengl_sort()
                 self.prev_Rz = Rz
                 # end = time.time()
@@ -182,18 +183,13 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
 
     def opengl_sort(self):
         glUseProgram(self.sort_program)
-        k = 2
-        j = k >> 1
-        # move this loop to gpu.
-        while (k <= self.num_sort):
-            while (j > 0):
-                glUniform1i(glGetUniformLocation(self.sort_program, "k"), k)
-                glUniform1i(glGetUniformLocation(self.sort_program, "j"), j)
+        # can we move this loop to gpu?
+        for level in 2**np.arange(1, int(np.ceil(np.log2(self.num_sort))+1)):  # level = level*2
+            for stage in level/2**np.arange(1, np.log2(level)+1):   # stage =stage / 2
+                set_uniform_1int(self.sort_program, int(level), "level")
+                set_uniform_1int(self.sort_program, int(stage), "stage")
                 glDispatchCompute(div_round_up(self.num_sort//2, 256), 1, 1)
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
-                j = j >> 1
-            k = k*2
-            j = k >> 1
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
         glUseProgram(0)
 
