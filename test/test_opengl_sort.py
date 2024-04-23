@@ -53,13 +53,10 @@ def main():
 
     glUseProgram(sort_program)
     start = time.time()
-    for k in 2**np.arange(1, int(np.ceil(np.log2(NUM_ELEMENTS))+1)):  # k = k*2
-        for j in k/2**np.arange(1, np.log2(k)+1):   # j = j / 2
-            # m = np.arange(NUM_ELEMENTS/2)
-            # x1 = (m//j)*(j*2)+m%j
-            # print(x1)
-            glUniform1i(glGetUniformLocation(sort_program, "k"), int(k))
-            glUniform1i(glGetUniformLocation(sort_program, "j"), int(j))
+    for level in 2**np.arange(1, int(np.ceil(np.log2(NUM_ELEMENTS))+1)):  # level = level*2
+        for stage in level/2**np.arange(1, np.log2(level)+1):   # stage =stage / 2
+            glUniform1i(glGetUniformLocation(sort_program, "level"), int(level))
+            glUniform1i(glGetUniformLocation(sort_program, "stage"), int(stage))
             glDispatchCompute(div_round_up(NUM_SORT//2, 256), 1, 1)
             glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
             # glBindBuffer(GL_SHADER_STORAGE_BUFFER, output_buffer)
