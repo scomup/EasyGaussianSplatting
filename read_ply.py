@@ -73,7 +73,9 @@ def load_ply(path, T=None):
     shs[:, 1] = np.asarray(plydata.elements[0]["f_dc_1"])
     shs[:, 2] = np.asarray(plydata.elements[0]["f_dc_2"])
 
-    for i in range(45):
+    sh_rest_dim = len(plydata.elements[0][0])-17
+
+    for i in range(sh_rest_dim):
         name = "f_rest_%d" % i
         shs[:, 3 + i] = np.asarray(plydata.elements[0][name])
 
