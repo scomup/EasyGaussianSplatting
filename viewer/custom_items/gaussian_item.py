@@ -57,6 +57,7 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         self.sh_dim = 0
         self.gs_data = np.empty([0])
         self.prev_Rz = np.array([np.inf, np.inf, np.inf])
+        self.cuda_pw = None
 
     def initializeGL(self):
         fragment_shader = open(path + '/../shaders/gau_frag.glsl', 'r').read()
@@ -196,9 +197,13 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         # don't sort if the depths are not change.
         Rz = self.view_matrix[2, :3]
         if (np.linalg.norm(self.prev_Rz - Rz) > 0.1):
+            # import torch
+            # torch.cuda.synchronize()
             # start = time.time()
             self.opengl_sort()
+            # self.torch_sort(Rz)
             self.prev_Rz = Rz
+            # torch.cuda.synchronize()
             # end = time.time()
             # time_diff = end - start
             # print(time_diff)
@@ -212,8 +217,20 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
                 set_uniform_1int(self.sort_program, int(stage), "stage")
                 glDispatchCompute(div_round_up(self.num_sort//2, 256), 1, 1)
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
-        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
         glUseProgram(0)
+
+    def torch_sort(self, Rz):
+        import torch
+        if self.cuda_pw is None:
+            self.cuda_pw = torch.tensor(self.gs_data[:, :3]).cuda()
+        Rz = torch.tensor(Rz).cuda()
+        depth = Rz @ self.cuda_pw.T
+        index = torch.argsort(depth).type(torch.int32).cpu().numpy()
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_gi)
+        glBufferData(GL_SHADER_STORAGE_BUFFER, index.nbytes, index, GL_STATIC_DRAW)
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, self.ssbo_gi)
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+        return index
 
     def preprocess_gs(self):
         glUseProgram(self.prep_program)
