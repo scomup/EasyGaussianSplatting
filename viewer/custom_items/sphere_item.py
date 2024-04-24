@@ -9,7 +9,6 @@ import numpy as np
 import threading
 import time
 from PyQt5 import QtGui, QtCore
-from PIL import Image
 
 
 class SphereItem(gl.GLGraphicsItem.GLGraphicsItem):
