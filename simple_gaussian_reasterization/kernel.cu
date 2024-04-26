@@ -167,7 +167,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 
     float3 finial_color = {0, 0, 0};
 
-    float T = 1.0f;
+    float tau = 1.0f;
 
     // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
@@ -203,27 +203,27 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
         float3 color = shared_color[j];
         float2 d = u - pix;
 
-        // forward.md (5.3.1)
+        // forward.md (5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
 
-        float opacity = min(0.99f, alpha * exp( -0.5f * maha_dist));
+        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
 
-        if (opacity < 0.002f)
+        if (alpha_prime < 0.002f)
             continue;
 
-        // forward.md (5.4)
-        finial_color +=  T * opacity * color;
+        // forward.md (5)
+        finial_color +=  tau * alpha_prime * color;
 
-        // forward.md (5.4.1)
-        float T_new = T * (1.f - opacity);
+        // forward.md (5.2)
+        float tau_new = tau * (1.f - alpha_prime);
 
-        if (T_new < 0.0001f)
+        if (tau_new < 0.0001f)
         {
             thread_is_finished = true;
             continue;
         }
-        T = T_new;
+        tau = tau_new;
     }
 
     if (inside)
@@ -234,10 +234,35 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     }
 }
 
+__global__ void inverseCov2D(
+    int gs_num,
+    const float *__restrict__ cov2d,
+    float *__restrict__ cov2d_inv,
+    float *__restrict__ areas)
+{
+    // compute inverse of cov2d
+    // Determine the drawing area of 2d Gaussian.
+
+    const int gs_id = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (gs_id >= gs_num)
+		return;
+    // forward.md 5.3
+    const float a = cov2d[gs_id * 3];
+    const float b = cov2d[gs_id * 3 + 1];
+    const float c = cov2d[gs_id * 3 + 2];
+
+    const float det_inv = 1./(a*c - b*b);
+    cov2d_inv[gs_id * 3 + 0] =  det_inv * c;
+    cov2d_inv[gs_id * 3 + 1] = -det_inv * b;
+    cov2d_inv[gs_id * 3 + 2] =  det_inv * a;
+    areas[gs_id * 2 + 0] =  3 * sqrt(a);
+    areas[gs_id * 2 + 1] =  3 * sqrt(c);
+}
+
 std::vector<torch::Tensor> rasterizGuassian2DCUDA(
     torch::Tensor us,
-    torch::Tensor areas,
-    torch::Tensor cov2d_inv,
+    torch::Tensor cov2d,
     torch::Tensor alphas,
     torch::Tensor depths,
     torch::Tensor colors,
@@ -260,13 +285,21 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
     thrust::device_vector<uint4> gs_rects(gs_num);
     thrust::device_vector<uint>  gs_patch_num(gs_num);
     thrust::device_vector<uint>  gs_patch_offsets(gs_num);
+    thrust::device_vector<float>  cov2d_inv(gs_num * 3);
+    thrust::device_vector<float>  areas(gs_num * 2);
+
+    inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+        gs_num,
+        cov2d.contiguous().data<float>(),
+        thrust::raw_pointer_cast(cov2d_inv.data()),
+        thrust::raw_pointer_cast(areas.data()));
 
     getRect<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         W,
         H,
         gs_num,
         us.contiguous().data<float>(),
-        areas.contiguous().data<float>(),
+        thrust::raw_pointer_cast(areas.data()),
         depths.contiguous().data<float>(),
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
@@ -304,9 +337,11 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
         thrust::raw_pointer_cast(gs_ranges.data()),
         thrust::raw_pointer_cast(patch_gs_ids.data()),
         us.contiguous().data<float>(),
-        cov2d_inv.contiguous().data<float>(),
+        thrust::raw_pointer_cast(cov2d_inv.data()),
         alphas.contiguous().data<float>(),
         colors.contiguous().data<float>(),
         image.contiguous().data<float>());
+    /*
+    */
     return {image};
 }

@@ -4,9 +4,8 @@
 
 std::vector<torch::Tensor> rasterizGuassian2DCUDA(
     torch::Tensor u,
-    torch::Tensor areas,
-    torch::Tensor cov2d_inv,
-    torch::Tensor opacity,
+    torch::Tensor cov2d,
+    torch::Tensor alpha,
     torch::Tensor depth,
     torch::Tensor color,
     int H,
@@ -16,15 +15,14 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
 // Use CUDA rasterization for acceleration
 std::vector<at::Tensor> rasterizGuassian2D(
     torch::Tensor u,
-    torch::Tensor areas,
-    torch::Tensor cov2d_inv,
-    torch::Tensor opacity,
+    torch::Tensor cov2d,
+    torch::Tensor alpha,
     torch::Tensor depth,
     torch::Tensor color,
     int H,
     int W)
 {
-  return rasterizGuassian2DCUDA(u, areas, cov2d_inv, opacity, depth, color, H, W);
+  return rasterizGuassian2DCUDA(u, cov2d, alpha, depth, color, H, W);
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)

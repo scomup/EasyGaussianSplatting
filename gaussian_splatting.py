@@ -4,8 +4,6 @@ import numpy as np
 import time
 import math
 
-
-BLOCK = 16
 # https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
 SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
 SH_C1_0 = -0.4886025119029199  # Y1,-1: sqrt(3/(4*pi))       minus
@@ -23,6 +21,45 @@ SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
 SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
 SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
 SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(35/(2*pi))  minus
+
+
+def upper_triangular(mat):
+    s = mat[0].shape[0]
+    n = 0
+    if (s == 2):
+        n = 3
+    elif(s == 3):
+        n = 6
+    else:
+        raise NotImplementedError("no supported mat")
+    upper = np.zeros([mat.shape[0], n])
+    n = 0
+    for i in range(s):
+        for j in range(i, s):
+            upper[:, n] = mat[:, i, j]
+            n = n + 1
+    return upper
+
+
+def symmetric_matrix(upper):
+    n = upper.shape[1]
+    if (n == 6):
+        s = 3
+    elif(n == 3):
+        s = 2
+    else:
+        raise NotImplementedError("no supported mat")
+
+    mat = np.zeros([upper.shape[0], s, s])
+
+    n = 0
+    for i in range(s):
+        for j in range(i, s):
+            mat[:, i, j] = upper[:, n]
+            if (i != j):
+                mat[:, j, i] = upper[:, n]
+            n = n + 1
+    return mat
 
 
 def sh2color(sh, ray_dir):
@@ -90,8 +127,9 @@ def compute_cov_3d(scale, rot):
 
     # Compute 3D world covariance matrix Sigma
     Sigma = M @ M.transpose(0, 2, 1)
+    cov3d = upper_triangular(Sigma)
 
-    return Sigma
+    return cov3d
 
 
 def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
@@ -109,31 +147,44 @@ def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
     W = Rcw
     T = J @ W
 
-    cov2d = T @ cov3d @ T.transpose(0, 2, 1)
-    cov2d[:, 0, 0] += 0.3
-    cov2d[:, 1, 1] += 0.3
-    return cov2d[:, 0:2, 0:2]
+    Sigma = symmetric_matrix(cov3d)
+
+    Sigma_prime = T @ Sigma @ T.transpose(0, 2, 1)
+    Sigma_prime[:, 0, 0] += 0.3
+    Sigma_prime[:, 1, 1] += 0.3
+
+    cov2d = upper_triangular(Sigma_prime[:, :2, :2])
+    return cov2d
 
 
 def focal2fov(focal, pixels):
     return 2*math.atan(pixels/(2*focal))
 
 
-def get_splatting_info(pc, K, cov2d, grid):
+def project(pw, Tcw, K):
+    # project the mean of 2d gaussian to image.
+    # forward.md (1.1) (1.2)
+    Rcw = Tcw[:3, :3]
+    tcw = Tcw[:3, 3]
+    pc = (Rcw @ pw.T).T + tcw
+    depth = pc[:, 2]
     pc_proj = (K @ pc.T).T
     pc_proj /= pc_proj[:, 2][:, np.newaxis]
-
-    det_inv = 1. / (cov2d[:, 0, 0] * cov2d[:, 1, 1] - cov2d[:, 0, 1] * cov2d[:, 0, 1] + 0.000001)
-    cov2d_inv = np.array([cov2d[:, 1, 1] * det_inv, -cov2d[:, 0, 1] * det_inv, cov2d[:, 0, 0] * det_inv]).T
-
-    areas = 3 * np.sqrt(np.vstack([cov2d[:, 0, 0], cov2d[:, 1, 1]])).T
     u = pc_proj[:, :2]
-    return u, areas, cov2d_inv
+    return u, pc
 
 
-def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
+def splat(us, cov2d, alpha, depth, color, H, W):
     image = np.zeros([H, W, 3])
     image_T = np.ones([H, W])
+
+    # forward.md 5.3
+    # compute inverse of cov2d
+    det_inv = 1. / (cov2d[:, 0] * cov2d[:, 2] - cov2d[:, 1] * cov2d[:, 1] + 0.000001)
+    cov2d_inv = np.array([cov2d[:, 2] * det_inv, -cov2d[:, 1] * det_inv, cov2d[:, 0] * det_inv]).T
+
+    # Determine the drawing area of 2d Gaussian.
+    areas = 3 * np.sqrt(np.vstack([cov2d[:, 0], cov2d[:, 2]])).T
 
     start = time.time()
 
@@ -167,7 +218,7 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
             continue
 
         cinv = cov2d_inv[i]
-        opa = opacity[i]
+        opa = alpha[i]
         patch_color = color[i]
 
         d = u[:, np.newaxis, np.newaxis] - idx_map[:, y0:y1, x0:x1]
@@ -192,33 +243,29 @@ def splat(us, areas, cov2d_inv, opacity, depth, color, H, W):
     return image
 
 
-def splat_gpu(u, areas, cov2d_inv, opacity, depth, color, H, W):
+def splat_gpu(u, cov2d, alpha, depth, color, H, W):
     import torch
     import simple_gaussian_reasterization as sgr
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
-    areas = torch.from_numpy(areas).type(torch.float32).to('cuda')
-    cov2d_inv = torch.from_numpy(cov2d_inv).type(torch.float32).to('cuda')
-    opacity = torch.from_numpy(opacity).type(torch.float32).to('cuda')
+    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
+    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
     depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.rasterize(u, areas, cov2d_inv, opacity, depth, color, H, W)
+    res = sgr.rasterize(u, cov2d, alpha, depth, color, H, W)
     image = res[0].to('cpu').detach().numpy().copy()
     image = image.transpose(1, 2, 0)
     # exit()
     return image
 
 
-def blend(color, opacity, pc, K, cov2d, H, W):
-    grid = np.array([(W + BLOCK - 1) / BLOCK, (H + BLOCK - 1) / BLOCK]).astype(int)
-    u, areas, cov2d_inv = get_splatting_info(pc, K, cov2d, grid)
-    depth = pc[:, 2]
+def blend(color, alpha, u, depth, K, cov2d, H, W):
     try:
         import torchx
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
-        image = splat_gpu(u, areas, cov2d_inv, opacity, depth, color, H, W)
+        image = splat_gpu(u, cov2d, alpha, depth, color, H, W)
     except ImportError:
         print("cannot find simple_gaussian_reasterization, using CPU mode.")
         print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(u, areas, cov2d_inv, opacity, depth, color, H, W)
+        image = splat(u, cov2d, alpha, depth, color, H, W)
     return image

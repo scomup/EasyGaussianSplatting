@@ -8,13 +8,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.ply:
-        # "/home/liu/workspace/gaussian-splatting/output/fb15ba66-e/point_cloud/iteration_30000/point_cloud.ply
+        # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
         ply_fn = args.ply
         print("Try to load %s ..." % ply_fn)
         gs = load_ply(ply_fn)
     else:
         print("not fly file.")
         exit(0)
+        # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
+        # gs = load_ply(ply_fn)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -32,15 +34,17 @@ if __name__ == "__main__":
                   [0, 0, 1.]])
 
     Tcw = np.eye(4)
-    Tcw[0:3, 0:3] = Rcw
-    Tcw[0:3, 3] = tcw
+    Tcw[:3, :3] = Rcw
+    Tcw[:3, 3] = tcw
     cam_center = np.linalg.inv(Tcw)[:3, 3]
 
     pw = gs['pos']
-    # pw = np.vstack((pw.T, np.ones(pw.shape[0]))).T
 
-    # step1. Transform the location to camera frame.
-    pc = (Rcw @ pw.T).T + tcw
+    # step1. Transform pw to camera frame,
+    # and project it to iamge.
+    u, pc = project(pw, Tcw, K)
+
+    depth = pc[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
@@ -54,7 +58,7 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    image = blend(color, gs['alpha'], pc, K, cov2d, H, W)
+    image = blend(color, gs['alpha'], u, depth, K, cov2d, H, W)
 
     plt.imshow(image)
 
