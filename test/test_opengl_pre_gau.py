@@ -27,6 +27,7 @@ def main():
     data_buffer = glGenBuffers(1)
     prep_buffer = glGenBuffers(1)
     depth_buffer = glGenBuffers(1)
+    index_buffer = glGenBuffers(1)
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, data_buffer)
     glBufferData(GL_SHADER_STORAGE_BUFFER, gs_data.nbytes, gs_data, GL_DYNAMIC_COPY)
@@ -35,9 +36,13 @@ def main():
     glBufferData(GL_SHADER_STORAGE_BUFFER, gs_data.shape[0] * 4 * 12, None, GL_DYNAMIC_COPY)
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, depth_buffer)
-    glBufferData(GL_SHADER_STORAGE_BUFFER, gs_data.shape[0] * 4, None, GL_DYNAMIC_COPY)
+    glBufferData(GL_SHADER_STORAGE_BUFFER, gs_data.shape[0] * 4 * 2, None, GL_DYNAMIC_COPY)
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, index_buffer)
+    glBufferData(GL_SHADER_STORAGE_BUFFER, gs_data.shape[0] * 4 * 2, None, GL_DYNAMIC_COPY)
 
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, data_buffer)
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, index_buffer)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, depth_buffer)
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 3, prep_buffer)
 
@@ -75,7 +80,9 @@ def main():
 
     start = time.time()
     glDispatchCompute(div_round_up(gs_data.shape[0], 256), 1, 1)
+    glFinish()
     end = time.time()
+    glUseProgram(0)
 
     time_diff = end - start
     print(time_diff)
@@ -85,6 +92,49 @@ def main():
     gs_prep = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 12)
     gs_prep = np.frombuffer(gs_prep, dtype=np.float32).reshape([-1, 12])
     # print(gs_prep)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, depth_buffer)
+    depth = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 2)
+    depth = np.frombuffer(depth, dtype=np.uint32)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, index_buffer)
+    index = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 2)
+    index = np.frombuffer(index, dtype=np.uint32)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+    source = open(
+        '/home/liu/workspace/simple_gaussian_splatting/viewer/shaders/radix_sort.glsl', 'r').read()
+    program = shaders.compileProgram(
+        shaders.compileShader(source, GL_COMPUTE_SHADER))
+    glUseProgram(program)
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, depth_buffer)
+    depth = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 2)
+    depth = np.frombuffer(depth, dtype=np.uint32)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, index_buffer)
+    index = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 2)
+    index = np.frombuffer(index, dtype=np.uint32)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+    start = time.time()
+    glDispatchCompute(div_round_up(gs_data.shape[0], 256), 1, 1)
+    glFinish()
+    end = time.time()
+    glUseProgram(0)
+    time_diff = end - start
+    print(time_diff)
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, depth_buffer)
+    depth = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 2)
+    depth = np.frombuffer(depth, dtype=np.uint32)
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, index_buffer)
+    index = glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, gs_data.shape[0] * 4 * 2)
+    index = np.frombuffer(index, dtype=np.uint32)
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
 
 if __name__ == "__main__":

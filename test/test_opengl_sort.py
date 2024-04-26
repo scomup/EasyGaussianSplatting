@@ -64,6 +64,7 @@ def main():
             # indices = np.frombuffer(indices, dtype=np.uint32)
             # print(data_aligned[indices])
             # glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0)
+    glFinish()
     end = time.time()
 
     time_diff = end - start

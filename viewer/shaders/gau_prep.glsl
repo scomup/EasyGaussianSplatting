@@ -47,8 +47,12 @@ layout (std430, binding=0) buffer GaussianData {
 	float gs_data[];
 };
 
+layout (std430, binding=1) buffer GaussianIndex {
+	uint index[];
+};
+
 layout (std430, binding=2) buffer GaussianDepth {
-	float depth[];
+	uint depth[];
 };
 
 layout (std430, binding=3) buffer GaussianPrep {
@@ -186,8 +190,13 @@ void main()
     vec4 pc = view_matrix * pw;
     vec4 u = projection_matrix * pc;
 
-	// set depth for sorter.
-	depth[gs_id] = pc.z;
+	// intial depth for sorter.
+	uint d = pc.z > 0 ? uint(pc.z * 100) : 0;
+	depth[gs_id] = d;
+	depth[gs_id + gs_num] = d;
+	index[gs_id] = gs_id;
+	index[gs_id + gs_num] = gs_id;
+
 
 	u = u / u.w;
 
