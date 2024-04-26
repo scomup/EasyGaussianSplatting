@@ -260,7 +260,7 @@ __global__ void inverseCov2D(
     areas[gs_id * 2 + 1] =  3 * sqrt(c);
 }
 
-std::vector<torch::Tensor> rasterizGuassian2DCUDA(
+std::vector<torch::Tensor> rasterizGuassian2D(
     torch::Tensor us,
     torch::Tensor cov2d,
     torch::Tensor alphas,
@@ -293,6 +293,7 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
         cov2d.contiguous().data<float>(),
         thrust::raw_pointer_cast(cov2d_inv.data()),
         thrust::raw_pointer_cast(areas.data()));
+    cudaDeviceSynchronize();
 
     getRect<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         W,
@@ -304,6 +305,7 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
         thrust::raw_pointer_cast(gs_patch_num.data()));
+    cudaDeviceSynchronize();
 
     thrust::inclusive_scan(gs_patch_num.begin(), gs_patch_num.end(), gs_patch_offsets.begin());
 
@@ -321,6 +323,7 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
         thrust::raw_pointer_cast(gs_patch_offsets.data()),
         thrust::raw_pointer_cast(patch_keys.data()),
         thrust::raw_pointer_cast(patch_gs_ids.data()));
+    cudaDeviceSynchronize();
 
     thrust::sort_by_key(patch_keys.begin(), patch_keys.end(), patch_gs_ids.begin());
 
@@ -330,6 +333,7 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
         patch_num,
         thrust::raw_pointer_cast(patch_keys.data()),
         thrust::raw_pointer_cast(gs_ranges.data()));
+    cudaDeviceSynchronize();
 
     draw<<<grid, block>>>(
         W,
@@ -341,7 +345,7 @@ std::vector<torch::Tensor> rasterizGuassian2DCUDA(
         alphas.contiguous().data<float>(),
         colors.contiguous().data<float>(),
         image.contiguous().data<float>());
-    /*
-    */
+    cudaDeviceSynchronize();
+
     return {image};
 }
