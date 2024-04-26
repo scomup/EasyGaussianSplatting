@@ -10,6 +10,8 @@ in float alpha;
 in vec3 cov_inv;
 in vec2 d_pix;  // u - pix
 
+uniform int  render_mod = 1;
+
 out vec4 final_color;
 
 void main()
@@ -19,8 +21,22 @@ void main()
     float maha_dist = cov_inv.x * d_pix.x * d_pix.x + cov_inv.z * d_pix.y * d_pix.y + 2 * cov_inv.y * d_pix.x * d_pix.y;
     if (maha_dist < 0.f)
         discard;
-    float alpha_prime = min(0.99f, alpha * exp(- 0.5 * maha_dist));
+
+    float g = exp(- 0.5 * maha_dist);
+    float alpha_prime = min(0.99f, alpha * g);
     if (alpha_prime < 1.f / 255.f)
         discard;
     final_color = vec4(color, alpha_prime);
+
+    if (render_mod == 1)
+    {
+        final_color.a = final_color.a > 0.3 ? 1 : 0;
+        final_color.rgb = final_color.rgb * g;
+    }
+    else if (render_mod == 2)
+    {
+        final_color.a = final_color.a > 0.3 ? 1 - final_color.a: 0;
+    }
+    
+
 }

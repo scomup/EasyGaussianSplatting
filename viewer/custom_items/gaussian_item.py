@@ -11,6 +11,8 @@ import time
 from PyQt5 import QtGui, QtCore
 import sys
 import os
+from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QSizePolicy,\
+      QSpacerItem, QLabel, QLineEdit, QMainWindow, QApplication, QDoubleSpinBox
 
 path = os.path.dirname(__file__)
 
@@ -65,6 +67,25 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
             self.sort = self.torch_sort
         except ImportError:
                 self.sort = self.opengl_sort
+
+    def addSetting(self, layout):
+        label1 = QLabel("set render mode:")
+        layout.addWidget(label1)
+        combo = QComboBox()
+        combo.addItem("render normal guassian")
+        combo.addItem("render ball")
+        combo.addItem("render inverse guassian")
+        combo.currentIndexChanged.connect(self.on_combobox_selection)
+        layout.addWidget(combo)
+        weights = []
+        weights.append(label1)
+        weights.append(combo)
+        return weights
+
+    def on_combobox_selection(self, index):
+        glUseProgram(self.program)
+        set_uniform_1int(self.program, index, "render_mod")
+        glUseProgram(0)
 
     def initializeGL(self):
         fragment_shader = open(path + '/../shaders/gau_frag.glsl', 'r').read()
@@ -129,6 +150,7 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
 
         glUseProgram(self.program)
         set_uniform_v2(self.program, [W, H], 'win_size')
+        set_uniform_1int(self.program, 0, "render_mod")
         glUseProgram(0)
 
         # opengl settings

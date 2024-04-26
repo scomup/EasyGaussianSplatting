@@ -260,7 +260,7 @@ def splat_gpu(u, cov2d, alpha, depth, color, H, W):
 
 def blend(color, alpha, u, depth, K, cov2d, H, W):
     try:
-        import torchx
+        import torch
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
         image = splat_gpu(u, cov2d, alpha, depth, color, H, W)
