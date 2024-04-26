@@ -57,7 +57,14 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         self.sh_dim = 0
         self.gs_data = np.empty([0])
         self.prev_Rz = np.array([np.inf, np.inf, np.inf])
-        self.cuda_pw = None
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                raise ImportError
+            self.cuda_pw = None
+            self.sort = self.torch_sort
+        except ImportError:
+                self.sort = self.opengl_sort
 
     def initializeGL(self):
         fragment_shader = open(path + '/../shaders/gau_frag.glsl', 'r').read()
@@ -200,8 +207,7 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
             # import torch
             # torch.cuda.synchronize()
             # start = time.time()
-            self.opengl_sort()
-            # self.torch_sort(Rz)
+            self.sort()
             self.prev_Rz = Rz
             # torch.cuda.synchronize()
             # end = time.time()
@@ -217,13 +223,14 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
                 set_uniform_1int(self.sort_program, int(stage), "stage")
                 glDispatchCompute(div_round_up(self.num_sort//2, 256), 1, 1)
                 glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT)
+        # glFinish()
         glUseProgram(0)
 
-    def torch_sort(self, Rz):
+    def torch_sort(self):
         import torch
         if self.cuda_pw is None:
             self.cuda_pw = torch.tensor(self.gs_data[:, :3]).cuda()
-        Rz = torch.tensor(Rz).cuda()
+        Rz = torch.tensor(self.view_matrix[2, :3]).cuda()
         depth = Rz @ self.cuda_pw.T
         index = torch.argsort(depth).type(torch.int32).cpu().numpy()
         glBindBuffer(GL_SHADER_STORAGE_BUFFER, self.ssbo_gi)
