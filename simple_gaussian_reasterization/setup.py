@@ -6,8 +6,8 @@ setup(
     ext_modules=[
         CUDAExtension('simple_gaussian_reasterization', [
             'ext.cpp',
-            'render.cu',
-            'render_with_jacobian.cu',
+            'forward.cu',
+            'backward.cu',
         ])
     ],
     cmdclass={
