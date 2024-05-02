@@ -14,20 +14,56 @@ if __name__ == "__main__":
         gs = load_ply(ply_fn)
     else:
         print("not fly file.")
-        exit(0)
+        # exit(0)
         # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
         # gs = load_ply(ply_fn)
+    
+    gs_data = np.array([[0.,  0.,  0.,  # xyz
+                        1.,  0.,  0., 0.,  # rot
+                        0.5,  0.5,  0.5,  # size
+                        1.,
+                        1.772484,  -1.772484,  1.772484],
+                        [1.,  0.,  0.,
+                        1.,  0.,  0., 0.,
+                        2,  0.5,  0.5,
+                        1.,
+                        1.772484,  -1.772484, -1.772484],
+                        [0.,  1.,  0.,
+                        1.,  0.,  0., 0.,
+                        0.5,  2,  0.5,
+                        1.,
+                        -1.772484, 1.772484, -1.772484],
+                        [0.,  0.,  1.,
+                        1.,  0.,  0., 0.,
+                        0.5,  0.5,  2,
+                        1.,
+                        -1.772484, -1.772484,  1.772484]
+                        ], dtype=np.float32)
 
+    dtypes = [('pos', '<f4', (3,)),
+              ('rot', '<f4', (4,)),
+              ('scale', '<f4', (3,)),
+              ('alpha', '<f4'),
+              ('sh', '<f4', (3,))]
+
+    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
     Rcw = np.array([[0.89699204,  0.06525223,  0.43720409],
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
 
-    W = int(979)  # 1957  # 979
-    H = int(546)  # 1091  # 546
-    focal_x = 1163.2547280302354/2.
-    focal_y = 1156.280404988286/2.
+    ## W = int(979)  # 1957  # 979
+    ## H = int(546)  # 1091  # 546
+    ## focal_x = 1163.2547280302354/2.
+    ## focal_y = 1156.280404988286/2.
+
+    W = int(32)  # 1957  # 979
+    H = int(32)  # 1091  # 546
+    focal_x = 16
+    focal_y = 16
+
 
     K = np.array([[focal_x, 0, W/2.],
                   [0, focal_y, H/2.],
@@ -58,8 +94,8 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    image = blend(color, gs['alpha'], u, depth, K, cov2d, H, W)
+    image, contrib, final_tau = splat_gpu(u, cov2d, gs['alpha'], depth, color, H, W)
 
-    plt.imshow(image)
+    plt.imshow(final_tau)
 
     plt.show()

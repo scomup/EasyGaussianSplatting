@@ -142,7 +142,9 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     const float *__restrict__ cov2d_inv,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
-    float *__restrict__ image)
+    float *__restrict__ image,
+    int *__restrict__ contrib,
+    float *__restrict__ final_tau)
 
 {
     const uint2 tile = {blockIdx.x, blockIdx.y};
@@ -168,6 +170,8 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     float3 finial_color = {0, 0, 0};
 
     float tau = 1.0f;
+
+    int cont = 0;
 
     // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
@@ -214,6 +218,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 
         // forward.md (5)
         finial_color +=  tau * alpha_prime * color;
+        cont = cont + 1;  // how many gs contribute to this pixel. 
 
         // forward.md (5.2)
         float tau_new = tau * (1.f - alpha_prime);
@@ -231,6 +236,8 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
         image[H * W * 0 + pix_idx] = finial_color.x;
         image[H * W * 1 + pix_idx] = finial_color.y;
         image[H * W * 2 + pix_idx] = finial_color.z;
+        contrib[pix_idx] = cont;
+        final_tau[pix_idx] = tau;
     }
 }
 
@@ -270,7 +277,10 @@ std::vector<torch::Tensor> rasterizGuassian2D(
     int W)
 {
     auto float_opts = us.options().dtype(torch::kFloat32);
+    auto int_opts = us.options().dtype(torch::kInt32);
     torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
+    torch::Tensor contrib = torch::full({H, W}, 0, int_opts);
+    torch::Tensor final_tau = torch::full({H, W}, 0, float_opts);
 
     //gs:    2d gaussian;  a projection of a 3d gaussian onto a 2d image
     //tile:  a 16x16 area of 2d image
@@ -344,8 +354,10 @@ std::vector<torch::Tensor> rasterizGuassian2D(
         thrust::raw_pointer_cast(cov2d_inv.data()),
         alphas.contiguous().data<float>(),
         colors.contiguous().data<float>(),
-        image.contiguous().data<float>());
+        image.contiguous().data<float>(),
+        contrib.contiguous().data<int>(),
+        final_tau.contiguous().data<float>());
     cudaDeviceSynchronize();
 
-    return {image};
+    return {image, contrib, final_tau};
 }

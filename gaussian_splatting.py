@@ -253,17 +253,19 @@ def splat_gpu(u, cov2d, alpha, depth, color, H, W):
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
     res = sgr.rasterize(u, cov2d, alpha, depth, color, H, W)
     image = res[0].to('cpu').detach().numpy().copy()
+    contrib = res[1].to('cpu').detach().numpy().copy()
+    final_tau = res[2].to('cpu').detach().numpy().copy()
     image = image.transpose(1, 2, 0)
     # exit()
-    return image
+    return image, contrib, final_tau
 
 
-def blend(color, alpha, u, depth, K, cov2d, H, W):
+def blend(u, cov2d, alpha, depth, color, H, W):
     try:
         import torch
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
-        image = splat_gpu(u, cov2d, alpha, depth, color, H, W)
+        image, _, _ = splat_gpu(u, cov2d, alpha, depth, color, H, W)
     except ImportError:
         print("cannot find simple_gaussian_reasterization, using CPU mode.")
         print("try install it by 'pip install simple_gaussian_reasterization/.'")
