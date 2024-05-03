@@ -174,7 +174,7 @@ def project(pw, Tcw, K):
     return u, pc
 
 
-def splat(us, cov2d, alpha, depth, color, H, W):
+def splat(H, W, u, cov2d, alpha, depth, color):
     image = np.zeros([H, W, 3])
     image_T = np.ones([H, W])
 
@@ -243,7 +243,7 @@ def splat(us, cov2d, alpha, depth, color, H, W):
     return image
 
 
-def splat_gpu(u, cov2d, alpha, depth, color, H, W):
+def splat_gpu(H, W, u, cov2d, alpha, depth, color):
     import torch
     import simple_gaussian_reasterization as sgr
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
@@ -251,23 +251,23 @@ def splat_gpu(u, cov2d, alpha, depth, color, H, W):
     alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
     depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.rasterize(u, cov2d, alpha, depth, color, H, W)
+    res = sgr.forward(H, W, u, cov2d, alpha, depth, color)
     res_cpu = []
     for r in res:
-        res_cpu.append(r.to('cpu').detach().numpy().copy())
+        res_cpu.append(r.to('cpu').numpy())
     res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
     return res_cpu
 
 
-def blend(u, cov2d, alpha, depth, color, H, W):
+def blend(H, W, u, cov2d, alpha, depth, color):
     try:
         import torch
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
-        res = splat_gpu(u, cov2d, alpha, depth, color, H, W)
+        res = splat_gpu(H, W, u, cov2d, alpha, depth, color)
         image = res[0]
     except ImportError:
         print("cannot find simple_gaussian_reasterization, using CPU mode.")
         print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(u, cov2d, alpha, depth, color, H, W)
+        image = splat(H, W, cov2d, alpha, depth, color)
     return image

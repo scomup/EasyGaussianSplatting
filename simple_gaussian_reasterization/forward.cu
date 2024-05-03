@@ -7,7 +7,7 @@
 inline __device__ void fetch2shared(
     int32_t n,
     const int2 range,
-    const uint *__restrict__ gs_id_per_patch,
+    const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
     const float *__restrict__ cov2d_inv,
     const float *__restrict__ alphas,
@@ -40,7 +40,7 @@ __global__ void createKey(const int gs_num,
                           const float *__restrict__ depths,
                           const uint *__restrict__ patch_offset_per_gs,
                           uint64_t *__restrict__ patch_keys,
-                          uint *__restrict__ gs_id_per_patch)
+                          int *__restrict__ gs_id_per_patch)
 {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -142,7 +142,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     const int W,
     const int H,
     const int *__restrict__ patch_offset_per_tile,
-    const uint *__restrict__ gs_id_per_patch,
+    const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
     const float *__restrict__ cov2d_inv,
     const float *__restrict__ alphas,
@@ -272,17 +272,17 @@ __global__ void inverseCov2D(
     areas[gs_id * 2 + 1] =  3 * sqrt(c);
 }
 
-std::vector<torch::Tensor> rasterizGuassian2D(
-    torch::Tensor us,
-    torch::Tensor cov2d,
-    torch::Tensor alphas,
-    torch::Tensor depths,
-    torch::Tensor colors,
-    int H,
-    int W)
+std::vector<torch::Tensor> forward(
+    const int H,
+    const int W,
+    const torch::Tensor us,
+    const torch::Tensor cov2d,
+    const torch::Tensor alphas,
+    const torch::Tensor depths,
+    const torch::Tensor colors)
 {
-    auto float_opts = us.options().dtype(torch::kFloat32);
-    auto int_opts = us.options().dtype(torch::kInt32);
+    auto float_opts = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
+    auto int_opts = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt32);
     torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
     torch::Tensor contrib = torch::full({H, W}, 0, int_opts);
     torch::Tensor final_tau = torch::full({H, W}, 0, float_opts);
@@ -300,13 +300,15 @@ std::vector<torch::Tensor> rasterizGuassian2D(
     thrust::device_vector<uint4> gs_rects(gs_num);
     thrust::device_vector<uint>  patch_num_per_gs(gs_num);
     thrust::device_vector<uint>  patch_offset_per_gs(gs_num);
-    thrust::device_vector<float>  cov2d_inv(gs_num * 3);
+    // thrust::device_vector<float>  cov2d_inv(gs_num * 3);
     thrust::device_vector<float>  areas(gs_num * 2);
+
+    torch::Tensor cov2d_inv = torch::full({gs_num * 3}, 0, float_opts);
 
     inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        cov2d.contiguous().data<float>(),
-        thrust::raw_pointer_cast(cov2d_inv.data()),
+        cov2d.contiguous().data_ptr<float>(),
+        cov2d_inv.contiguous().data_ptr<float>(),
         thrust::raw_pointer_cast(areas.data()));
     cudaDeviceSynchronize();
 
@@ -314,9 +316,9 @@ std::vector<torch::Tensor> rasterizGuassian2D(
         W,
         H,
         gs_num,
-        us.contiguous().data<float>(),
+        us.contiguous().data_ptr<float>(),
         thrust::raw_pointer_cast(areas.data()),
-        depths.contiguous().data<float>(),
+        depths.contiguous().data_ptr<float>(),
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
         thrust::raw_pointer_cast(patch_num_per_gs.data()));
@@ -328,13 +330,13 @@ std::vector<torch::Tensor> rasterizGuassian2D(
     uint patch_num = (uint)patch_offset_per_gs[gs_num - 1];  // copy to cpu memory
 
     thrust::device_vector<uint64_t> patch_keys(patch_num);
-    thrust::device_vector<uint> gs_id_per_patch(patch_num);
+    thrust::device_vector<int> gs_id_per_patch(patch_num);
     
     createKey<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
-        depths.contiguous().data<float>(),
+        depths.contiguous().data_ptr<float>(),
         thrust::raw_pointer_cast(patch_offset_per_gs.data()),
         thrust::raw_pointer_cast(patch_keys.data()),
         thrust::raw_pointer_cast(gs_id_per_patch.data()));
@@ -348,22 +350,25 @@ std::vector<torch::Tensor> rasterizGuassian2D(
     getOffset<<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         patch_num,
         thrust::raw_pointer_cast(patch_keys.data()),
-        patch_offset_per_tile.contiguous().data<int>());
+        patch_offset_per_tile.contiguous().data_ptr<int>());
     cudaDeviceSynchronize();
 
     draw<<<grid, block>>>(
         W,
         H,
-        patch_offset_per_tile.contiguous().data<int>(),
+        patch_offset_per_tile.contiguous().data_ptr<int>(),
         thrust::raw_pointer_cast(gs_id_per_patch.data()),
-        us.contiguous().data<float>(),
-        thrust::raw_pointer_cast(cov2d_inv.data()),
-        alphas.contiguous().data<float>(),
-        colors.contiguous().data<float>(),
-        image.contiguous().data<float>(),
-        contrib.contiguous().data<int>(),
-        final_tau.contiguous().data<float>());
+        us.contiguous().data_ptr<float>(),
+        cov2d_inv.contiguous().data_ptr<float>(),
+        alphas.contiguous().data_ptr<float>(),
+        colors.contiguous().data_ptr<float>(),
+        image.contiguous().data_ptr<float>(),
+        contrib.contiguous().data_ptr<int>(),
+        final_tau.contiguous().data_ptr<float>());
     cudaDeviceSynchronize();
 
-    return {image, contrib, final_tau, patch_offset_per_tile};
+    torch::Tensor gsid_per_patch_torch = torch::from_blob(thrust::raw_pointer_cast(gs_id_per_patch.data()), 
+        {static_cast<long>(gs_id_per_patch.size())}, torch::TensorOptions().dtype(torch::kInt32)).to(torch::kCUDA);
+
+    return {image, contrib, final_tau, patch_offset_per_tile, gsid_per_patch_torch, cov2d_inv};
 }

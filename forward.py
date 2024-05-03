@@ -46,7 +46,7 @@ if __name__ == "__main__":
               ('alpha', '<f4'),
               ('sh', '<f4', (3,))]
 
-    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    # gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
     
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -94,7 +94,7 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    res = splat_gpu(u, cov2d, gs['alpha'], depth, color, H, W)
+    res = splat_gpu(H, W, u, cov2d, gs['alpha'], depth, color)
     print(res[3])
 
     plt.imshow(res[0])
