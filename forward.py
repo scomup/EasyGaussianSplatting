@@ -94,8 +94,9 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    image, contrib, final_tau = splat_gpu(u, cov2d, gs['alpha'], depth, color, H, W)
+    res = splat_gpu(u, cov2d, gs['alpha'], depth, color, H, W)
+    print(res[3])
 
-    plt.imshow(final_tau)
-
+    plt.imshow(res[0])
+    
     plt.show()
