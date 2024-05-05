@@ -72,7 +72,7 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 
 	const int gs_num = range.y - range.x;
 
-    float3 gamma = {0, 0, 0}; // final color of pix
+    float3 gamma_next = {0, 0, 0}; // final color of pix
 
     float3 dloss_dgamma = {dloss_dgammas[0 * H * W + pix_idx],
                            dloss_dgammas[1 * H * W + pix_idx],
@@ -118,12 +118,21 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         int gs_id = shared_gsid[j];
         float2 d = u - pix;
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
+        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
 
-        float3 dgamma_dalphaprime = tau * (color - gamma);
+        float3 dgamma_dalphaprime = tau * (color - gamma_next);
         float dalphaprime_dalpha = exp(-0.5f * maha_dist);
         float dloss_dalpha = dot(dloss_dgamma, dgamma_dalphaprime) * dalphaprime_dalpha;
+        printf("%d %f\n", gs_id, dloss_dalpha);
+        // atomicAdd(&dloss_dalphas[gs_id], 0);
+        // printf("%d %f\n", gs_id, dloss_dalphas[gs_id]);
 
-        atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
+        /*
+
+        float3 gamma = alpha_prime * color + (1 - alpha_prime) * gamma_next;
+        float tau_prev = tau / (1 - alpha_prime);
+
+        //if ()
 
 
         
@@ -134,7 +143,7 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 
         // forward.md (5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
-        /*
+        
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
 
         float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
@@ -188,11 +197,12 @@ std::vector<torch::Tensor> backward(
     dim3 grid(DIV_ROUND_UP(W, BLOCK), DIV_ROUND_UP(H, BLOCK), 1);
 	dim3 block(BLOCK, BLOCK, 1);
     
-    auto float_opts = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
-    auto int_opts = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt32);
+    auto float_opts = us.options().dtype(torch::kFloat32);
+    auto int_opts = us.options().dtype(torch::kInt32);
+    torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
     torch::Tensor dloss_dalphas = torch::full({gs_num}, 0, float_opts);
 
-
+    
     drawBack<<<grid, block>>>(
         W,
         H,
@@ -206,8 +216,10 @@ std::vector<torch::Tensor> backward(
         final_tau.contiguous().data_ptr<float>(),
         dloss_dgammas.contiguous().data_ptr<float>(),
         dloss_dalphas.contiguous().data_ptr<float>());
-        
+    
     cudaDeviceSynchronize();
+
+   return {image};
     
     
 

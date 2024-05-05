@@ -1,5 +1,51 @@
 from gaussian_splatting import *
 
+"""
+    const int H,
+    const int W,
+    const torch::Tensor us,
+    const torch::Tensor cov2d,
+    const torch::Tensor alphas,
+    const torch::Tensor depths,
+    const torch::Tensor colors,
+
+    const torch::Tensor contrib,
+    const torch::Tensor final_tau, 
+    const torch::Tensor patch_offset_per_tile, 
+    const torch::Tensor gs_id_per_patch,
+    const torch::Tensor cov2d_inv,
+    const torch::Tensor dloss_dgammas)
+
+image, contrib, final_tau, patch_offset_per_tile, gsid_per_patch_torch, cov2d_inv
+"""
+
+def splat_test(H, W, u, cov2d, alpha, depth, color):
+    import torch
+    import simple_gaussian_reasterization as sgr
+    u = torch.from_numpy(u).type(torch.float32).to('cuda')
+    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
+    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
+    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
+    color = torch.from_numpy(color).type(torch.float32).to('cuda')
+    res = sgr.forward(H, W, u, cov2d, alpha, depth, color)
+
+    # res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
+    #                    res[1], res[2], res[3], res[4], res[5], dloss_dgamma)
+    contrib = torch.clone(res[1])
+    final_tau = torch.clone(res[2])
+    patch_offset_per_tile = torch.clone(res[3])
+    gs_id_per_patch = torch.clone(res[4])
+    cov2d_inv = torch.clone(res[5])
+    dloss_dgamma = torch.ones([H,W,3],dtype=torch.float32).to('cuda')
+    res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
+                            contrib, final_tau, patch_offset_per_tile, 
+                            gs_id_per_patch, cov2d_inv, dloss_dgamma)
+
+    res_cpu = []
+    for r in res:
+        res_cpu.append(r.to('cpu').numpy())
+    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
+    return res_cpu
 
 if __name__ == "__main__":
     import argparse
@@ -46,7 +92,7 @@ if __name__ == "__main__":
               ('alpha', '<f4'),
               ('sh', '<f4', (3,))]
 
-    # gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
     
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -94,7 +140,7 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    res = splat_gpu(H, W, u, cov2d, gs['alpha'], depth, color)
+    res = splat_test(H, W, u, cov2d, gs['alpha'], depth, color)
     print(res[3])
 
     plt.imshow(res[0])

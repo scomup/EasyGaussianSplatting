@@ -281,8 +281,8 @@ std::vector<torch::Tensor> forward(
     const torch::Tensor depths,
     const torch::Tensor colors)
 {
-    auto float_opts = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kFloat32);
-    auto int_opts = torch::TensorOptions().device(torch::kCUDA).dtype(torch::kInt32);
+    auto float_opts = us.options().dtype(torch::kFloat32);
+    auto int_opts = us.options().dtype(torch::kInt32);
     torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
     torch::Tensor contrib = torch::full({H, W}, 0, int_opts);
     torch::Tensor final_tau = torch::full({H, W}, 0, float_opts);
