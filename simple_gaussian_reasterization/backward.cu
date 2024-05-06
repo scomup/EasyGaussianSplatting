@@ -18,7 +18,8 @@ inline __device__ void fetch2sharedBack(
     int *shared_gsid)
 {
     int i = blockDim.x * threadIdx.y + threadIdx.x;  // block idx
-    int j = range.y - n * BLOCK_SIZE + i;  // patch idx
+    int j = range.y + n * BLOCK_SIZE - i - 1;  // patch idx
+
     if (j >= range.x)
     {
         int gs_id = gs_id_per_patch[j];
@@ -47,7 +48,8 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     const int *__restrict__ contrib,
     const float *__restrict__ final_tau,
     const float *__restrict__ dloss_dgammas,
-    float *__restrict__ dloss_dalphas)
+    float *__restrict__ dloss_dalphas,
+    float *__restrict__ dloss_dcolors)
 
 {
     const uint2 tile = {blockIdx.x, blockIdx.y};
@@ -59,7 +61,7 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 
 	const bool inside = pix.x < W && pix.y < H;
 	const int2 range = {patch_offset_per_tile[tile_idx], 
-                        patch_offset_per_tile[tile_idx] + contrib[pix_idx]};
+                        patch_offset_per_tile[tile_idx + 1]};
 
 
 	bool thread_is_finished = !inside;
@@ -72,15 +74,20 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 
 	const int gs_num = range.y - range.x;
 
-    float3 gamma_next = {0, 0, 0}; // final color of pix
+    float3 gamma_cur2last = {0, 0, 0}; // the accumulated color of the pix from current to last gaussians (backward)
 
     float3 dloss_dgamma = {dloss_dgammas[0 * H * W + pix_idx],
                            dloss_dgammas[1 * H * W + pix_idx],
                            dloss_dgammas[2 * H * W + pix_idx]};
 
     float tau = final_tau[pix_idx];
+    int cont = contrib[pix_idx];
 
-    int cont = 0;
+    if (pix.x == 16 && pix.y == 16)
+    {
+        printf("backward\n");
+        printf("tile_idx: %d gs_num:%d range:%d %d cont %d\n", tile_idx, gs_num, range.x, range.y, cont);
+    }
 
     // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
@@ -110,6 +117,10 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
                          shared_gsid);
             __syncthreads();
         }
+        
+        // becasuse we fetch data by backward, we skip i < gs_num - cont
+        if ( i < gs_num - cont)
+            continue;
 
         float2 u = shared_pos2d[j];
         float3 cinv = shared_cinv2d[j];
@@ -118,19 +129,38 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         int gs_id = shared_gsid[j];
         float2 d = u - pix;
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
-        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
+        float g = exp(-0.5f * maha_dist);
+        float alpha_prime = min(0.99f, alpha * g);
+        tau = tau / (1 - alpha_prime);
 
-        float3 dgamma_dalphaprime = tau * (color - gamma_next);
-        float dalphaprime_dalpha = exp(-0.5f * maha_dist);
-        float dloss_dalpha = dot(dloss_dgamma, dgamma_dalphaprime) * dalphaprime_dalpha;
-        printf("%d %f\n", gs_id, dloss_dalpha);
-        // atomicAdd(&dloss_dalphas[gs_id], 0);
-        // printf("%d %f\n", gs_id, dloss_dalphas[gs_id]);
+        float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
+        float dalphaprime_dalpha = g;
+        float3 dgamma_dalpha = dgamma_dalphaprime * dalphaprime_dalpha; 
+        float dloss_dalpha = dot(dloss_dgamma, dgamma_dalpha);
+    
+        atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
+
+        if (pix.x == 16 && pix.y == 16)
+        {
+            //printf("i:%d, gs_id:%d, alpha_prime %f, tau %f, color: %f %f %f, gamma :%f %f %f\n",
+            //    i, gs_id,
+            //    alpha_prime, tau,
+            //    color.x, color.y, color.z,
+            //    gamma_cur2last.x, gamma_cur2last.y, gamma_cur2last.z);
+            printf("i: %d  tau: %f color: %f %f %f gamma_cur2last: %f %f %f dgamma_dalphaprime:%f %f %f\n", 
+                i, tau,
+                color.x, color.y, color.z,
+                gamma_cur2last.x, gamma_cur2last.y, gamma_cur2last.z,
+                dgamma_dalphaprime.x, dgamma_dalphaprime.y, dgamma_dalphaprime.z);
+        }
+
+        gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
+
+        float dgamma_dcolor = tau * alpha_prime;
+        float3 dloss_dcolor = dloss_dgamma * dgamma_dcolor;
+        atomicAdd(&dloss_dcolors[gs_id], dgamma_dcolor);
 
         /*
-
-        float3 gamma = alpha_prime * color + (1 - alpha_prime) * gamma_next;
-        float tau_prev = tau / (1 - alpha_prime);
 
         //if ()
 
@@ -201,6 +231,7 @@ std::vector<torch::Tensor> backward(
     auto int_opts = us.options().dtype(torch::kInt32);
     torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
     torch::Tensor dloss_dalphas = torch::full({gs_num}, 0, float_opts);
+    torch::Tensor dloss_dcolors = torch::full({gs_num, 3}, 0, float_opts);
 
     
     drawBack<<<grid, block>>>(
@@ -215,11 +246,12 @@ std::vector<torch::Tensor> backward(
         contrib.contiguous().data_ptr<int>(),
         final_tau.contiguous().data_ptr<float>(),
         dloss_dgammas.contiguous().data_ptr<float>(),
-        dloss_dalphas.contiguous().data_ptr<float>());
+        dloss_dalphas.contiguous().data_ptr<float>(),
+        dloss_dcolors.contiguous().data_ptr<float>());
     
     cudaDeviceSynchronize();
 
-   return {image};
+   return {dloss_dalphas, dloss_dcolors};
     
     
 

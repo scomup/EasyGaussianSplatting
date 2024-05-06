@@ -31,15 +31,18 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
 
     # res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
     #                    res[1], res[2], res[3], res[4], res[5], dloss_dgamma)
+    image = torch.clone(res[0])
     contrib = torch.clone(res[1])
     final_tau = torch.clone(res[2])
     patch_offset_per_tile = torch.clone(res[3])
     gs_id_per_patch = torch.clone(res[4])
     cov2d_inv = torch.clone(res[5])
-    dloss_dgamma = torch.ones([H,W,3],dtype=torch.float32).to('cuda')
+    dloss_dgammas = torch.ones([H,W,3],dtype=torch.float32).to('cuda')
+    print(image[:,16,16])
+
     res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
                             contrib, final_tau, patch_offset_per_tile, 
-                            gs_id_per_patch, cov2d_inv, dloss_dgamma)
+                            gs_id_per_patch, cov2d_inv, dloss_dgammas)
 
     res_cpu = []
     for r in res:

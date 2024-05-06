@@ -13,8 +13,11 @@ inline __device__ float dot(const float3 &a, const float3 &b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
-
 inline __device__ float3 operator*(const float &b, const float3 &a) 
+{
+  return make_float3(a.x*b, a.y*b, a.z*b);
+}
+inline __device__ float3 operator*(const float3 &a, const float &b) 
 {
   return make_float3(a.x*b, a.y*b, a.z*b);
 }
