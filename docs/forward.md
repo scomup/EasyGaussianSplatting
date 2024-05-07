@@ -191,18 +191,23 @@ Here, $r$ is the unit direction vector between the camera and the 3D Gaussian, a
 Using the information obtained from steps 1 to 4, calculate the final values (RGB colors) for all pixels in the 2D scene.
 
 $$
-\gamma_{j} 
-= \sum_{i \in N} \alpha_{ij}^{\prime}(x_{j}, \alpha_i, \Sigma^{\prime}) c_i \tau_{ij}
+\gamma_{j} (\alpha_i, \sigma^{\prime}_i, c_i, x_{j})
+= \sum_{i \in N} \alpha_{ij}^{\prime} c_i \tau_{ij}
 \tag{5}
 $$
 
 Where $\alpha_{ij}^{\prime}$ represents the opacity of the $i$-th 3D Gaussian at pixel $j$, and is calculated using the following equation:
 
 $$
-\alpha_{ij}^{\prime} = \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1} (u_{i}-x_{j})^T\right) \alpha_i
+\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, x_{j}) = 
+\exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \alpha_i
 \tag{5.1}
 $$
 
+where:
+$$
+\Sigma^{\prime}_i = \mathrm{symmetric\_matrix}(\sigma^{\prime})
+ $$
 The opacity increases as the Mahalanobis distance between the mean of the 2D Gaussian ($u_{i}$) and the current pixel ($x_{j}$) gets closer.
 
 As light from objects farther away from the camera travels through multiple objects and ends up in the camera, the light becomes weaker. As a result, the contribution to the final color decreases as the distance from the camera increases.

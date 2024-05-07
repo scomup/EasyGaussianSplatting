@@ -1,23 +1,5 @@
 from gaussian_splatting import *
 
-"""
-    const int H,
-    const int W,
-    const torch::Tensor us,
-    const torch::Tensor cov2d,
-    const torch::Tensor alphas,
-    const torch::Tensor depths,
-    const torch::Tensor colors,
-
-    const torch::Tensor contrib,
-    const torch::Tensor final_tau, 
-    const torch::Tensor patch_offset_per_tile, 
-    const torch::Tensor gs_id_per_patch,
-    const torch::Tensor cov2d_inv,
-    const torch::Tensor dloss_dgammas)
-
-image, contrib, final_tau, patch_offset_per_tile, gsid_per_patch_torch, cov2d_inv
-"""
 
 def splat_test(H, W, u, cov2d, alpha, depth, color):
     import torch
@@ -37,11 +19,11 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
     patch_offset_per_tile = torch.clone(res[3])
     gs_id_per_patch = torch.clone(res[4])
     cov2d_inv = torch.clone(res[5])
-    dloss_dgammas = torch.ones([H,W,3],dtype=torch.float32).to('cuda')
-    print(image[:,16,16])
+    dloss_dgammas = torch.ones([H, W, 3], dtype=torch.float32).to('cuda')
+    print(image[:, 16, 16])
 
     res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
-                            contrib, final_tau, patch_offset_per_tile, 
+                            contrib, final_tau, patch_offset_per_tile,
                             gs_id_per_patch, cov2d_inv, dloss_dgammas)
 
     res_cpu = []
@@ -49,6 +31,7 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
         res_cpu.append(r.to('cpu').numpy())
     res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
     return res_cpu
+
 
 if __name__ == "__main__":
     import argparse
@@ -66,7 +49,7 @@ if __name__ == "__main__":
         # exit(0)
         # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
         # gs = load_ply(ply_fn)
-    
+
     gs_data = np.array([[0.,  0.,  0.,  # xyz
                         1.,  0.,  0., 0.,  # rot
                         0.5,  0.5,  0.5,  # size
@@ -96,23 +79,22 @@ if __name__ == "__main__":
               ('sh', '<f4', (3,))]
 
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
-    
+
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
     Rcw = np.array([[0.89699204,  0.06525223,  0.43720409],
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
 
-    ## W = int(979)  # 1957  # 979
-    ## H = int(546)  # 1091  # 546
-    ## focal_x = 1163.2547280302354/2.
-    ## focal_y = 1156.280404988286/2.
+    # W = int(979)  # 1957  # 979
+    # H = int(546)  # 1091  # 546
+    # focal_x = 1163.2547280302354/2.
+    # focal_y = 1156.280404988286/2.
 
     W = int(32)  # 1957  # 979
     H = int(32)  # 1091  # 546
     focal_x = 16
     focal_y = 16
-
 
     K = np.array([[focal_x, 0, W/2.],
                   [0, focal_y, H/2.],
@@ -147,5 +129,5 @@ if __name__ == "__main__":
     print(res[3])
 
     plt.imshow(res[0])
-    
+
     plt.show()

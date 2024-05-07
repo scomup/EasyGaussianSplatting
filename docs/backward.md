@@ -1,3 +1,67 @@
+# The Backward Process of 3D Gaussian Splatting
+
+This document describes the **backward process** of 3D Gaussian Splatting, which is the process of training 3D Gaussians by given 2D image.
+
+This process requires training the 3D Gaussians by optimizing, so we need to compute the jacabian of all the functions mentioned in the **forward process**.
+
+
+## The input of backward process
+
+### The output of forward process
+
+- $\gamma_j$: The final values (RGB colors) for all pixels in the 2D image.
+
+
+### Parameters
+
+3D Gaussian parameters to be trained:
+
+- $q_i$: Rotation 3D Gaussian (quaternion)
+- $s_i$: Scale of 3D Gaussian (3D vector)
+- $h_i$: Spherical harmonics parameters of 3D Gaussian
+- $\alpha_i$: Opacity of 3D Gaussian
+- ${p_w}_i$: The location of 3D Gaussian in the world frame
+
+where $i$ is the index of 3D Gaussian. For ease of reading, $i$ is omitted in the following text.
+
+## The output of backward process
+
+$$
+\newcommand{\diff}[2]{\frac{\partial #1}{\partial #2}} %norm 
+$$
+
+### Parameters
+
+3D Gaussian parameters to be trained:
+
+- $\diff{\gamma_j}{q_i}$: derivative of $\gamma_j$ with respect to rotation.
+- $\diff{\gamma_j}{s_i}$: derivative of $\gamma_j$ with respect to scale .
+- $\diff{\gamma_j}{h_i}$: derivative of $\gamma_j$ with respect to spherical harmonics parameters.
+- $\diff{\gamma_j}{\alpha_i}$: derivative of $\gamma_j$ with respect to opacity.
+- $\diff{\gamma_j}{{p_w}_i}$: derivative of $\gamma_j$ with respect to The location.
+
+$$
+\diff{\gamma_j}{q_i} = \diff{\gamma_j}{\sigma^{\prime}_i} \diff{\sigma^{\prime}_i}{\sigma_i} \diff{\sigma_i}{q_i}
+$$
+
+$$
+\diff{\gamma_j}{s_i} = \diff{\gamma_j}{\sigma^{\prime}_i} \diff{\sigma^{\prime}_i}{\sigma_i} \diff{\sigma_i}{s_i}
+$$
+
+$$
+\diff{\gamma_j}{h_i} = \diff{\gamma_j}{c_i} \diff{c_i}{h_i}
+$$
+
+$$
+\diff{\gamma_j}{\alpha_i} = \diff{\gamma_j}{\alpha^{\prime}_i} \diff{\alpha^{\prime}_i}{\alpha}
+$$
+
+$$
+\diff{\gamma_j}{{p_w}_i} = \diff{\gamma_j}{\sigma^{\prime}_i} \diff{\sigma^{\prime}_i}{\sigma_i} \diff{\sigma_i}{s_i}
+$$
+
+First, the required input data is defined as parameters and settings.
+
 
 We compute the color $\gamma$ for each pixel by blending overlapped 2D Gaussians.
 
@@ -25,10 +89,6 @@ $$
 &\gamma_{N+1} = 0
 \end{aligned}
 \tag{3}
-$$
-
-$$
-\newcommand{\diff}[2]{\frac{\partial #1}{\partial #2}} %norm 
 $$
 
 Find the derivative for each alpha.

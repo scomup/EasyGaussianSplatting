@@ -140,37 +140,25 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     
         atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
 
-        if (pix.x == 16 && pix.y == 16)
-        {
-            //printf("i:%d, gs_id:%d, alpha_prime %f, tau %f, color: %f %f %f, gamma :%f %f %f\n",
-            //    i, gs_id,
-            //    alpha_prime, tau,
-            //    color.x, color.y, color.z,
-            //    gamma_cur2last.x, gamma_cur2last.y, gamma_cur2last.z);
-            printf("i: %d  tau: %f color: %f %f %f gamma_cur2last: %f %f %f dgamma_dalphaprime:%f %f %f\n", 
-                i, tau,
-                color.x, color.y, color.z,
-                gamma_cur2last.x, gamma_cur2last.y, gamma_cur2last.z,
-                dgamma_dalphaprime.x, dgamma_dalphaprime.y, dgamma_dalphaprime.z);
-        }
-
-        gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
-
         float dgamma_dcolor = tau * alpha_prime;
         float3 dloss_dcolor = dloss_dgamma * dgamma_dcolor;
         atomicAdd(&dloss_dcolors[gs_id], dgamma_dcolor);
 
+        // update gamma_cur2last for next iteration.
+        gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
+
+        if (pix.x == 16 && pix.y == 16)
+        {
+            printf("id: %d  dgamma_dcolor: %f  dgamma_dalpha:%f %f %f\n", 
+                gs_num - i - 1,
+                dgamma_dcolor,
+                dgamma_dalpha.x, dgamma_dalpha.y, dgamma_dalpha.z);
+        }
+
         /*
-
-        //if ()
-
-
         
 
         // float dloss_dalpahprime = dot(dloss_dgamma, dgamma_dalphaprime);
-
-
-
         // forward.md (5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
         
