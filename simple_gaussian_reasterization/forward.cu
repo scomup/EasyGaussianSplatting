@@ -206,6 +206,9 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
             __syncthreads();
         }
 
+        if(thread_is_finished)
+            continue;
+
         // get 2d gaussian info for current tile (pix share the same info within the tile)
         float2 u = shared_pos2d[j];
         float3 cinv = shared_cinv2d[j];

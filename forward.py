@@ -28,8 +28,10 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
     jacobians = sgr.backward(H, W, u, cov2d, alpha, depth, color,
                             contrib, final_tau, patch_offset_per_tile,
                             gs_id_per_patch, dloss_dgammas)
-    print("dloss_dalpha:\n", jacobians[0])
-    print("dloss_dcolor:\n", jacobians[1])
+    print("dloss_du:\n", jacobians[0])
+    print("dloss_dcov2d:\n", jacobians[1])
+    print("dloss_dalpha:\n", jacobians[2])
+    print("dloss_dcolor:\n", jacobians[3])
     res[0].detach().to('cpu').numpy().transpose(1, 2, 0)
     return contrib.detach().to('cpu').numpy()
 

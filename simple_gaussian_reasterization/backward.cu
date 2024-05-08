@@ -70,6 +70,38 @@ __global__ void inverseCov2DBack(
     dcinv2d_dcov2d[gs_id * 9 + 8] = -a*a*det_inv2;
 }
 
+__global__ void calcDlossDcov2d(
+    int gs_num,
+    const float *__restrict__ dloss_dcinv2ds,
+    const float *__restrict__ dcinv2d_dcov2ds,
+    float *__restrict__ dloss_dcov2ds)
+{
+    const int gs_id = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (gs_id >= gs_num)
+		return;
+    float3 dloss_dcinv2d = {dloss_dcinv2ds[gs_id*3 + 0],
+                            dloss_dcinv2ds[gs_id*3 + 1],
+                            dloss_dcinv2ds[gs_id*3 + 2]};
+
+    float3 dcinv2d_dcov2d0 = {dcinv2d_dcov2ds[gs_id*9 + 0],
+                              dcinv2d_dcov2ds[gs_id*9 + 3],
+                              dcinv2d_dcov2ds[gs_id*9 + 6]};
+
+    float3 dcinv2d_dcov2d1 = {dcinv2d_dcov2ds[gs_id*9 + 1],
+                              dcinv2d_dcov2ds[gs_id*9 + 4],
+                              dcinv2d_dcov2ds[gs_id*9 + 7]};
+
+    float3 dcinv2d_dcov2d2 = {dcinv2d_dcov2ds[gs_id*9 + 2],
+                              dcinv2d_dcov2ds[gs_id*9 + 5],
+                              dcinv2d_dcov2ds[gs_id*9 + 8]};
+
+    dloss_dcov2ds[gs_id*3 + 0] = dot(dloss_dcinv2d, dcinv2d_dcov2d0);
+    dloss_dcov2ds[gs_id*3 + 1] = dot(dloss_dcinv2d, dcinv2d_dcov2d1);
+    dloss_dcov2ds[gs_id*3 + 2] = dot(dloss_dcinv2d, dcinv2d_dcov2d2);
+
+}
+
 __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     const int W,
     const int H,
@@ -82,6 +114,8 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     const int *__restrict__ contrib,
     const float *__restrict__ final_tau,
     const float *__restrict__ dloss_dgammas,
+    float *__restrict__ dloss_dus,
+    float *__restrict__ dloss_dcinv2ds,
     float *__restrict__ dloss_dalphas,
     float *__restrict__ dloss_dcolors)
 
@@ -165,12 +199,16 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         float maha_dist = max(0.0f,  mahaSqDist(cinv2d, d));
         float g = exp(-0.5f * maha_dist);
         float alpha_prime = min(0.99f, alpha * g);
+
+        // if (alpha_prime < 0.002f)
+        //     continue;
+
         tau = tau / (1 - alpha_prime);
 
         float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
         float dalphaprime_dalpha = g;
-        float3 dgamma_dalpha = dgamma_dalphaprime * dalphaprime_dalpha; 
-        float dloss_dalpha = dot(dloss_dgamma, dgamma_dalpha);
+        float dloss_dalphaprime = dot(dloss_dgamma, dgamma_dalphaprime); 
+        float dloss_dalpha = dloss_dalphaprime * dalphaprime_dalpha;
     
         atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
 
@@ -182,64 +220,22 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 
         float2 dalphaprime_du = {(-cinv2d.x*d.x - cinv2d.y*d.y) * alpha_prime, 
                                  (-cinv2d.y*d.x - cinv2d.z*d.y) * alpha_prime};
-        float3 dalphaprime_dcinv2d ={-0.5 * alpha_prime * (d.x * d.x), 
-                                           -alpha_prime * (d.x * d.y), 
-                                     -0.5 * alpha_prime * (d.y * d.y)};
+        float2 dloss_du = dloss_dalphaprime * dalphaprime_du;
 
+        atomicAdd(&dloss_dus[gs_id * 2 + 0], dloss_du.x);
+        atomicAdd(&dloss_dus[gs_id * 2 + 1], dloss_du.y);
+
+        float3 dalphaprime_dcinv2d ={-0.5f * alpha_prime * (d.x * d.x), 
+                                           -alpha_prime * (d.x * d.y), 
+                                     -0.5f * alpha_prime * (d.y * d.y)};
+        float3 dloss_dcinv2d = dloss_dalphaprime * dalphaprime_dcinv2d;
+        
+        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 0], dloss_dcinv2d.x);
+        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 1], dloss_dcinv2d.y);
+        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 2], dloss_dcinv2d.z);
+    
         // update gamma_cur2last for next iteration.
         gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
-        //if(gs_id == 1)
-        //printf("x: %d y: %d dloss_dalpha: %f final dloss_dalpha:%f\n", 
-        //    pix.x, pix.y, dloss_dalpha, dloss_dalphas[gs_id]);
-
-
-        if (pix.x == 20 && pix.y == 15)
-        {
-            printf("x: %d y: %d  gsid: %d cont: %d \n",pix.x, pix.y, shared_gsid[j], cont);
-
-            //printf("id: %d  dloss_dgamma: %f dgamma_dalpha:%f %f %f\n", 
-            //    gs_num - i - 1,
-            //    dloss_dalpha,
-            //    dgamma_dalpha.x, dgamma_dalpha.y, dgamma_dalpha.z);
-            //printf("id: %d  dgamma_dcolor: %f  dgamma_dalpha:%f %f %f\n", 
-            //    gs_num - i - 1,
-            //    dgamma_dcolor,
-            //    dgamma_dalpha.x, dgamma_dalpha.y, dgamma_dalpha.z);
-            //printf("id: %d  dgamma_du:\n %f %f %f\n %f %f %f\n %f %f %f\n", 
-            //    gs_num - i - 1,
-            //    dgamma_dcinv2d00, dgamma_dcinv2d01, dgamma_dcinv2d02,
-            //    dgamma_dcinv2d10, dgamma_dcinv2d11, dgamma_dcinv2d12,
-            //    dgamma_dcinv2d20, dgamma_dcinv2d21, dgamma_dcinv2d22);
-        }
-
-        /*
-        
-
-        // float dloss_dalpahprime = dot(dloss_dgamma, dgamma_dalphaprime);
-        // forward.md (5.1)
-        // mahalanobis squared distance for 2d gaussian to this pix
-        
-        float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
-
-        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
-
-        if (alpha_prime < 0.002f)
-            continue;
-
-        // forward.md (5)
-        finial_color +=  tau * alpha_prime * color;
-        cont = cont + 1;  // how many gs contribute to this pixel. 
-
-        // forward.md (5.2)
-        float tau_new = tau * (1.f - alpha_prime);
-
-        if (tau_new < 0.0001f)
-        {
-            thread_is_finished = true;
-            continue;
-        }
-        tau = tau_new;
-        */
     }
 
     //if (inside)
@@ -276,14 +272,19 @@ std::vector<torch::Tensor> backward(
     torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
     torch::Tensor dloss_dalphas = torch::full({gs_num, 1}, 0, float_opts);
     torch::Tensor dloss_dcolors = torch::full({gs_num, 3}, 0, float_opts);
+    torch::Tensor dloss_dcinv2ds = torch::full({gs_num, 3}, 0, float_opts);
+    torch::Tensor dloss_dcov2ds = torch::full({gs_num, 3}, 0, float_opts);
+    torch::Tensor dloss_dus = torch::full({gs_num, 2}, 0, float_opts);
+
     thrust::device_vector<float>  cinv2d(gs_num * 3);
-    thrust::device_vector<float>  dcinv2d_dcov2d(gs_num * 9);
+    // thrust::device_vector<float>  dcinv2d_dcov2d(gs_num * 9);
+    torch::Tensor dcinv2d_dcov2d = torch::full({gs_num, 9}, 0, float_opts);
 
     inverseCov2DBack<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         cov2d.contiguous().data_ptr<float>(),
         thrust::raw_pointer_cast(cinv2d.data()),
-        thrust::raw_pointer_cast(dcinv2d_dcov2d.data()));
+        dcinv2d_dcov2d.contiguous().data_ptr<float>());
     cudaDeviceSynchronize();
     
 
@@ -299,13 +300,19 @@ std::vector<torch::Tensor> backward(
         contrib.contiguous().data_ptr<int>(),
         final_tau.contiguous().data_ptr<float>(),
         dloss_dgammas.contiguous().data_ptr<float>(),
+        dloss_dus.contiguous().data_ptr<float>(),
+        dloss_dcinv2ds.contiguous().data_ptr<float>(),
         dloss_dalphas.contiguous().data_ptr<float>(),
         dloss_dcolors.contiguous().data_ptr<float>());
-    
     cudaDeviceSynchronize();
-    
 
-   return {dloss_dalphas, dloss_dcolors};
+    calcDlossDcov2d<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+        gs_num,
+        dloss_dcinv2ds.contiguous().data_ptr<float>(),
+        dcinv2d_dcov2d.contiguous().data_ptr<float>(),
+        dloss_dcov2ds.contiguous().data_ptr<float>());
+    
+   return {dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors};
     
     
 

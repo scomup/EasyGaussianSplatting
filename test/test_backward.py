@@ -117,9 +117,9 @@ def calc_loss(alphas, cov2ds, colors, us, W, H, calc_J=False):
     loss = criterion(image_tensor, image_gt)
     loss_val = loss.detach().numpy().reshape(1)
     if (calc_J):
+        contrib = np.ones([H, W])
         loss.backward()
         dloss_dgammas = image_tensor.grad.detach().numpy()
-        # dloss_dgammas = np.ones([3, H, W])
         gs_num = alphas.shape[0]
         dloss_dalphas = np.zeros([gs_num, 1])
         dloss_dcov2ds = np.zeros([gs_num, 3])
@@ -129,15 +129,12 @@ def calc_loss(alphas, cov2ds, colors, us, W, H, calc_J=False):
             gamma, dgamma_dalphas, dgamma_dcov2ds, dgamma_dcolors, dgamma_dus, cont =\
                 calc_gamma(alpha, cov2d, color, u, x, True)
             dloss_dgamma = dloss_dgammas[:, x[1], x[0]]
-            # contrib[x[1], x[0]] = cont
+            contrib[x[1], x[0]] = cont
             for i in range(cont):
                 dloss_dalphas[i] += dloss_dgamma @ dgamma_dalphas[i]
                 dloss_dcov2ds[i] += dloss_dgamma @ dgamma_dcov2ds[i]
                 dloss_dcolors[i] += dloss_dgamma @ dgamma_dcolors[i]
                 dloss_dus[i] += dloss_dgamma @ dgamma_dus[i]
-        # plt.imshow(contrib)
-        # plt.show()
-        # exit(0)
         return loss_val,\
                dloss_dalphas.reshape(1, -1),\
                dloss_dcov2ds.reshape(1, -1),\
@@ -269,5 +266,7 @@ if __name__ == "__main__":
     print("check dloss_du: ", check(dloss_du_numerial, dloss_du))
 
     gs_num = gs.shape[0]
+    print("dloss_du:\n", dloss_du.reshape([gs_num, 2])[idxb])
+    print("dloss_dcov2d:\n", dloss_dcov2d.reshape([gs_num, 3])[idxb])
     print("dloss_dalpha:\n", dloss_dalpha.reshape([gs_num, 1])[idxb])
-    print("dloss_dcolor:\n", dloss_dcolor.reshape([gs_num, 3])[idxb])   
+    print("dloss_dcolor:\n", dloss_dcolor.reshape([gs_num, 3])[idxb])
