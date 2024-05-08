@@ -11,25 +11,27 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
     res = sgr.forward(H, W, u, cov2d, alpha, depth, color)
 
-    # res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
-    #                    res[1], res[2], res[3], res[4], res[5], dloss_dgamma)
-    image = torch.clone(res[0])
-    contrib = torch.clone(res[1])
-    final_tau = torch.clone(res[2])
-    patch_offset_per_tile = torch.clone(res[3])
-    gs_id_per_patch = torch.clone(res[4])
-    dloss_dgammas = torch.ones([H, W, 3], dtype=torch.float32).to('cuda')
-    print(image[:, 16, 16])
+    contrib = res[1]
+    final_tau = res[2]
+    patch_offset_per_tile = res[3]
+    gs_id_per_patch = res[4]
+    import torch.nn as nn
+    criterion = nn.L1Loss()
+    
+    image = res[0].requires_grad_(True)
+    image_gt = torch.zeros([3, H, W], dtype=torch.float32).to('cuda')
+    loss = criterion(image, image_gt)
+    loss.backward()
+    dloss_dgammas = image.grad
+    # dloss_dgammas = torch.ones([3, H, W], dtype=torch.float32).to('cuda')
 
-    res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
+    jacobians = sgr.backward(H, W, u, cov2d, alpha, depth, color,
                             contrib, final_tau, patch_offset_per_tile,
                             gs_id_per_patch, dloss_dgammas)
-
-    res_cpu = []
-    for r in res:
-        res_cpu.append(r.to('cpu').numpy())
-    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
-    return res_cpu
+    print("dloss_dalpha:\n", jacobians[0])
+    print("dloss_dcolor:\n", jacobians[1])
+    res[0].detach().to('cpu').numpy().transpose(1, 2, 0)
+    return contrib.detach().to('cpu').numpy()
 
 
 if __name__ == "__main__":
@@ -91,7 +93,7 @@ if __name__ == "__main__":
     # focal_y = 1156.280404988286/2.
 
     W = int(32)  # 1957  # 979
-    H = int(32)  # 1091  # 546
+    H = int(16)  # 1091  # 546
     focal_x = 16
     focal_y = 16
 
@@ -124,9 +126,8 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    res = splat_test(H, W, u, cov2d, gs['alpha'], depth, color)
-    print(res[3])
+    image = splat_test(H, W, u, cov2d, gs['alpha'], depth, color)
 
-    plt.imshow(res[0])
+    plt.imshow(image)
 
     plt.show()

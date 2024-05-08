@@ -177,6 +177,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     float tau = 1.0f;
 
     int cont = 0;
+    int cont_tmp = 0;
 
     // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
@@ -212,6 +213,8 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
         float3 color = shared_color[j];
         float2 d = u - pix;
 
+        cont_tmp = cont_tmp + 1;
+
         // forward.md (5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
@@ -223,7 +226,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 
         // forward.md (5)
         finial_color +=  tau * alpha_prime * color;
-        cont = cont + 1;  // how many gs contribute to this pixel. 
+        cont = cont_tmp;   // how many gs contribute to this pixel. 
 
         // forward.md (5.2)
         float tau_new = tau * (1.f - alpha_prime);
