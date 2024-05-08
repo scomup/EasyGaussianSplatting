@@ -18,13 +18,12 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
     final_tau = torch.clone(res[2])
     patch_offset_per_tile = torch.clone(res[3])
     gs_id_per_patch = torch.clone(res[4])
-    cov2d_inv = torch.clone(res[5])
     dloss_dgammas = torch.ones([H, W, 3], dtype=torch.float32).to('cuda')
     print(image[:, 16, 16])
 
     res_back = sgr.backward(H, W, u, cov2d, alpha, depth, color,
                             contrib, final_tau, patch_offset_per_tile,
-                            gs_id_per_patch, cov2d_inv, dloss_dgammas)
+                            gs_id_per_patch, dloss_dgammas)
 
     res_cpu = []
     for r in res:

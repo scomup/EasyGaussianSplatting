@@ -36,6 +36,10 @@ inline __device__ float2 operator-(const float2 &a, const uint2 &b)
 {
   return make_float2(a.x-(float)b.x, a.y-(float)b.y);
 }
+inline __device__ float2 operator*(const float &b, const float2 &a) 
+{
+  return make_float2(a.x*b, a.y*b);
+}
 
 inline __device__ void operator+=(float3 &a, const float3& b)
 {

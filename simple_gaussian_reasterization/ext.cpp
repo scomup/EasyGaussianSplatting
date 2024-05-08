@@ -24,7 +24,6 @@ std::vector<torch::Tensor> backward(
     const torch::Tensor final_tau, 
     const torch::Tensor patch_offset_per_tile, 
     const torch::Tensor gs_id_per_patch,
-    const torch::Tensor cov2d_inv,
     const torch::Tensor dloss_dgammas);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)

@@ -8,7 +8,7 @@ inline __device__ void fetch2sharedBack(
     const int2 range,
     const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
-    const float *__restrict__ cov2d_inv,
+    const float *__restrict__ cinv2d,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
     float2 *shared_pos2d,
@@ -26,14 +26,48 @@ inline __device__ void fetch2sharedBack(
         shared_gsid[i] = gs_id;
         shared_pos2d[i].x = us[gs_id * 2];
         shared_pos2d[i].y = us[gs_id * 2 + 1];
-        shared_cinv2d[i].x = cov2d_inv[gs_id * 3];
-        shared_cinv2d[i].y = cov2d_inv[gs_id * 3 + 1];
-        shared_cinv2d[i].z = cov2d_inv[gs_id * 3 + 2];
+        shared_cinv2d[i].x = cinv2d[gs_id * 3];
+        shared_cinv2d[i].y = cinv2d[gs_id * 3 + 1];
+        shared_cinv2d[i].z = cinv2d[gs_id * 3 + 2];
         shared_alpha[i] =   alphas[gs_id];
         shared_color[i].x = colors[gs_id * 3];
         shared_color[i].y = colors[gs_id * 3 + 1];
         shared_color[i].z = colors[gs_id * 3 + 2];
     }
+}
+
+__global__ void inverseCov2DBack(
+    int gs_num,
+    const float *__restrict__ cov2d,
+    float *__restrict__ cinv2d,
+    float *__restrict__ dcinv2d_dcov2d)
+{
+    // compute inverse of cov2d
+    // Determine the drawing area of 2d Gaussian.
+
+    const int gs_id = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if (gs_id >= gs_num)
+		return;
+    // forward.md 5.3
+    const float a = cov2d[gs_id * 3];
+    const float b = cov2d[gs_id * 3 + 1];
+    const float c = cov2d[gs_id * 3 + 2];
+
+    const float det_inv = 1./(a*c - b*b);
+    const float det_inv2 = det_inv * det_inv;
+    cinv2d[gs_id * 3 + 0] =  det_inv * c;
+    cinv2d[gs_id * 3 + 1] = -det_inv * b;
+    cinv2d[gs_id * 3 + 2] =  det_inv * a;
+    dcinv2d_dcov2d[gs_id * 9 + 0] = -c*c*det_inv2;
+    dcinv2d_dcov2d[gs_id * 9 + 1] = 2*b*c*det_inv2;
+    dcinv2d_dcov2d[gs_id * 9 + 2] = -a*c*det_inv2 + det_inv;
+    dcinv2d_dcov2d[gs_id * 9 + 3] = b*c*det_inv2;
+    dcinv2d_dcov2d[gs_id * 9 + 4] = -2*b*b*det_inv2 - det_inv;
+    dcinv2d_dcov2d[gs_id * 9 + 5] = a*b*det_inv2;
+    dcinv2d_dcov2d[gs_id * 9 + 6] = -a*c*det_inv2 + det_inv;
+    dcinv2d_dcov2d[gs_id * 9 + 7] = 2*a*b*det_inv2;
+    dcinv2d_dcov2d[gs_id * 9 + 8] = -a*a*det_inv2;
 }
 
 __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
@@ -42,7 +76,7 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     const int *__restrict__ patch_offset_per_tile,
     const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
-    const float *__restrict__ cov2d_inv,
+    const float *__restrict__ cinv2d,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
     const int *__restrict__ contrib,
@@ -107,7 +141,7 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
                          range,
                          gs_id_per_patch,
                          us,
-                         cov2d_inv,
+                         cinv2d,
                          alphas,
                          colors,
                          shared_pos2d,
@@ -123,12 +157,12 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
             continue;
 
         float2 u = shared_pos2d[j];
-        float3 cinv = shared_cinv2d[j];
+        float3 cinv2d = shared_cinv2d[j];
         float alpha = shared_alpha[j];
         float3 color = shared_color[j];
         int gs_id = shared_gsid[j];
         float2 d = u - pix;
-        float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
+        float maha_dist = max(0.0f,  mahaSqDist(cinv2d, d));
         float g = exp(-0.5f * maha_dist);
         float alpha_prime = min(0.99f, alpha * g);
         tau = tau / (1 - alpha_prime);
@@ -144,15 +178,32 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         float3 dloss_dcolor = dloss_dgamma * dgamma_dcolor;
         atomicAdd(&dloss_dcolors[gs_id], dgamma_dcolor);
 
+        float2 dalphaprime_du = {(-cinv2d.x*d.x - cinv2d.y*d.y) * alpha_prime, 
+                                 (-cinv2d.y*d.x - cinv2d.z*d.y) * alpha_prime};
+        float3 dalphaprime_dcinv2d ={-0.5 * alpha_prime * (d.x * d.x), 
+                                           -alpha_prime * (d.x * d.y), 
+                                     -0.5 * alpha_prime * (d.y * d.y)};
+        //float dgamma_du00 = dgamma_dalphaprime.x * dalphaprime_du.x;
+        //float dgamma_du01 = dgamma_dalphaprime.x * dalphaprime_du.y;
+        //float dgamma_du10 = dgamma_dalphaprime.y * dalphaprime_du.x;
+        //float dgamma_du11 = dgamma_dalphaprime.y * dalphaprime_du.y;
+        //float dgamma_du20 = dgamma_dalphaprime.z * dalphaprime_du.x;
+        //float dgamma_du21 = dgamma_dalphaprime.z * dalphaprime_du.y;
+
         // update gamma_cur2last for next iteration.
         gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
 
         if (pix.x == 16 && pix.y == 16)
         {
-            printf("id: %d  dgamma_dcolor: %f  dgamma_dalpha:%f %f %f\n", 
-                gs_num - i - 1,
-                dgamma_dcolor,
-                dgamma_dalpha.x, dgamma_dalpha.y, dgamma_dalpha.z);
+            //printf("id: %d  dgamma_dcolor: %f  dgamma_dalpha:%f %f %f\n", 
+            //    gs_num - i - 1,
+            //    dgamma_dcolor,
+            //    dgamma_dalpha.x, dgamma_dalpha.y, dgamma_dalpha.z);
+            //printf("id: %d  dgamma_du:\n %f %f\n %f %f\n %f %f\n", 
+            //    gs_num - i - 1,
+            //    dgamma_du00, dgamma_du01,
+            //    dgamma_du10, dgamma_du11,
+            //    dgamma_du20, dgamma_du21);
         }
 
         /*
@@ -208,7 +259,6 @@ std::vector<torch::Tensor> backward(
     const torch::Tensor final_tau, 
     const torch::Tensor patch_offset_per_tile, 
     const torch::Tensor gs_id_per_patch,
-    const torch::Tensor cov2d_inv,
     const torch::Tensor dloss_dgammas)
 {
     int gs_num = us.sizes()[0]; 
@@ -220,15 +270,24 @@ std::vector<torch::Tensor> backward(
     torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
     torch::Tensor dloss_dalphas = torch::full({gs_num}, 0, float_opts);
     torch::Tensor dloss_dcolors = torch::full({gs_num, 3}, 0, float_opts);
+    thrust::device_vector<float>  cinv2d(gs_num * 3);
+    thrust::device_vector<float>  dcinv2d_dcov2d(gs_num * 9);
 
+    inverseCov2DBack<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+        gs_num,
+        cov2d.contiguous().data_ptr<float>(),
+        thrust::raw_pointer_cast(cinv2d.data()),
+        thrust::raw_pointer_cast(dcinv2d_dcov2d.data()));
+    cudaDeviceSynchronize();
     
+
     drawBack<<<grid, block>>>(
         W,
         H,
         patch_offset_per_tile.contiguous().data_ptr<int>(),
         gs_id_per_patch.contiguous().data_ptr<int>(),
         us.contiguous().data_ptr<float>(),
-        cov2d_inv.contiguous().data_ptr<float>(),
+        thrust::raw_pointer_cast(cinv2d.data()),
         alphas.contiguous().data_ptr<float>(),
         colors.contiguous().data_ptr<float>(),
         contrib.contiguous().data_ptr<int>(),
@@ -238,6 +297,7 @@ std::vector<torch::Tensor> backward(
         dloss_dcolors.contiguous().data_ptr<float>());
     
     cudaDeviceSynchronize();
+    
 
    return {dloss_dalphas, dloss_dcolors};
     

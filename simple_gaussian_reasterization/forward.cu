@@ -9,7 +9,7 @@ inline __device__ void fetch2shared(
     const int2 range,
     const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
-    const float *__restrict__ cov2d_inv,
+    const float *__restrict__ cinv2d,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
     float2 *shared_pos2d,
@@ -24,9 +24,9 @@ inline __device__ void fetch2shared(
         int gs_id = gs_id_per_patch[j];
         shared_pos2d[i].x = us[gs_id * 2];
         shared_pos2d[i].y = us[gs_id * 2 + 1];
-        shared_cinv2d[i].x = cov2d_inv[gs_id * 3];
-        shared_cinv2d[i].y = cov2d_inv[gs_id * 3 + 1];
-        shared_cinv2d[i].z = cov2d_inv[gs_id * 3 + 2];
+        shared_cinv2d[i].x = cinv2d[gs_id * 3];
+        shared_cinv2d[i].y = cinv2d[gs_id * 3 + 1];
+        shared_cinv2d[i].z = cinv2d[gs_id * 3 + 2];
         shared_alpha[i] =   alphas[gs_id];
         shared_color[i].x = colors[gs_id * 3];
         shared_color[i].y = colors[gs_id * 3 + 1];
@@ -144,7 +144,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     const int *__restrict__ patch_offset_per_tile,
     const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
-    const float *__restrict__ cov2d_inv,
+    const float *__restrict__ cinv2d,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
     float *__restrict__ image,
@@ -195,7 +195,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
                          range,
                          gs_id_per_patch,
                          us,
-                         cov2d_inv,
+                         cinv2d,
                          alphas,
                          colors,
                          shared_pos2d,
@@ -249,7 +249,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 __global__ void inverseCov2D(
     int gs_num,
     const float *__restrict__ cov2d,
-    float *__restrict__ cov2d_inv,
+    float *__restrict__ cinv2d,
     float *__restrict__ areas)
 {
     // compute inverse of cov2d
@@ -265,9 +265,9 @@ __global__ void inverseCov2D(
     const float c = cov2d[gs_id * 3 + 2];
 
     const float det_inv = 1./(a*c - b*b);
-    cov2d_inv[gs_id * 3 + 0] =  det_inv * c;
-    cov2d_inv[gs_id * 3 + 1] = -det_inv * b;
-    cov2d_inv[gs_id * 3 + 2] =  det_inv * a;
+    cinv2d[gs_id * 3 + 0] =  det_inv * c;
+    cinv2d[gs_id * 3 + 1] = -det_inv * b;
+    cinv2d[gs_id * 3 + 2] =  det_inv * a;
     areas[gs_id * 2 + 0] =  3 * sqrt(a);
     areas[gs_id * 2 + 1] =  3 * sqrt(c);
 }
@@ -300,15 +300,13 @@ std::vector<torch::Tensor> forward(
     thrust::device_vector<uint4> gs_rects(gs_num);
     thrust::device_vector<uint>  patch_num_per_gs(gs_num);
     thrust::device_vector<uint>  patch_offset_per_gs(gs_num);
-    // thrust::device_vector<float>  cov2d_inv(gs_num * 3);
+    thrust::device_vector<float>  cinv2d(gs_num * 3);
     thrust::device_vector<float>  areas(gs_num * 2);
-
-    torch::Tensor cov2d_inv = torch::full({gs_num * 3}, 0, float_opts);
 
     inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         cov2d.contiguous().data_ptr<float>(),
-        cov2d_inv.contiguous().data_ptr<float>(),
+        thrust::raw_pointer_cast(cinv2d.data()),
         thrust::raw_pointer_cast(areas.data()));
     cudaDeviceSynchronize();
 
@@ -359,7 +357,7 @@ std::vector<torch::Tensor> forward(
         patch_offset_per_tile.contiguous().data_ptr<int>(),
         thrust::raw_pointer_cast(gs_id_per_patch.data()),
         us.contiguous().data_ptr<float>(),
-        cov2d_inv.contiguous().data_ptr<float>(),
+        thrust::raw_pointer_cast(cinv2d.data()),
         alphas.contiguous().data_ptr<float>(),
         colors.contiguous().data_ptr<float>(),
         image.contiguous().data_ptr<float>(),
@@ -370,5 +368,5 @@ std::vector<torch::Tensor> forward(
     torch::Tensor gsid_per_patch_torch = torch::from_blob(thrust::raw_pointer_cast(gs_id_per_patch.data()), 
         {static_cast<long>(gs_id_per_patch.size())}, torch::TensorOptions().dtype(torch::kInt32)).to(torch::kCUDA);
 
-    return {image, contrib, final_tau, patch_offset_per_tile, gsid_per_patch_torch, cov2d_inv};
+    return {image, contrib, final_tau, patch_offset_per_tile, gsid_per_patch_torch};
 }

@@ -19,8 +19,8 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
     tau = 1.
     gamma = np.zeros(3)
     for alpha, cov2d, color, u in zip(alphas, cov2ds, colors, us):
-        cinv = calc_cov2d_inv(cov2d)
-        alpha_prime = calc_alpha_prime(alpha, cinv, u, x)
+        cinv2d = calc_cinv2d(cov2d)
+        alpha_prime = calc_alpha_prime(alpha, cinv2d, u, x)
         gamma += alpha_prime * color * tau
         tau = tau * (1 - alpha_prime)
     if (calc_J):
@@ -31,13 +31,13 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
         dgamma_dcolor = []
         dgamma_du = []
         for alpha, cov2d, color, u in reversed_values:
-            cinv, dcinv_dcov2d = calc_cov2d_inv(cov2d, True)
-            alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv, dalphaprime_du =\
-                calc_alpha_prime(alpha, cinv, u, x, True)
+            cinv2d, dcinv2d_dcov2d = calc_cinv2d(cov2d, True)
+            alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du =\
+                calc_alpha_prime(alpha, cinv2d, u, x, True)
             tau = tau / (1 - alpha_prime)
             dgamma_dalphaprime = (tau * (color - gamma_cur2last)).reshape([3, 1])
             dgamma_dalpha.insert(0, dgamma_dalphaprime @ dalphaprime_dalpha)
-            dgamma_dcov2d.insert(0, dgamma_dalphaprime @ dalphaprime_dcinv @ dcinv_dcov2d)
+            dgamma_dcov2d.insert(0, dgamma_dalphaprime @ dalphaprime_dcinv2d @ dcinv2d_dcov2d)
             dgamma_dcolor.insert(0, tau * alpha_prime * np.eye(3))
             dgamma_du.insert(0, dgamma_dalphaprime @ dalphaprime_du)
             gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last
@@ -46,31 +46,31 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
         return gamma
 
 
-def calc_cov2d_inv(cov2d, calc_J=False):
+def calc_cinv2d(cov2d, calc_J=False):
     det_inv = 1. / (cov2d[0] * cov2d[2] - cov2d[1] * cov2d[1])
-    cinv = np.array([cov2d[2], -cov2d[1], cov2d[0]]) * det_inv
+    cinv2d = np.array([cov2d[2], -cov2d[1], cov2d[0]]) * det_inv
     if (calc_J):
         a, b, c = cov2d
         det_inv2 = det_inv * det_inv
         J = np.array([[-c*c*det_inv2, 2*b*c*det_inv2, -a*c*det_inv2 + det_inv],
                       [b*c*det_inv2, -2*b*b*det_inv2 - det_inv, a*b*det_inv2],
                       [-a*c*det_inv2 + det_inv, 2*a*b*det_inv2, -a*a*det_inv2]])
-        return cinv, J
+        return cinv2d, J
 
     else:
-        return cinv
+        return cinv2d
 
 
-def calc_alpha_prime(alpha, cinv, u, x, calc_J=False):
+def calc_alpha_prime(alpha, cinv2d, u, x, calc_J=False):
     d = u - x
-    maha_dist = cinv[0] * d[0] * d[0] + cinv[2] * d[1] * d[1] + 2 * cinv[1] * d[0] * d[1]
+    maha_dist = cinv2d[0] * d[0] * d[0] + cinv2d[2] * d[1] * d[1] + 2 * cinv2d[1] * d[0] * d[1]
     g = np.exp(-0.5 * maha_dist)
     alphaprime = g * alpha
     if (calc_J):
         dalphaprime_dalpha = np.array([[g]])
-        dalphaprime_dcinv = -0.5 * alphaprime * np.array([d[0] * d[0], 2 * d[0] * d[1], d[1] * d[1]])
-        dalphaprime_du = alphaprime * np.array([-cinv[0]*d[0] - cinv[1]*d[1], (-cinv[1]*d[0] - cinv[2]*d[1])])
-        return alphaprime, dalphaprime_dalpha, dalphaprime_dcinv.reshape([1, 3]), dalphaprime_du.reshape([1, 2])
+        dalphaprime_dcinv2d = -0.5 * alphaprime * np.array([d[0] * d[0], 2 * d[0] * d[1], d[1] * d[1]])
+        dalphaprime_du = alphaprime * np.array([-cinv2d[0]*d[0] - cinv2d[1]*d[1], (-cinv2d[1]*d[0] - cinv2d[2]*d[1])])
+        return alphaprime, dalphaprime_dalpha, dalphaprime_dcinv2d.reshape([1, 3]), dalphaprime_du.reshape([1, 2])
     else:
         return alphaprime
 
@@ -172,21 +172,21 @@ if __name__ == "__main__":
     x = np.array([16, 16])
 
     cov2d0 = cov2d[:3]
-    cinv0, dcov2d_dcinv = calc_cov2d_inv(cov2d0, True)
-    dcov2d_dcinv_numerial = numerical_derivative(calc_cov2d_inv, [cov2d0], 0)
-    print("check dcov2d_dcinv: ", check(dcov2d_dcinv_numerial, dcov2d_dcinv))
+    cinv2d0, dcov2d_dcinv2d = calc_cinv2d(cov2d0, True)
+    dcov2d_dcinv2d_numerial = numerical_derivative(calc_cinv2d, [cov2d0], 0)
+    print("check dcov2d_dcinv2d: ", check(dcov2d_dcinv2d_numerial, dcov2d_dcinv2d))
 
-    cinv = calc_cov2d_inv(cov2d)
+    cinv2d = calc_cinv2d(cov2d)
     alpha0, u0 = alpha[:1], u[:2]
-    calc_alpha_prime(alpha0, cinv0, u0, x)
+    calc_alpha_prime(alpha0, cinv2d0, u0, x)
 
-    dalphaprime_dalpha_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv0, u0, x], 0)
-    dalphaprime_dcinv_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv0, u0, x], 1)
-    dalphaprime_du_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv0, u0, x], 2)
-    alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv, dalphaprime_du = calc_alpha_prime(alpha0, cinv0, u0, x, True)
+    dalphaprime_dalpha_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv2d0, u0, x], 0)
+    dalphaprime_dcinv2d_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv2d0, u0, x], 1)
+    dalphaprime_du_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv2d0, u0, x], 2)
+    alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du = calc_alpha_prime(alpha0, cinv2d0, u0, x, True)
 
     print("check dalphaprime_dalpha: ", check(dalphaprime_dalpha_numerial, dalphaprime_dalpha))
-    print("check dalphaprime_dcinv: ", check(dalphaprime_dcinv_numerial, dalphaprime_dcinv))
+    print("check dalphaprime_dcinv2d: ", check(dalphaprime_dcinv2d_numerial, dalphaprime_dcinv2d))
     print("check dalphaprime_du: ", check(dalphaprime_du_numerial, dalphaprime_du))
 
     gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du = calc_gamma(alpha, cov2d, color, u, x, True)
@@ -203,4 +203,4 @@ if __name__ == "__main__":
 
     for i in range(alpha.shape[0]):
         # print("dgamma_dalpha_%d\n: " % i, dgamma_dalpha[i])
-        print("dgamma_dcolor_%d\n: " % i, dgamma_dcolor[i])
+        print("dgamma_du_%d\n: " % i, dgamma_du[i])
