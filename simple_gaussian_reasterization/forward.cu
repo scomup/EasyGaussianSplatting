@@ -162,6 +162,9 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 	const bool inside = pix.x < W && pix.y < H;
 	const int2 range = {patch_offset_per_tile[tile_idx], patch_offset_per_tile[tile_idx + 1]};
 
+    // not patch for this tile.
+    if (range.x == -1)
+        return;
 
 	bool thread_is_finished = !inside;
 
@@ -232,6 +235,11 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 
         // forward.md (5.2)
         tau = tau * (1.f - alpha_prime);
+
+        // if(pix.x == 167 && pix.y == 392)
+        // {
+        //     printf("%i, finial_color %f %f %f\n", i, finial_color.x, finial_color.y, finial_color.z);
+        // }
 
         if (tau < 0.0001f)
         {
@@ -347,7 +355,7 @@ std::vector<torch::Tensor> forward(
     thrust::sort_by_key(patch_keys.begin(), patch_keys.end(), gs_id_per_patch.begin());
 
     const uint tile_num = grid.x * grid.y;
-    torch::Tensor patch_offset_per_tile = torch::full({tile_num+1}, 0, int_opts);
+    torch::Tensor patch_offset_per_tile = torch::full({tile_num+1}, -1, int_opts);
 
     getOffset<<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         patch_num,

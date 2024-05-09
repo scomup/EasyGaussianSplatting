@@ -130,7 +130,10 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 	const bool inside = pix.x < W && pix.y < H;
 	const int2 range = {patch_offset_per_tile[tile_idx], 
                         patch_offset_per_tile[tile_idx + 1]};
-
+    
+    // not patch for this tile.
+    if (range.x == -1)
+        return;
 
 	bool thread_is_finished = !inside;
 
@@ -150,12 +153,6 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 
     float tau = final_tau[pix_idx];
     int cont = contrib[pix_idx];
-
-    if (pix.x == 16 && pix.y == 16)
-    {
-        printf("backward\n");
-        printf("tile_idx: %d gs_num:%d range:%d %d cont %d\n", tile_idx, gs_num, range.x, range.y, cont);
-    }
 
     // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
@@ -237,17 +234,7 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         // update gamma_cur2last for next iteration.
         gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
     }
-
-    //if (inside)
-    //{
-    //    image[H * W * 0 + pix_idx] = finial_color.x;
-    //    image[H * W * 1 + pix_idx] = finial_color.y;
-    //    image[H * W * 2 + pix_idx] = finial_color.z;
-    //    contrib[pix_idx] = cont;
-    //    final_tau[pix_idx] = tau;
-    //}
 }
-
 
 std::vector<torch::Tensor> backward(
     const int H,
@@ -276,17 +263,15 @@ std::vector<torch::Tensor> backward(
     torch::Tensor dloss_dcov2ds = torch::full({gs_num, 3}, 0, float_opts);
     torch::Tensor dloss_dus = torch::full({gs_num, 2}, 0, float_opts);
 
-    thrust::device_vector<float>  cinv2d(gs_num * 3);
-    // thrust::device_vector<float>  dcinv2d_dcov2d(gs_num * 9);
+    torch::Tensor cinv2d = torch::full({gs_num, 3}, 0, float_opts);
     torch::Tensor dcinv2d_dcov2d = torch::full({gs_num, 9}, 0, float_opts);
 
     inverseCov2DBack<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         cov2d.contiguous().data_ptr<float>(),
-        thrust::raw_pointer_cast(cinv2d.data()),
+        cinv2d.contiguous().data_ptr<float>(),
         dcinv2d_dcov2d.contiguous().data_ptr<float>());
     cudaDeviceSynchronize();
-    
 
     drawBack<<<grid, block>>>(
         W,
@@ -294,7 +279,7 @@ std::vector<torch::Tensor> backward(
         patch_offset_per_tile.contiguous().data_ptr<int>(),
         gs_id_per_patch.contiguous().data_ptr<int>(),
         us.contiguous().data_ptr<float>(),
-        thrust::raw_pointer_cast(cinv2d.data()),
+        cinv2d.contiguous().data_ptr<float>(),
         alphas.contiguous().data_ptr<float>(),
         colors.contiguous().data_ptr<float>(),
         contrib.contiguous().data_ptr<int>(),
