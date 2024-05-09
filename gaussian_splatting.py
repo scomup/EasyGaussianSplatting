@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import math
+import collections
 
 # https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
 SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
@@ -21,6 +22,19 @@ SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
 SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
 SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
 SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(35/(2*pi))  minus
+
+
+class Camera:
+    def __init__(self, id, width, height, K, Rcw, tcw):
+        self.id = id
+        self.width = width
+        self.height = height
+        self.K = K
+        self.Rcw = Rcw
+        self.tcw = tcw
+        self.cam_center = -np.linalg.inv(Rcw) @ tcw
+        self.focal_x = K[0, 0]
+        self.focal_y = K[1, 1]
 
 
 def upper_triangular(mat):
@@ -161,11 +175,9 @@ def focal2fov(focal, pixels):
     return 2*math.atan(pixels/(2*focal))
 
 
-def project(pw, Tcw, K):
+def project(pw, Rcw, tcw, K):
     # project the mean of 2d gaussian to image.
     # forward.md (1.1) (1.2)
-    Rcw = Tcw[:3, :3]
-    tcw = Tcw[:3, 3]
     pc = (Rcw @ pw.T).T + tcw
     depth = pc[:, 2]
     pc_proj = (K @ pc.T).T

@@ -120,6 +120,7 @@ class MyViewWidget(gl.GLViewWidget):
         else:
             self.setting_window.show()
 
+
 class Viewer(QMainWindow):
     def __init__(self, items):
         self.items = items

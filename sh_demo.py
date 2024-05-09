@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.optim as optim
 
-
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'viewer'))
@@ -231,7 +230,6 @@ def sh2color(sh, ray_dir, dim=36):
 
 # spherical harmonics
 class SHNet(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, sh):
         color, dCdSH = sh2color(sh, xyz)

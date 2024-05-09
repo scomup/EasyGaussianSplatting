@@ -103,16 +103,13 @@ if __name__ == "__main__":
                   [0, focal_y, H/2.],
                   [0, 0, 1.]])
 
-    Tcw = np.eye(4)
-    Tcw[:3, :3] = Rcw
-    Tcw[:3, 3] = tcw
-    cam_center = np.linalg.inv(Tcw)[:3, 3]
+    camera = Camera(id=0, width=W, height=H, K=K, Rcw=Rcw, tcw=tcw)
 
     pw = gs['pos']
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    u, pc = project(pw, Tcw, K)
+    u, pc = project(pw, camera.Rcw, camera.tcw, camera.K)
 
     depth = pc[:, 2]
 
@@ -120,15 +117,15 @@ if __name__ == "__main__":
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw)
+    cov2d = compute_cov_2d(pc, camera.focal_x, camera.focal_y, cov3d, camera.Rcw)
 
     # step4. get color info
-    ray_dir = pw[:, :3] - cam_center
+    ray_dir = pw[:, :3] - camera.cam_center
     ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    image = splat_test(H, W, u, cov2d, gs['alpha'], depth, color)
+    image = splat_test(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
 
     plt.imshow(image)
 
