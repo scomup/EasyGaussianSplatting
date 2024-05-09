@@ -38,9 +38,9 @@ inline __device__ void fetch2sharedBack(
 
 __global__ void inverseCov2DBack(
     int gs_num,
-    const float *__restrict__ cov2d,
-    float *__restrict__ cinv2d,
-    float *__restrict__ dcinv2d_dcov2d)
+    const float *__restrict__ cov2ds,
+    float *__restrict__ cinv2ds,
+    float *__restrict__ dcinv2d_dcov2ds)
 {
     // compute inverse of cov2d
     // Determine the drawing area of 2d Gaussian.
@@ -50,24 +50,36 @@ __global__ void inverseCov2DBack(
 	if (gs_id >= gs_num)
 		return;
     // forward.md 5.3
-    const float a = cov2d[gs_id * 3];
-    const float b = cov2d[gs_id * 3 + 1];
-    const float c = cov2d[gs_id * 3 + 2];
+    const float a = cov2ds[gs_id * 3];
+    const float b = cov2ds[gs_id * 3 + 1];
+    const float c = cov2ds[gs_id * 3 + 2];
 
-    const float det_inv = 1./(a*c - b*b);
-    const float det_inv2 = det_inv * det_inv;
-    cinv2d[gs_id * 3 + 0] =  det_inv * c;
-    cinv2d[gs_id * 3 + 1] = -det_inv * b;
-    cinv2d[gs_id * 3 + 2] =  det_inv * a;
-    dcinv2d_dcov2d[gs_id * 9 + 0] = -c*c*det_inv2;
-    dcinv2d_dcov2d[gs_id * 9 + 1] = 2*b*c*det_inv2;
-    dcinv2d_dcov2d[gs_id * 9 + 2] = -a*c*det_inv2 + det_inv;
-    dcinv2d_dcov2d[gs_id * 9 + 3] = b*c*det_inv2;
-    dcinv2d_dcov2d[gs_id * 9 + 4] = -2*b*b*det_inv2 - det_inv;
-    dcinv2d_dcov2d[gs_id * 9 + 5] = a*b*det_inv2;
-    dcinv2d_dcov2d[gs_id * 9 + 6] = -a*c*det_inv2 + det_inv;
-    dcinv2d_dcov2d[gs_id * 9 + 7] = 2*a*b*det_inv2;
-    dcinv2d_dcov2d[gs_id * 9 + 8] = -a*a*det_inv2;
+    const float det = a*c - b*b;
+    if (det == 0.0f)
+		return;
+
+    const float det_inv = 1.0f/(det);
+    const float det_inv2 = 1.0f / ((det * det) + 0.0000001f);
+
+    cinv2ds[gs_id * 3 + 0] =  det_inv * c;
+    cinv2ds[gs_id * 3 + 1] = -det_inv * b;
+    cinv2ds[gs_id * 3 + 2] =  det_inv * a;
+    dcinv2d_dcov2ds[gs_id * 9 + 0] = -c*c*det_inv2;
+    dcinv2d_dcov2ds[gs_id * 9 + 1] = 2*b*c*det_inv2;
+    dcinv2d_dcov2ds[gs_id * 9 + 2] = -a*c*det_inv2 + det_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 3] = b*c*det_inv2;
+    dcinv2d_dcov2ds[gs_id * 9 + 4] = -2*b*b*det_inv2 - det_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 5] = a*b*det_inv2;
+    dcinv2d_dcov2ds[gs_id * 9 + 6] = -a*c*det_inv2 + det_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 7] = 2*a*b*det_inv2;
+    dcinv2d_dcov2ds[gs_id * 9 + 8] = -a*a*det_inv2;
+
+    if(isnan(dcinv2d_dcov2ds[gs_id * 9 + 0]))
+    {
+        printf("gs_id: %d \n", gs_id);
+        printf("a, b, c: %f %f %f det %f det_inv2 %f\n", a, b, c, det, det_inv2);
+    }
+
 }
 
 __global__ void calcDlossDcov2d(
@@ -99,6 +111,12 @@ __global__ void calcDlossDcov2d(
     dloss_dcov2ds[gs_id*3 + 0] = dot(dloss_dcinv2d, dcinv2d_dcov2d0);
     dloss_dcov2ds[gs_id*3 + 1] = dot(dloss_dcinv2d, dcinv2d_dcov2d1);
     dloss_dcov2ds[gs_id*3 + 2] = dot(dloss_dcinv2d, dcinv2d_dcov2d2);
+    if(isnan(dot(dloss_dcinv2d, dcinv2d_dcov2d0)))
+    {
+        printf("gs_id: %d gs_num %d \n", gs_id, gs_num);
+        printf("dcinv2d_dcov2d0: %f %f %f \n", dcinv2d_dcov2d0.x, dcinv2d_dcov2d0.y, dcinv2d_dcov2d0.z);
+        printf("dcinv2d_dcov2d0: %f\n", dcinv2d_dcov2ds[gs_id*9 + 0]);
+    }
 
 }
 
@@ -241,7 +259,7 @@ std::vector<torch::Tensor> backward(
     const int height,
     const int width,
     const torch::Tensor us,
-    const torch::Tensor cov2d,
+    const torch::Tensor cov2ds,
     const torch::Tensor alphas,
     const torch::Tensor depths,
     const torch::Tensor colors,
@@ -264,14 +282,14 @@ std::vector<torch::Tensor> backward(
     torch::Tensor dloss_dcov2ds = torch::full({gs_num, 3}, 0, float_opts);
     torch::Tensor dloss_dus = torch::full({gs_num, 2}, 0, float_opts);
 
-    torch::Tensor cinv2d = torch::full({gs_num, 3}, 0, float_opts);
-    torch::Tensor dcinv2d_dcov2d = torch::full({gs_num, 9}, 0, float_opts);
+    torch::Tensor cinv2ds = torch::full({gs_num, 3}, 0, float_opts);
+    torch::Tensor dcinv2d_dcov2ds = torch::full({gs_num, 9}, 0, float_opts);
 
     inverseCov2DBack<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        cov2d.contiguous().data_ptr<float>(),
-        cinv2d.contiguous().data_ptr<float>(),
-        dcinv2d_dcov2d.contiguous().data_ptr<float>());
+        cov2ds.contiguous().data_ptr<float>(),
+        cinv2ds.contiguous().data_ptr<float>(),
+        dcinv2d_dcov2ds.contiguous().data_ptr<float>());
     cudaDeviceSynchronize();
 
     drawBack<<<grid, block>>>(
@@ -280,7 +298,7 @@ std::vector<torch::Tensor> backward(
         patch_range_per_tile.contiguous().data_ptr<int>(),
         gs_id_per_patch.contiguous().data_ptr<int>(),
         us.contiguous().data_ptr<float>(),
-        cinv2d.contiguous().data_ptr<float>(),
+        cinv2ds.contiguous().data_ptr<float>(),
         alphas.contiguous().data_ptr<float>(),
         colors.contiguous().data_ptr<float>(),
         contrib.contiguous().data_ptr<int>(),
@@ -295,12 +313,8 @@ std::vector<torch::Tensor> backward(
     calcDlossDcov2d<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         dloss_dcinv2ds.contiguous().data_ptr<float>(),
-        dcinv2d_dcov2d.contiguous().data_ptr<float>(),
+        dcinv2d_dcov2ds.contiguous().data_ptr<float>(),
         dloss_dcov2ds.contiguous().data_ptr<float>());
     
    return {dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors};
-    
-    
-
-
 }

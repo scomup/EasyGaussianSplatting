@@ -85,9 +85,9 @@ if __name__ == "__main__":
     image = blend(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
 
     plt.imshow(image)
-    from PIL import Image
-    pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
-    print(pil_img.mode)
-    pil_img.save('test.png')
+    # from PIL import Image
+    # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
+    # print(pil_img.mode)
+    # pil_img.save('test.png')
 
     plt.show()

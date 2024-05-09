@@ -34,7 +34,6 @@ class GS2DNet(torch.autograd.Function):
         print("dloss_dcov2ds:\n", torch.isnan(dloss_dcov2ds).any())
         print("dloss_dalphas:\n", torch.isnan(dloss_dalphas).any())
         print("dloss_dcolors:\n", torch.isnan(dloss_dcolors).any())
-
         return dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors
 
 
@@ -130,7 +129,7 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
-    optimizer = optim.SGD([u, cov2d, alpha, color], lr=0.01)
+    optimizer = optim.SGD([u, cov2d, alpha, color], lr=0.001)
     # image = gs2dnet.apply(u, cov2d, alpha, color)
     # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
     # plt.show()
@@ -141,9 +140,8 @@ if __name__ == "__main__":
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        #print(loss.item())
-
+        print(loss.item())
         # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
         # plt.pause(0.1)
-    #plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
-    #plt.show()
+    plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
+    plt.show()

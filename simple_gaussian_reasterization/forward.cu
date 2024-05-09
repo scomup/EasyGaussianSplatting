@@ -274,7 +274,11 @@ __global__ void inverseCov2D(
     const float b = cov2d[gs_id * 3 + 1];
     const float c = cov2d[gs_id * 3 + 2];
 
-    const float det_inv = 1./(a*c - b*b);
+    const float det = a*c - b*b;
+    if (det == 0.0f)
+		return;
+
+    const float det_inv = 1.f/det;
     cinv2d[gs_id * 3 + 0] =  det_inv * c;
     cinv2d[gs_id * 3 + 1] = -det_inv * b;
     cinv2d[gs_id * 3 + 2] =  det_inv * a;
