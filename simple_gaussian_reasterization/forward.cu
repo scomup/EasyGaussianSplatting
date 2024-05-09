@@ -222,8 +222,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
         // mahalanobis squared distance for 2d gaussian to this pix
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
 
-        //float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
-        float alpha_prime = 0.99f;
+        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
         if (alpha_prime < 0.002f)
             continue;
 
