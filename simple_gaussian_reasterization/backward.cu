@@ -103,9 +103,9 @@ __global__ void calcDlossDcov2d(
 }
 
 __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
-    const int W,
-    const int H,
-    const int *__restrict__ patch_offset_per_tile,
+    const int width,
+    const int height,
+    const int *__restrict__ patch_range_per_tile,
     const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
     const float *__restrict__ cinv2d,
@@ -125,14 +125,16 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
                        tile.y * BLOCK + threadIdx.y};
 
     const int tile_idx = tile.y * gridDim.x + tile.x;
-    const uint32_t pix_idx = W * pix.y + pix.x;
+    const uint32_t pix_idx = width * pix.y + pix.x;
 
-	const bool inside = pix.x < W && pix.y < H;
-	const int2 range = {patch_offset_per_tile[tile_idx], 
-                        patch_offset_per_tile[tile_idx + 1]};
+	const bool inside = pix.x < width && pix.y < height;
+	const int2 range = {patch_range_per_tile[2 * tile_idx], 
+                        patch_range_per_tile[2 * tile_idx + 1]};
     
+	const int gs_num = range.y - range.x;
+
     // not patch for this tile.
-    if (range.x == -1)
+    if (gs_num == 0)
         return;
 
 	bool thread_is_finished = !inside;
@@ -143,13 +145,12 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     __shared__ float3 shared_color[BLOCK_SIZE];
     __shared__ int shared_gsid[BLOCK_SIZE];
 
-	const int gs_num = range.y - range.x;
 
     float3 gamma_cur2last = {0, 0, 0}; // the accumulated color of the pix from current to last gaussians (backward)
 
-    float3 dloss_dgamma = {dloss_dgammas[0 * H * W + pix_idx],
-                           dloss_dgammas[1 * H * W + pix_idx],
-                           dloss_dgammas[2 * H * W + pix_idx]};
+    float3 dloss_dgamma = {dloss_dgammas[0 * height * width + pix_idx],
+                           dloss_dgammas[1 * height * width + pix_idx],
+                           dloss_dgammas[2 * height * width + pix_idx]};
 
     float tau = final_tau[pix_idx];
     int cont = contrib[pix_idx];
@@ -237,8 +238,8 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
 }
 
 std::vector<torch::Tensor> backward(
-    const int H,
-    const int W,
+    const int height,
+    const int width,
     const torch::Tensor us,
     const torch::Tensor cov2d,
     const torch::Tensor alphas,
@@ -246,17 +247,17 @@ std::vector<torch::Tensor> backward(
     const torch::Tensor colors,
     const torch::Tensor contrib,
     const torch::Tensor final_tau, 
-    const torch::Tensor patch_offset_per_tile, 
+    const torch::Tensor patch_range_per_tile, 
     const torch::Tensor gs_id_per_patch,
     const torch::Tensor dloss_dgammas)
 {
     int gs_num = us.sizes()[0]; 
-    dim3 grid(DIV_ROUND_UP(W, BLOCK), DIV_ROUND_UP(H, BLOCK), 1);
+    dim3 grid(DIV_ROUND_UP(width, BLOCK), DIV_ROUND_UP(height, BLOCK), 1);
 	dim3 block(BLOCK, BLOCK, 1);
     
     auto float_opts = us.options().dtype(torch::kFloat32);
     auto int_opts = us.options().dtype(torch::kInt32);
-    torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
+    torch::Tensor image = torch::full({3, height, width}, 0.0, float_opts);
     torch::Tensor dloss_dalphas = torch::full({gs_num, 1}, 0, float_opts);
     torch::Tensor dloss_dcolors = torch::full({gs_num, 3}, 0, float_opts);
     torch::Tensor dloss_dcinv2ds = torch::full({gs_num, 3}, 0, float_opts);
@@ -274,9 +275,9 @@ std::vector<torch::Tensor> backward(
     cudaDeviceSynchronize();
 
     drawBack<<<grid, block>>>(
-        W,
-        H,
-        patch_offset_per_tile.contiguous().data_ptr<int>(),
+        width,
+        height,
+        patch_range_per_tile.contiguous().data_ptr<int>(),
         gs_id_per_patch.contiguous().data_ptr<int>(),
         us.contiguous().data_ptr<float>(),
         cinv2d.contiguous().data_ptr<float>(),

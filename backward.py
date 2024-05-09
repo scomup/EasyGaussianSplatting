@@ -1,7 +1,7 @@
 from gaussian_splatting import *
 
 
-def splat_test(H, W, u, cov2d, alpha, depth, color):
+def splat_test(height, width, u, cov2d, alpha, depth, color):
     import torch
     import simple_gaussian_reasterization as sgr
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
@@ -9,7 +9,7 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
     alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
     depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.forward(H, W, u, cov2d, alpha, depth, color)
+    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
 
     contrib = res[1]
     final_tau = res[2]
@@ -19,13 +19,13 @@ def splat_test(H, W, u, cov2d, alpha, depth, color):
     criterion = nn.L1Loss()
 
     image = res[0].requires_grad_(True)
-    image_gt = torch.zeros([3, H, W], dtype=torch.float32).to('cuda')
+    image_gt = torch.zeros([3, height, width], dtype=torch.float32).to('cuda')
     loss = criterion(image, image_gt)
     loss.backward()
     dloss_dgammas = image.grad
-    # dloss_dgammas = torch.ones([3, H, W], dtype=torch.float32).to('cuda')
+    # dloss_dgammas = torch.ones([3, height, width], dtype=torch.float32).to('cuda')
 
-    jacobians = sgr.backward(H, W, u, cov2d, alpha, depth, color,
+    jacobians = sgr.backward(height, width, u, cov2d, alpha, depth, color,
                              contrib, final_tau, patch_offset_per_tile,
                              gs_id_per_patch, dloss_dgammas)
     print("dloss_du:\n", jacobians[0])
@@ -89,21 +89,21 @@ if __name__ == "__main__":
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
 
-    # W = int(979)  # 1957  # 979
-    # H = int(546)  # 1091  # 546
+    # width = int(979)  # 1957  # 979
+    # height = int(546)  # 1091  # 546
     # focal_x = 1163.2547280302354/2.
     # focal_y = 1156.280404988286/2.
 
-    W = int(32)  # 1957  # 979
-    H = int(16)  # 1091  # 546
+    width = int(32)  # 1957  # 979
+    height = int(16)  # 1091  # 546
     focal_x = 16
     focal_y = 16
 
-    K = np.array([[focal_x, 0, W/2.],
-                  [0, focal_y, H/2.],
+    K = np.array([[focal_x, 0, width/2.],
+                  [0, focal_y, height/2.],
                   [0, 0, 1.]])
 
-    camera = Camera(id=0, width=W, height=H, K=K, Rcw=Rcw, tcw=tcw)
+    camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
 
     pw = gs['pos']
 

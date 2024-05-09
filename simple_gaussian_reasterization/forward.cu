@@ -65,8 +65,8 @@ __global__ void createKey(const int gs_num,
 }
 
 __global__ void getRect(
-    const int W,
-    const int H,
+    const int width,
+    const int height,
     int gs_num,
     const float *__restrict__ us,
     const float *__restrict__ areas,
@@ -83,8 +83,8 @@ __global__ void getRect(
     float d = depths[idx];
     float2 u = {us[idx*2], us[idx*2 + 1]};
 
-    float x_norm =  u.x / W * 2.f - 1.f;
-    float y_norm =  u.y / H * 2.f - 1.f;
+    float x_norm =  u.x / width * 2.f - 1.f;
+    float y_norm =  u.y / height * 2.f - 1.f;
     if (abs(x_norm) > 1.3 || abs(y_norm) > 1.3 || d < 0.1 || d > 100)
     {
         gs_rects[idx] = {0, 0, 0, 0};
@@ -106,10 +106,10 @@ __global__ void getRect(
     patch_num_per_gs[idx] = (rect.z - rect.x) * (rect.w - rect.y);
 }
 
-__global__ void getOffset(
+__global__ void getRange(
     const int patch_num,
     const uint64_t *__restrict__ patch_keys,
-    int *__restrict__ patch_offset_per_tile)
+    int *__restrict__ patch_range_per_tile)
 {
     const int cur_patch = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -122,26 +122,22 @@ __global__ void getOffset(
     uint32_t prv_tile = patch_keys[prv_patch] >> 32;
 
     if (cur_patch == 0)
-    {
-        patch_offset_per_tile[0] = 0;
-        return;
-    }
-
-     if (cur_patch == patch_num - 1)
-     {
-        patch_offset_per_tile[cur_tile + 1] = patch_num;
-     }
+        patch_range_per_tile[2*cur_tile] = 0;
+    else if (cur_patch == patch_num - 1)
+        patch_range_per_tile[2*cur_tile + 1] = patch_num;
 
     if (prv_tile != cur_tile)
     {
-        patch_offset_per_tile[cur_tile] = cur_patch;
+        patch_range_per_tile[2*prv_tile + 1] = cur_patch;
+        patch_range_per_tile[2*cur_tile] = cur_patch;
     }
 }
 
+
 __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
-    const int W,
-    const int H,
-    const int *__restrict__ patch_offset_per_tile,
+    const int width,
+    const int height,
+    const int *__restrict__ patch_range_per_tile,
     const int *__restrict__ gs_id_per_patch,
     const float *__restrict__ us,
     const float *__restrict__ cinv2d,
@@ -157,13 +153,16 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
                        tile.y * BLOCK + threadIdx.y};
 
     const int tile_idx = tile.y * gridDim.x + tile.x;
-    const uint32_t pix_idx = W * pix.y + pix.x;
+    const uint32_t pix_idx = width * pix.y + pix.x;
 
-	const bool inside = pix.x < W && pix.y < H;
-	const int2 range = {patch_offset_per_tile[tile_idx], patch_offset_per_tile[tile_idx + 1]};
+    const bool inside = pix.x < width && pix.y < height;
+    const int2 range = {patch_range_per_tile[2 * tile_idx],
+                        patch_range_per_tile[2 * tile_idx + 1]};
+
+	const int gs_num = range.y - range.x;
 
     // not patch for this tile.
-    if (range.x == -1)
+    if (gs_num == 0)
         return;
 
 	bool thread_is_finished = !inside;
@@ -173,7 +172,6 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     __shared__ float  shared_alpha[BLOCK_SIZE];
     __shared__ float3 shared_color[BLOCK_SIZE];
 
-	const int gs_num = range.y - range.x;
 
     float3 finial_color = {0, 0, 0};
 
@@ -250,9 +248,9 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 
     if (inside)
     {
-        image[H * W * 0 + pix_idx] = finial_color.x;
-        image[H * W * 1 + pix_idx] = finial_color.y;
-        image[H * W * 2 + pix_idx] = finial_color.z;
+        image[height * width * 0 + pix_idx] = finial_color.x;
+        image[height * width * 1 + pix_idx] = finial_color.y;
+        image[height * width * 2 + pix_idx] = finial_color.z;
         contrib[pix_idx] = cont;
         final_tau[pix_idx] = tau;
     }
@@ -285,8 +283,8 @@ __global__ void inverseCov2D(
 }
 
 std::vector<torch::Tensor> forward(
-    const int H,
-    const int W,
+    const int height,
+    const int width,
     const torch::Tensor us,
     const torch::Tensor cov2d,
     const torch::Tensor alphas,
@@ -295,9 +293,9 @@ std::vector<torch::Tensor> forward(
 {
     auto float_opts = us.options().dtype(torch::kFloat32);
     auto int_opts = us.options().dtype(torch::kInt32);
-    torch::Tensor image = torch::full({3, H, W}, 0.0, float_opts);
-    torch::Tensor contrib = torch::full({H, W}, 0, int_opts);
-    torch::Tensor final_tau = torch::full({H, W}, 0, float_opts);
+    torch::Tensor image = torch::full({3, height, width}, 0.0, float_opts);
+    torch::Tensor contrib = torch::full({height, width}, 0, int_opts);
+    torch::Tensor final_tau = torch::full({height, width}, 0, float_opts);
 
     //gs:    2d gaussian;  a projection of a 3d gaussian onto a 2d image
     //tile:  a 16x16 area of 2d image
@@ -306,7 +304,7 @@ std::vector<torch::Tensor> forward(
     // the total number of 2d gaussian.
     int gs_num = us.sizes()[0]; 
     
-    dim3 grid(DIV_ROUND_UP(W, BLOCK), DIV_ROUND_UP(H, BLOCK), 1);
+    dim3 grid(DIV_ROUND_UP(width, BLOCK), DIV_ROUND_UP(height, BLOCK), 1);
 	dim3 block(BLOCK, BLOCK, 1);
 
     thrust::device_vector<uint4> gs_rects(gs_num);
@@ -323,8 +321,8 @@ std::vector<torch::Tensor> forward(
     cudaDeviceSynchronize();
 
     getRect<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
-        W,
-        H,
+        width,
+        height,
         gs_num,
         us.contiguous().data_ptr<float>(),
         thrust::raw_pointer_cast(areas.data()),
@@ -355,18 +353,18 @@ std::vector<torch::Tensor> forward(
     thrust::sort_by_key(patch_keys.begin(), patch_keys.end(), gs_id_per_patch.begin());
 
     const uint tile_num = grid.x * grid.y;
-    torch::Tensor patch_offset_per_tile = torch::full({tile_num+1}, -1, int_opts);
+    torch::Tensor patch_range_per_tile = torch::full({tile_num, 2}, 0, int_opts);
 
-    getOffset<<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+    getRange<<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         patch_num,
         thrust::raw_pointer_cast(patch_keys.data()),
-        patch_offset_per_tile.contiguous().data_ptr<int>());
+        patch_range_per_tile.contiguous().data_ptr<int>());
     cudaDeviceSynchronize();
 
     draw<<<grid, block>>>(
-        W,
-        H,
-        patch_offset_per_tile.contiguous().data_ptr<int>(),
+        width,
+        height,
+        patch_range_per_tile.contiguous().data_ptr<int>(),
         thrust::raw_pointer_cast(gs_id_per_patch.data()),
         us.contiguous().data_ptr<float>(),
         thrust::raw_pointer_cast(cinv2d.data()),
@@ -380,5 +378,5 @@ std::vector<torch::Tensor> forward(
     torch::Tensor gsid_per_patch_torch = torch::from_blob(thrust::raw_pointer_cast(gs_id_per_patch.data()), 
         {static_cast<long>(gs_id_per_patch.size())}, torch::TensorOptions().dtype(torch::kInt32)).to(torch::kCUDA);
 
-    return {image, contrib, final_tau, patch_offset_per_tile, gsid_per_patch_torch};
+    return {image, contrib, final_tau, patch_range_per_tile, gsid_per_patch_torch};
 }

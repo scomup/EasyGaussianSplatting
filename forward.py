@@ -54,16 +54,16 @@ if __name__ == "__main__":
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
 
-    W = int(979)  # 1957  # 979
-    H = int(546)  # 1091  # 546
+    width = int(979)  # 1957  # 979
+    height = int(546)  # 1091  # 546
     focal_x = 1163.2547280302354/2.
     focal_y = 1156.280404988286/2.
 
-    K = np.array([[focal_x, 0, W/2.],
-                  [0, focal_y, H/2.],
+    K = np.array([[focal_x, 0, width/2.],
+                  [0, focal_y, height/2.],
                   [0, 0, 1.]])
 
-    camera = Camera(id=0, width=W, height=H, K=K, Rcw=Rcw, tcw=tcw)
+    camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
 
     pw = gs['pos']
 

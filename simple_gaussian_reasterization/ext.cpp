@@ -21,7 +21,7 @@ std::vector<torch::Tensor> backward(
     const torch::Tensor colors,
     const torch::Tensor contrib,
     const torch::Tensor final_tau,
-    const torch::Tensor patch_offset_per_tile,
+    const torch::Tensor patch_range_per_tile,
     const torch::Tensor gs_id_per_patch,
     const torch::Tensor dloss_dgammas);
 

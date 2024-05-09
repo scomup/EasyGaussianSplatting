@@ -113,19 +113,19 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
         return gamma
 
 
-def calc_loss(alphas, cov2ds, colors, us, W, H, calc_J=False):
-    image = np.zeros([H, W, 3])
-    xs = np.indices([W, H]).reshape(2, -1).T
+def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
+    image = np.zeros([height, width, 3])
+    xs = np.indices([width, height]).reshape(2, -1).T
     for x in xs:
         gamma = calc_gamma(alphas, cov2ds, colors, us, x)
         image[x[1], x[0]] = gamma
     criterion = nn.L1Loss()
     image_tensor = torch.tensor(image.transpose([2, 0, 1]), requires_grad=True)
-    image_gt = torch.zeros([3, H, W], dtype=torch.double)
+    image_gt = torch.zeros([3, height, width], dtype=torch.double)
     loss = criterion(image_tensor, image_gt)
     loss_val = loss.detach().numpy().reshape(1)
     if (calc_J):
-        contrib = np.ones([H, W])
+        contrib = np.ones([height, width])
         loss.backward()
         dloss_dgammas = image_tensor.grad.detach().numpy()
         gs_num = alphas.shape[0]
@@ -190,13 +190,13 @@ if __name__ == "__main__":
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
 
-    W = int(32)  # 1957  # 979
-    H = int(16)  # 1091  # 546
+    width = int(32)  # 1957  # 979
+    height = int(16)  # 1091  # 546
     focal_x = 16
     focal_y = 16
 
-    K = np.array([[focal_x, 0, W/2.],
-                  [0, focal_y, H/2.],
+    K = np.array([[focal_x, 0, width/2.],
+                  [0, focal_y, height/2.],
                   [0, 0, 1.]])
 
     Tcw = np.eye(4)
@@ -208,7 +208,7 @@ if __name__ == "__main__":
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    u, pc = project(pw, Tcw, K)
+    u, pc = project(pw, Rcw, tcw, K)
 
     depth = pc[:, 2]
 
@@ -282,15 +282,15 @@ if __name__ == "__main__":
             dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]))
 
     loss, dloss_dalpha, dloss_dcov2d, dloss_dcolor, dloss_du = calc_loss(
-        alpha, cov2d, color, u, W, H, True)
+        alpha, cov2d, color, u, width, height, True)
     dloss_dalpha_numerial = numerical_derivative(
-        calc_loss, [alpha, cov2d, color, u, W, H], 0)
+        calc_loss, [alpha, cov2d, color, u, width, height], 0)
     dloss_dcov2d_numerial = numerical_derivative(
-        calc_loss, [alpha, cov2d, color, u, W, H], 1)
+        calc_loss, [alpha, cov2d, color, u, width, height], 1)
     dloss_dcolor_numerial = numerical_derivative(
-        calc_loss, [alpha, cov2d, color, u, W, H], 2)
+        calc_loss, [alpha, cov2d, color, u, width, height], 2)
     dloss_du_numerial = numerical_derivative(
-        calc_loss, [alpha, cov2d, color, u, W, H], 3)
+        calc_loss, [alpha, cov2d, color, u, width, height], 3)
 
     print("check dloss_dalpha: ", check(dloss_dalpha_numerial, dloss_dalpha))
     print("check dloss_dcov2d: ", check(dloss_dcov2d_numerial, dloss_dcov2d))

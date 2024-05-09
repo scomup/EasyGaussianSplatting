@@ -158,8 +158,7 @@ def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
     J[:, 1, 1] = focal_y / z
     J[:, 1, 2] = -(focal_y * y) / z2
 
-    W = Rcw
-    T = J @ W
+    T = J @ Rcw
 
     Sigma = symmetric_matrix(cov3d)
 
@@ -186,9 +185,9 @@ def project(pw, Rcw, tcw, K):
     return u, pc
 
 
-def splat(H, W, u, cov2d, alpha, depth, color):
-    image = np.zeros([H, W, 3])
-    image_T = np.ones([H, W])
+def splat(height, width, u, cov2d, alpha, depth, color):
+    image = np.zeros([height, width, 3])
+    image_T = np.ones([height, width])
 
     # forward.md 5.3
     # compute inverse of cov2d
@@ -203,8 +202,8 @@ def splat(H, W, u, cov2d, alpha, depth, color):
     # sort by depth
     sort_idx = np.argsort(depth)
 
-    idx_map = np.array((np.meshgrid(np.arange(0, W), np.arange(0, H))))
-    win_size = np.array([W, H])
+    idx_map = np.array((np.meshgrid(np.arange(0, width), np.arange(0, height))))
+    win_size = np.array([width, height])
 
     for j, i in enumerate(sort_idx):
         if (j % 100000 == 0):
@@ -221,10 +220,10 @@ def splat(H, W, u, cov2d, alpha, depth, color):
             continue
 
         r = areas[i]
-        x0 = int(np.maximum(np.minimum(u[0] - r[0], W), 0))
-        x1 = int(np.maximum(np.minimum(u[0] + r[0], W), 0))
-        y0 = int(np.maximum(np.minimum(u[1] - r[1], H), 0))
-        y1 = int(np.maximum(np.minimum(u[1] + r[1], H), 0))
+        x0 = int(np.maximum(np.minimum(u[0] - r[0], width), 0))
+        x1 = int(np.maximum(np.minimum(u[0] + r[0], width), 0))
+        y0 = int(np.maximum(np.minimum(u[1] - r[1], height), 0))
+        y1 = int(np.maximum(np.minimum(u[1] + r[1], height), 0))
 
         if ((x1 - x0) * (y1 - y0) == 0):
             continue
@@ -255,7 +254,7 @@ def splat(H, W, u, cov2d, alpha, depth, color):
     return image
 
 
-def splat_gpu(H, W, u, cov2d, alpha, depth, color):
+def splat_gpu(height, width, u, cov2d, alpha, depth, color):
     import torch
     import simple_gaussian_reasterization as sgr
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
@@ -263,7 +262,7 @@ def splat_gpu(H, W, u, cov2d, alpha, depth, color):
     alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
     depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.forward(H, W, u, cov2d, alpha, depth, color)
+    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
     res_cpu = []
     for r in res:
         res_cpu.append(r.to('cpu').numpy())
@@ -271,15 +270,15 @@ def splat_gpu(H, W, u, cov2d, alpha, depth, color):
     return res_cpu
 
 
-def blend(H, W, u, cov2d, alpha, depth, color):
+def blend(height, width, u, cov2d, alpha, depth, color):
     try:
         import torch
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
-        res = splat_gpu(H, W, u, cov2d, alpha, depth, color)
+        res = splat_gpu(height, width, u, cov2d, alpha, depth, color)
         image = res[0]
     except ImportError:
         print("cannot find simple_gaussian_reasterization, using CPU mode.")
         print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(H, W, cov2d, alpha, depth, color)
+        image = splat(height, width, cov2d, alpha, depth, color)
     return image
