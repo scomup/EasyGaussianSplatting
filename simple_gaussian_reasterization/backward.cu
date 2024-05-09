@@ -200,8 +200,8 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         float g = exp(-0.5f * maha_dist);
         float alpha_prime = min(0.99f, alpha * g);
 
-        // if (alpha_prime < 0.002f)
-        //     continue;
+        if (alpha_prime < 0.002f)
+            continue;
 
         tau = tau / (1 - alpha_prime);
 

@@ -1,11 +1,11 @@
+import matplotlib.pyplot as plt
+import torch
+import torch.nn as nn
 import numpy as np
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from gaussian_splatting import *
-import torch.nn as nn
-import torch
-import matplotlib.pyplot as plt
 
 
 def numerical_derivative(func, param, idx, plus=lambda a, b: a + b, minus=lambda a, b: a - b, delta=1e-8):
@@ -50,13 +50,17 @@ def calc_cinv2d(cov2d, calc_J=False):
 
 def calc_alpha_prime(alpha, cinv2d, u, x, calc_J=False):
     d = u - x
-    maha_dist = cinv2d[0] * d[0] * d[0] + cinv2d[2] * d[1] * d[1] + 2 * cinv2d[1] * d[0] * d[1]
+    maha_dist = cinv2d[0] * d[0] * d[0] + cinv2d[2] * \
+        d[1] * d[1] + 2 * cinv2d[1] * d[0] * d[1]
     g = np.exp(-0.5 * maha_dist)
     alphaprime = g * alpha
     if (calc_J):
         dalphaprime_dalpha = np.array([[g]])
-        dalphaprime_dcinv2d = -0.5 * alphaprime * np.array([d[0] * d[0], 2 * d[0] * d[1], d[1] * d[1]])
-        dalphaprime_du = alphaprime * np.array([-cinv2d[0]*d[0] - cinv2d[1]*d[1], (-cinv2d[1]*d[0] - cinv2d[2]*d[1])])
+        dalphaprime_dcinv2d = -0.5 * alphaprime * \
+            np.array([d[0] * d[0], 2 * d[0] * d[1], d[1] * d[1]])
+        dalphaprime_du = alphaprime * \
+            np.array([-cinv2d[0]*d[0] - cinv2d[1]*d[1],
+                     (-cinv2d[1]*d[0] - cinv2d[2]*d[1])])
         return alphaprime, dalphaprime_dalpha, dalphaprime_dcinv2d.reshape([1, 3]), dalphaprime_du.reshape([1, 2])
     else:
         return alphaprime
@@ -84,22 +88,26 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
     if (calc_J):
         gs_num = alphas.shape[0]
         gamma_cur2last = np.zeros(3)
-        dgamma_dalpha = np.zeros([gs_num,3, 1])
-        dgamma_dcov2d = np.zeros([gs_num,3, 3])
-        dgamma_dcolor = np.zeros([gs_num,3, 3])
-        dgamma_du = np.zeros([gs_num,3, 2])
+        dgamma_dalpha = np.zeros([gs_num, 3, 1])
+        dgamma_dcov2d = np.zeros([gs_num, 3, 3])
+        dgamma_dcolor = np.zeros([gs_num, 3, 3])
+        dgamma_du = np.zeros([gs_num, 3, 2])
         for i in reversed(range(cont)):
             alpha, cov2d, color, u = alphas[i], cov2ds[i], colors[i], us[i]
             cinv2d, dcinv2d_dcov2d = calc_cinv2d(cov2d, True)
             alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du =\
                 calc_alpha_prime(alpha, cinv2d, u, x, True)
+            if (alpha_prime < 0.002):
+                continue
             tau = tau / (1 - alpha_prime)
-            dgamma_dalphaprime = (tau * (color - gamma_cur2last)).reshape([3, 1])
+            dgamma_dalphaprime = (
+                tau * (color - gamma_cur2last)).reshape([3, 1])
             dgamma_dalpha[i] = dgamma_dalphaprime @ dalphaprime_dalpha
             dgamma_dcov2d[i] = dgamma_dalphaprime @ dalphaprime_dcinv2d @ dcinv2d_dcov2d
             dgamma_dcolor[i] = tau * alpha_prime * np.eye(3)
             dgamma_du[i] = dgamma_dalphaprime @ dalphaprime_du
-            gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last
+            gamma_cur2last = alpha_prime * color + \
+                (1 - alpha_prime) * gamma_cur2last
         return gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du, cont
     else:
         return gamma
@@ -112,7 +120,7 @@ def calc_loss(alphas, cov2ds, colors, us, W, H, calc_J=False):
         gamma = calc_gamma(alphas, cov2ds, colors, us, x)
         image[x[1], x[0]] = gamma
     criterion = nn.L1Loss()
-    image_tensor = torch.tensor(image.transpose([2,0,1]), requires_grad=True)
+    image_tensor = torch.tensor(image.transpose([2, 0, 1]), requires_grad=True)
     image_gt = torch.zeros([3, H, W], dtype=torch.double)
     loss = criterion(image_tensor, image_gt)
     loss_val = loss.detach().numpy().reshape(1)
@@ -135,11 +143,11 @@ def calc_loss(alphas, cov2ds, colors, us, W, H, calc_J=False):
                 dloss_dcov2ds[i] += dloss_dgamma @ dgamma_dcov2ds[i]
                 dloss_dcolors[i] += dloss_dgamma @ dgamma_dcolors[i]
                 dloss_dus[i] += dloss_dgamma @ dgamma_dus[i]
-        return loss_val,\
-               dloss_dalphas.reshape(1, -1),\
-               dloss_dcov2ds.reshape(1, -1),\
-               dloss_dcolors.reshape(1, -1),\
-               dloss_dus.reshape(1, -1)
+        return loss_val, \
+            dloss_dalphas.reshape(1, -1), \
+            dloss_dcov2ds.reshape(1, -1), \
+            dloss_dcolors.reshape(1, -1), \
+            dloss_dus.reshape(1, -1)
     else:
         return loss_val
 
@@ -224,41 +232,65 @@ if __name__ == "__main__":
     u = u[idx].reshape(-1)
     x = np.array([16, 8])
 
+    calc_gamma(alpha, cov2d, color, u, np.array([16, 8]))
+
     cov2d0 = cov2d[:3]
     cinv2d0, dcov2d_dcinv2d = calc_cinv2d(cov2d0, True)
     dcov2d_dcinv2d_numerial = numerical_derivative(calc_cinv2d, [cov2d0], 0)
-    print("check dcov2d_dcinv2d: ", check(dcov2d_dcinv2d_numerial, dcov2d_dcinv2d))
+    print("check dcov2d_dcinv2d: ", check(
+        dcov2d_dcinv2d_numerial, dcov2d_dcinv2d))
 
     cinv2d = calc_cinv2d(cov2d)
     alpha0, u0 = alpha[:1], u[:2]
     calc_alpha_prime(alpha0, cinv2d0, u0, x)
 
-    dalphaprime_dalpha_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv2d0, u0, x], 0)
-    dalphaprime_dcinv2d_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv2d0, u0, x], 1)
-    dalphaprime_du_numerial = numerical_derivative(calc_alpha_prime, [alpha0, cinv2d0, u0, x], 2)
-    alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du = calc_alpha_prime(alpha0, cinv2d0, u0, x, True)
+    dalphaprime_dalpha_numerial = numerical_derivative(
+        calc_alpha_prime, [alpha0, cinv2d0, u0, x], 0)
+    dalphaprime_dcinv2d_numerial = numerical_derivative(
+        calc_alpha_prime, [alpha0, cinv2d0, u0, x], 1)
+    dalphaprime_du_numerial = numerical_derivative(
+        calc_alpha_prime, [alpha0, cinv2d0, u0, x], 2)
+    alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du = calc_alpha_prime(
+        alpha0, cinv2d0, u0, x, True)
 
-    print("check dalphaprime_dalpha: ", check(dalphaprime_dalpha_numerial, dalphaprime_dalpha))
-    print("check dalphaprime_dcinv2d: ", check(dalphaprime_dcinv2d_numerial, dalphaprime_dcinv2d))
-    print("check dalphaprime_du: ", check(dalphaprime_du_numerial, dalphaprime_du))
+    print("check dalphaprime_dalpha: ", check(
+        dalphaprime_dalpha_numerial, dalphaprime_dalpha))
+    print("check dalphaprime_dcinv2d: ", check(
+        dalphaprime_dcinv2d_numerial, dalphaprime_dcinv2d))
+    print("check dalphaprime_du: ", check(
+        dalphaprime_du_numerial, dalphaprime_du))
 
-    gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du, _ = calc_gamma(alpha, cov2d, color, u, x, True)
-    dgamma_dalpha_numerial = numerical_derivative(calc_gamma, [alpha, cov2d, color, u, x], 0)
-    dgamma_dcov2d_numerial = numerical_derivative(calc_gamma, [alpha, cov2d, color, u, x], 1)
-    dgamma_dcolor_numerial = numerical_derivative(calc_gamma, [alpha, cov2d, color, u, x], 2)
-    dgamma_du_numerial = numerical_derivative(calc_gamma, [alpha, cov2d, color, u, x], 3)
+    gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du, _ = calc_gamma(
+        alpha, cov2d, color, u, x, True)
+    dgamma_dalpha_numerial = numerical_derivative(
+        calc_gamma, [alpha, cov2d, color, u, x], 0)
+    dgamma_dcov2d_numerial = numerical_derivative(
+        calc_gamma, [alpha, cov2d, color, u, x], 1)
+    dgamma_dcolor_numerial = numerical_derivative(
+        calc_gamma, [alpha, cov2d, color, u, x], 2)
+    dgamma_du_numerial = numerical_derivative(
+        calc_gamma, [alpha, cov2d, color, u, x], 3)
 
     for i in range(gs_num):
-        print("check dgamma_dalpha_%d: " % i, check(dgamma_dalpha_numerial[:, i], dgamma_dalpha[i].reshape(-1)))
-        print("check dgamma_dcov2d_%d: " % i, check(dgamma_dcov2d_numerial[:, 3*i:3*i+3], dgamma_dcov2d[i]))
-        print("check dgamma_dcolor_%d: " % i, check(dgamma_dcolor_numerial[:, 3*i:3*i+3], dgamma_dcolor[i]))
-        print("check dgamma_du_%d: " % i, check(dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]))
+        print("check dgamma_dalpha_%d: " % i, check(
+            dgamma_dalpha_numerial[:, i], dgamma_dalpha[i].reshape(-1)))
+        print("check dgamma_dcov2d_%d: " % i, check(
+            dgamma_dcov2d_numerial[:, 3*i:3*i+3], dgamma_dcov2d[i]))
+        print("check dgamma_dcolor_%d: " % i, check(
+            dgamma_dcolor_numerial[:, 3*i:3*i+3], dgamma_dcolor[i]))
+        print("check dgamma_du_%d: " % i, check(
+            dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]))
 
-    loss, dloss_dalpha, dloss_dcov2d, dloss_dcolor, dloss_du = calc_loss(alpha, cov2d, color, u, W, H, True)
-    dloss_dalpha_numerial = numerical_derivative(calc_loss, [alpha, cov2d, color, u, W, H], 0)
-    dloss_dcov2d_numerial = numerical_derivative(calc_loss, [alpha, cov2d, color, u, W, H], 1)
-    dloss_dcolor_numerial = numerical_derivative(calc_loss, [alpha, cov2d, color, u, W, H], 2)
-    dloss_du_numerial = numerical_derivative(calc_loss, [alpha, cov2d, color, u, W, H], 3)
+    loss, dloss_dalpha, dloss_dcov2d, dloss_dcolor, dloss_du = calc_loss(
+        alpha, cov2d, color, u, W, H, True)
+    dloss_dalpha_numerial = numerical_derivative(
+        calc_loss, [alpha, cov2d, color, u, W, H], 0)
+    dloss_dcov2d_numerial = numerical_derivative(
+        calc_loss, [alpha, cov2d, color, u, W, H], 1)
+    dloss_dcolor_numerial = numerical_derivative(
+        calc_loss, [alpha, cov2d, color, u, W, H], 2)
+    dloss_du_numerial = numerical_derivative(
+        calc_loss, [alpha, cov2d, color, u, W, H], 3)
 
     print("check dloss_dalpha: ", check(dloss_dalpha_numerial, dloss_dalpha))
     print("check dloss_dcov2d: ", check(dloss_dcov2d_numerial, dloss_dcov2d))
