@@ -222,8 +222,8 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
         // mahalanobis squared distance for 2d gaussian to this pix
         float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
 
-        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
-
+        //float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
+        float alpha_prime = 0.99f;
         if (alpha_prime < 0.002f)
             continue;
 
@@ -232,14 +232,13 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
         cont = cont_tmp;   // how many gs contribute to this pixel. 
 
         // forward.md (5.2)
-        float tau_new = tau * (1.f - alpha_prime);
+        tau = tau * (1.f - alpha_prime);
 
-        if (tau_new < 0.0001f)
+        if (tau < 0.0001f)
         {
             thread_is_finished = true;
             continue;
         }
-        tau = tau_new;
     }
 
     if (inside)
