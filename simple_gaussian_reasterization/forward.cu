@@ -278,8 +278,8 @@ __global__ void inverseCov2D(
     cinv2d[gs_id * 3 + 0] =  det_inv * c;
     cinv2d[gs_id * 3 + 1] = -det_inv * b;
     cinv2d[gs_id * 3 + 2] =  det_inv * a;
-    areas[gs_id * 2 + 0] =  3 * sqrt(a);
-    areas[gs_id * 2 + 1] =  3 * sqrt(c);
+    areas[gs_id * 2 + 0] =  3 * sqrt(abs(a));
+    areas[gs_id * 2 + 1] =  3 * sqrt(abs(c));
 }
 
 std::vector<torch::Tensor> forward(

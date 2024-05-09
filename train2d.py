@@ -7,21 +7,35 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import simple_gaussian_reasterization as sgr
+import torchvision
 
 
 class GS2DNet(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, u, cov2d, alpha, depth, color, camera):
+    def forward(ctx, u, cov2d, alpha, color):
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            sgr.forward(camera.height, camera.width, u, cov2d, alpha, depth, color)
-        ctx.save_for_backward(contrib, final_tau, patch_offset_per_tile, gs_id_per_patch, camera)
+            sgr.forward(camera.height, camera.width,
+                        u, cov2d, alpha, depth, color)
+        ctx.save_for_backward(u, cov2d, alpha, color, contrib,
+                              final_tau, patch_offset_per_tile, gs_id_per_patch)
         return image
 
     @staticmethod
     def backward(ctx, dloss_dgammas):
-        contrib, final_tau, patch_offset_per_tile, gs_id_per_patch, camera =\
-            ctx.saved_tensors
-        return dLdSH.T
+        u, cov2d, alpha, color, contrib, \
+            final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
+
+        dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
+            sgr.backward(camera.height, camera.width, u, cov2d, alpha,
+                         depth, color, contrib, final_tau,
+                         patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+        dloss_dcov2dsx = dloss_dcov2ds.to('cpu').detach().numpy()
+        print("dloss_dus:\n", torch.isnan(dloss_dus).any())
+        print("dloss_dcov2ds:\n", torch.isnan(dloss_dcov2ds).any())
+        print("dloss_dalphas:\n", torch.isnan(dloss_dalphas).any())
+        print("dloss_dcolors:\n", torch.isnan(dloss_dcolors).any())
+
+        return dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors
 
 
 def create_guassian2d_data(camera, gs):
@@ -33,7 +47,7 @@ def create_guassian2d_data(camera, gs):
     depth = pc[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
-    cov3d = compute_cov_3d(gs['scale']/10, gs['rot'])
+    cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
     cov2d = compute_cov_2d(pc, camera.focal_x, camera.focal_y, cov3d, camera.Rcw)
@@ -43,6 +57,9 @@ def create_guassian2d_data(camera, gs):
     ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
     color = sh2color(gs['sh'], ray_dir)
     return u, cov2d, gs['alpha'], color, depth
+
+
+device = 'cuda'
 
 
 if __name__ == "__main__":
@@ -75,6 +92,8 @@ if __name__ == "__main__":
               ('sh', '<f4', (3,))]
 
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/aecdf69f-c/point_cloud/iteration_10/point_cloud.ply"
+    gs = load_ply(ply_fn)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -82,10 +101,10 @@ if __name__ == "__main__":
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
 
-    width = int(32)
-    height = int(16)
-    focal_x = 16
-    focal_y = 16
+    # width = int(32)
+    # height = int(16)
+    # focal_x = 16
+    # focal_y = 16
 
     width = int(979)
     height = int(546)
@@ -99,16 +118,32 @@ if __name__ == "__main__":
     camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
 
     u, cov2d, alpha, color, depth = create_guassian2d_data(camera, gs)
-    u = torch.from_numpy(u).type(torch.float32).to('cuda')
-    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
-    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
-    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
-    color = torch.from_numpy(color).type(torch.float32).to('cuda')
+    u = torch.from_numpy(u).type(torch.float32).to(device).requires_grad_()
+    cov2d = torch.from_numpy(cov2d).type(torch.float32).to(device).requires_grad_()
+    alpha = torch.from_numpy(alpha).type(torch.float32).to(device).requires_grad_()
+    depth = torch.from_numpy(depth).type(torch.float32).to(device).requires_grad_()
+    color = torch.from_numpy(color).type(torch.float32).to(device).requires_grad_()
 
     gs2dnet = GS2DNet
 
-    image = gs2dnet.apply(u, cov2d, alpha, depth, color, camera)
+    image_gt = torchvision.io.read_image("test.png").to(device)
+    image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
-    image_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
-    plt.imshow(image_cpu)
-    plt.show()
+    criterion = nn.MSELoss()
+    optimizer = optim.SGD([u, cov2d, alpha, color], lr=0.01)
+    # image = gs2dnet.apply(u, cov2d, alpha, color)
+    # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
+    # plt.show()
+
+    for i in range(1):
+        image = gs2dnet.apply(u, cov2d, alpha, color)
+        loss = criterion(image, image_gt)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        #print(loss.item())
+
+        # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
+        # plt.pause(0.1)
+    #plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
+    #plt.show()

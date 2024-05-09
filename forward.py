@@ -15,38 +15,35 @@ if __name__ == "__main__":
     else:
         print("not fly file.")
         # exit(0)
-        # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
-        # gs = load_ply(ply_fn)
+        gs_data = np.array([[0.,  0.,  0.,  # xyz
+                            1.,  0.,  0., 0.,  # rot
+                            0.05,  0.05,  0.05,  # size
+                            1.,
+                            1.772484,  -1.772484,  1.772484],
+                            [1.,  0.,  0.,
+                            1.,  0.,  0., 0.,
+                            0.2,  0.05,  0.05,
+                            1.,
+                            1.772484,  -1.772484, -1.772484],
+                            [0.,  1.,  0.,
+                            1.,  0.,  0., 0.,
+                            0.05,  0.2,  0.05,
+                            1.,
+                            -1.772484, 1.772484, -1.772484],
+                            [0.,  0.,  1.,
+                            1.,  0.,  0., 0.,
+                            0.05,  0.05,  0.2,
+                            1.,
+                            -1.772484, -1.772484,  1.772484]
+                            ], dtype=np.float32)
 
-    gs_data = np.array([[0.,  0.,  0.,  # xyz
-                        1.,  0.,  0., 0.,  # rot
-                        0.05,  0.05,  0.05,  # size
-                        1.,
-                        1.772484,  -1.772484,  1.772484],
-                        [1.,  0.,  0.,
-                        1.,  0.,  0., 0.,
-                        0.2,  0.05,  0.05,
-                        1.,
-                        1.772484,  -1.772484, -1.772484],
-                        [0.,  1.,  0.,
-                        1.,  0.,  0., 0.,
-                        0.05,  0.2,  0.05,
-                        1.,
-                        -1.772484, 1.772484, -1.772484],
-                        [0.,  0.,  1.,
-                        1.,  0.,  0., 0.,
-                        0.05,  0.05,  0.2,
-                        1.,
-                        -1.772484, -1.772484,  1.772484]
-                        ], dtype=np.float32)
+        dtypes = [('pos', '<f4', (3,)),
+                  ('rot', '<f4', (4,)),
+                  ('scale', '<f4', (3,)),
+                  ('alpha', '<f4'),
+                  ('sh', '<f4', (3,))]
 
-    dtypes = [('pos', '<f4', (3,)),
-              ('rot', '<f4', (4,)),
-              ('scale', '<f4', (3,)),
-              ('alpha', '<f4'),
-              ('sh', '<f4', (3,))]
-
-    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+        gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -88,5 +85,9 @@ if __name__ == "__main__":
     image = blend(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
 
     plt.imshow(image)
+    from PIL import Image
+    pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
+    print(pil_img.mode)
+    pil_img.save('test.png')
 
     plt.show()
