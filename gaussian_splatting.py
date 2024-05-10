@@ -37,6 +37,16 @@ class Camera:
         self.focal_y = K[1, 1]
 
 
+def projection_matrix(focal_x, focal_y, width, height, z_near=0.1, z_far=100):
+    P = np.zeros([4, 4])
+    P[0, 0] = 2 * focal_x / width
+    P[1, 1] = 2 * focal_x / width
+    P[2, 2] = -(z_near + z_far) / (z_far - z_near)
+    P[2, 3] = -(2 * z_near * z_far) / (z_far - z_near)
+    P[3, 0] = -1
+    return P
+
+
 def upper_triangular(mat):
     s = mat[0].shape[0]
     n = 0
@@ -146,7 +156,7 @@ def compute_cov_3d(scale, rot):
     return cov3d
 
 
-def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
+def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw, u):
     x = pc[:, 0]
     y = pc[:, 1]
     z = pc[:, 2]
@@ -185,7 +195,7 @@ def project(pw, Rcw, tcw, K):
     return u, pc
 
 
-def splat(height, width, u, cov2d, alpha, depth, color):
+def splat(height, width, us, cov2d, alpha, depth, color):
     image = np.zeros([height, width, 3])
     image_T = np.ones([height, width])
 
@@ -280,5 +290,5 @@ def blend(height, width, u, cov2d, alpha, depth, color):
     except ImportError:
         print("cannot find simple_gaussian_reasterization, using CPU mode.")
         print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(height, width, cov2d, alpha, depth, color)
+        image = splat(height, width, u, cov2d, alpha, depth, color)
     return image

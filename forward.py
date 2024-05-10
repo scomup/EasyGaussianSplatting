@@ -53,11 +53,11 @@ if __name__ == "__main__":
 
     width = int(979)  # 1957  # 979
     height = int(546)  # 1091  # 546
-    focal_x = 1163.2547280302354/2.
-    focal_y = 1156.280404988286/2.
 
-    K = np.array([[focal_x, 0, width/2.],
-                  [0, focal_y, height/2.],
+    focal_x = 581.6273640151177
+    focal_y = 578.140202494143
+    K = np.array([[focal_x, 0, width / 2],
+                  [0, focal_y, height / 2],
                   [0, 0, 1.]])
 
     camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
@@ -74,7 +74,7 @@ if __name__ == "__main__":
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.focal_x, camera.focal_y, cov3d, camera.Rcw)
+    cov2d = compute_cov_2d(pc, camera.focal_x, camera.focal_y, cov3d, camera.Rcw, u)
 
     # step4. get color info
     ray_dir = pw[:, :3] - camera.cam_center

@@ -18,7 +18,7 @@ inline __device__ void fetch2sharedBack(
     int *shared_gsid)
 {
     int i = blockDim.x * threadIdx.y + threadIdx.x;  // block idx
-    int j = range.y + n * BLOCK_SIZE - i - 1;  // patch idx
+    int j = range.y - n * BLOCK_SIZE - i - 1;  // patch idx
 
     if (j >= range.x)
     {
@@ -74,11 +74,6 @@ __global__ void inverseCov2DBack(
     dcinv2d_dcov2ds[gs_id * 9 + 7] = 2*a*b*det_inv2;
     dcinv2d_dcov2ds[gs_id * 9 + 8] = -a*a*det_inv2;
 
-    if(isnan(dcinv2d_dcov2ds[gs_id * 9 + 0]))
-    {
-        printf("gs_id: %d \n", gs_id);
-        printf("a, b, c: %f %f %f det %f det_inv2 %f\n", a, b, c, det, det_inv2);
-    }
 
 }
 
@@ -92,9 +87,15 @@ __global__ void calcDlossDcov2d(
 
 	if (gs_id >= gs_num)
 		return;
+        
     float3 dloss_dcinv2d = {dloss_dcinv2ds[gs_id*3 + 0],
                             dloss_dcinv2ds[gs_id*3 + 1],
                             dloss_dcinv2ds[gs_id*3 + 2]};
+
+    if (dloss_dcinv2d.x == 0.0f &&
+        dloss_dcinv2d.y == 0.0f &&
+        dloss_dcinv2d.z == 0.0f)
+        return;
 
     float3 dcinv2d_dcov2d0 = {dcinv2d_dcov2ds[gs_id*9 + 0],
                               dcinv2d_dcov2ds[gs_id*9 + 3],
@@ -111,12 +112,13 @@ __global__ void calcDlossDcov2d(
     dloss_dcov2ds[gs_id*3 + 0] = dot(dloss_dcinv2d, dcinv2d_dcov2d0);
     dloss_dcov2ds[gs_id*3 + 1] = dot(dloss_dcinv2d, dcinv2d_dcov2d1);
     dloss_dcov2ds[gs_id*3 + 2] = dot(dloss_dcinv2d, dcinv2d_dcov2d2);
-    if(isnan(dot(dloss_dcinv2d, dcinv2d_dcov2d0)))
-    {
-        printf("gs_id: %d gs_num %d \n", gs_id, gs_num);
-        printf("dcinv2d_dcov2d0: %f %f %f \n", dcinv2d_dcov2d0.x, dcinv2d_dcov2d0.y, dcinv2d_dcov2d0.z);
-        printf("dcinv2d_dcov2d0: %f\n", dcinv2d_dcov2ds[gs_id*9 + 0]);
-    }
+    // if(isnan(dot(dloss_dcinv2d, dcinv2d_dcov2d0)))
+    // {
+    //     printf("gs_id: %d gs_num %d \n", gs_id, gs_num);
+    //     printf("dloss_dcinv2d: %f %f %f \n", dloss_dcinv2d.x, dloss_dcinv2d.y, dloss_dcinv2d.z);
+    //     printf("dcinv2d_dcov2d0: %f %f %f \n", dcinv2d_dcov2d0.x, dcinv2d_dcov2d0.y, dcinv2d_dcov2d0.z);
+    //     printf("dcinv2d_dcov2d0: %f\n", dcinv2d_dcov2ds[gs_id*9 + 0]);
+    // }
 
 }
 
@@ -173,6 +175,11 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
     float tau = final_tau[pix_idx];
     int cont = contrib[pix_idx];
 
+    // if (pix.x == 687 && pix.y == 269)
+    // {
+    //     printf("tile%d gs_num %d, cont%d range %d %d\n", tile_idx, gs_num, cont, range.x, range.y);
+    // }
+
     // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
     {
@@ -219,6 +226,12 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         if (alpha_prime < 0.002f)
             continue;
 
+        if (gs_id == 687 && pix.y == 269)
+        {
+            printf("tile%d gs_num %d, cont%d range %d %d\n", tile_idx, gs_num, cont, range.x, range.y);
+        }
+
+
         tau = tau / (1 - alpha_prime);
 
         float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
@@ -241,9 +254,9 @@ __global__ void  drawBack __launch_bounds__(BLOCK * BLOCK)(
         atomicAdd(&dloss_dus[gs_id * 2 + 0], dloss_du.x);
         atomicAdd(&dloss_dus[gs_id * 2 + 1], dloss_du.y);
 
-        float3 dalphaprime_dcinv2d ={-0.5f * alpha_prime * (d.x * d.x), 
-                                           -alpha_prime * (d.x * d.y), 
-                                     -0.5f * alpha_prime * (d.y * d.y)};
+        float3 dalphaprime_dcinv2d = {-0.5f * alpha_prime * (d.x * d.x),
+                                      -alpha_prime * (d.x * d.y),
+                                      -0.5f * alpha_prime * (d.y * d.y)};
         float3 dloss_dcinv2d = dloss_dalphaprime * dalphaprime_dcinv2d;
         
         atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 0], dloss_dcinv2d.x);
