@@ -30,33 +30,20 @@ class GS2DNet(torch.autograd.Function):
             sgr.backward(camera.height, camera.width, u, cov2d, alpha,
                          depth, color, contrib, final_tau,
                          patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-
         # torch.save([u, cov2d, alpha,
         #             depth, color, contrib, final_tau,
         #             patch_offset_per_tile, gs_id_per_patch, dloss_dgammas], "temp.torch")
-        # if (torch.max(dloss_dalphas) > 10):
-        if (True):
-            # torch.save([u, cov2d, alpha,
-            #             depth, color, contrib, final_tau,
-            #             patch_offset_per_tile, gs_id_per_patch, dloss_dgammas], "temp.torch")
 
-            # u, cov2d, alpha, \
-            #     depth, color, contrib, final_tau, \
-            #     patch_offset_per_tile, gs_id_per_patch, dloss_dgammas = \
-            #     torch.load("temp.torch")
-            # width = int(979)
-            # height = int(546)
-            # dloss_dus0, dloss_dcov2ds0, dloss_dalphas0, dloss_dcolors0 =\
-            #     sgr.backward(camera.height, camera.width, u, cov2d, alpha,
-            #                  depth, color, contrib, final_tau,
-            #                  patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-
-            # print("dloss_dalphas:\n", torch.max(dloss_dalphas)) # 178080
-            print("dloss_dalphas:\n", torch.where(dloss_dalphas > 17))
-            print("u:\n", u[178080])
-            print("cov2d:\n", cov2d[178080])
-            print("alpha:\n", alpha[178080])
-            print("color:\n", color[178080])
+        # print("dloss_dalphas:\n", torch.max(dloss_dalphas)) # 178080
+        # print("dloss_dus:\n", torch.max(dloss_dus))
+        # print("dloss_dcov2ds:\n", torch.max(dloss_dcov2ds))
+        # print("dloss_dalphas:\n", torch.max(dloss_dalphas))
+        print("dloss_dcolors:\n", torch.max(dloss_dcolors))
+        dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
+            sgr.backward(camera.height, camera.width, u, cov2d, alpha,
+                         depth, color, contrib, final_tau,
+                         patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+        print("dloss_dcolors:\n", torch.max(dloss_dcolors))
 
         return dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors
 
@@ -73,7 +60,7 @@ def create_guassian2d_data(camera, gs):
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.focal_x, camera.focal_y, cov3d, camera.Rcw, u)
+    cov2d = compute_cov_2d(pc, K, cov3d, camera.Rcw, u)
 
     # step4. get color info
     ray_dir = pw[:, :3] - camera.cam_center
@@ -156,12 +143,12 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
-    optimizer = optim.SGD([u, cov2d, alpha, color], lr=0.001)
+    optimizer = optim.SGD([u, cov2d, alpha, color], lr=0.1)
     # image = gs2dnet.apply(u, cov2d, alpha, color)
     # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
     # plt.show()
 
-    for i in range(10):
+    for i in range(13):
         image = gs2dnet.apply(u, cov2d, alpha, color)
         loss = criterion(image, image_gt)
         optimizer.zero_grad()
