@@ -30,21 +30,6 @@ class GS2DNet(torch.autograd.Function):
             sgr.backward(camera.height, camera.width, u, cov2d, alpha,
                          depth, color, contrib, final_tau,
                          patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-        # torch.save([u, cov2d, alpha,
-        #             depth, color, contrib, final_tau,
-        #             patch_offset_per_tile, gs_id_per_patch, dloss_dgammas], "temp.torch")
-
-        # print("dloss_dalphas:\n", torch.max(dloss_dalphas)) # 178080
-        # print("dloss_dus:\n", torch.max(dloss_dus))
-        # print("dloss_dcov2ds:\n", torch.max(dloss_dcov2ds))
-        # print("dloss_dalphas:\n", torch.max(dloss_dalphas))
-        print("dloss_dcolors:\n", torch.max(dloss_dcolors))
-        dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
-            sgr.backward(camera.height, camera.width, u, cov2d, alpha,
-                         depth, color, contrib, final_tau,
-                         patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-        print("dloss_dcolors:\n", torch.max(dloss_dcolors))
-
         return dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors
 
 
@@ -143,20 +128,24 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
-    optimizer = optim.SGD([u, cov2d, alpha, color], lr=0.1)
+    optimizer = optim.Adam([u, cov2d, alpha, color], lr=0.01, eps=1e-15)
     # image = gs2dnet.apply(u, cov2d, alpha, color)
     # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
     # plt.show()
+    fig, ax = plt.subplots()
+    array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
+    im = ax.imshow(array)
 
-    for i in range(13):
+    for i in range(100):
         image = gs2dnet.apply(u, cov2d, alpha, color)
         loss = criterion(image, image_gt)
-        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
         print(loss.item())
-        print("-----------------", i)
-        # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
-        # plt.pause(0.1)
-    plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
-    plt.show()
+        if (i % 1 == 0):
+            # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
+            im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
+            im.set_data(im_cpu)
+            # fig.canvas.flush_events()
+            plt.pause(0.1)

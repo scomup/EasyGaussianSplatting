@@ -264,14 +264,13 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
-    optimizer = optim.SGD([sh], lr=1.)
-
+    optimizer = optim.Adam([sh], lr=0.1, eps=1e-15)
     for i in range(100):
         image = shnet.apply(sh)
         loss = criterion(image, image_gt)
-        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
         print(loss.item())
 
     sh = sh.to('cpu').detach().numpy()
