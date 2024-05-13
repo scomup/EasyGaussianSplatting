@@ -1,6 +1,6 @@
 # The Forward Process of 3D Gaussian Splatting
 
-This document describes the **forward process** of 3D Gaussian Splatting, which is the process of rendering trained 3D Gaussians onto a 2D scene.
+This document describes the **forward process** of 3D Gaussian Splatting, which is the process of rendering trained 3D Gaussians onto a 2D image.
 
 First, the required input data is defined as parameters and settings.
 
@@ -26,13 +26,13 @@ The settings are values related to the configuration of a virtual camera, which 
 
 ## Pipeline
 
-The overall pipeline for rendering a 2D scene from a set of 3D Gaussians is as follows:
+The overall pipeline for rendering a 2D image from a set of 3D Gaussians is as follows:
 
-1. Calculate the 2D coordinates when projecting the mean of the 3D Gaussian onto the 2D scene.
+1. Calculate the 2D coordinates when projecting the mean of the 3D Gaussian onto the 2D image.
 2. Compute the 3D covariance of the 3D Gaussian.
-3. Calculate the 2D covariance when projecting the 3D covariance onto the 2D scene.
+3. Calculate the 2D covariance when projecting the 3D covariance onto the 2D image.
 4. Calculate the color of the 3D Gaussian based on spherical harmonics.
-5. Render the 2D scene using the information calculated in steps 1-4.
+5. Render the 2D image using the information calculated in steps 1-4.
 
 ## 1. Project the Mean of 3D Gaussian
 
@@ -46,7 +46,7 @@ p_c & = \mathrm{T}_{cw}(p_w) \\
 \tag{1.1}
 $$
 
-Then, we calculate the pixel ($u$) coordinates when projecting the point ($p_c$) onto the 2D scene.
+Then, we calculate the pixel ($u$) coordinates when projecting the point ($p_c$) onto the 2D image.
 
 $$
 \begin{aligned}
@@ -99,7 +99,7 @@ $$
 
 ## 3. Project the 3D Covariance to 2D Image as a 2D Covariance
 
-When a 3D Gaussian is projected onto a 2D scene, it can be represented as a 2D Gaussian distribution. Equation (3) shows the formula for calculating the covariance matrix of this 2D Gaussian distribution.
+When a 3D Gaussian is projected onto a 2D image, it can be represented as a 2D Gaussian distribution. Equation (3) shows the formula for calculating the covariance matrix of this 2D Gaussian distribution.
 
 $$
 \begin{aligned}
@@ -188,10 +188,10 @@ Here, $r$ is the unit direction vector between the camera and the 3D Gaussian, a
 
 ## 5. Calculate the Color for Each Pixel
 
-Using the information obtained from steps 1 to 4, calculate the final values (RGB colors) for all pixels in the 2D scene.
+Using the information obtained from steps 1 to 4, calculate the final values (RGB colors) for all pixels in the 2D image.
 
 $$
-\gamma_{j} (\alpha_i, \sigma^{\prime}_i, c_i, x_{j})
+\gamma_{j} 
 = \sum_{i \in N} \alpha_{ij}^{\prime} c_i \tau_{ij}
 \tag{5}
 $$

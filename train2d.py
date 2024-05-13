@@ -8,7 +8,7 @@ import torch.optim as optim
 import matplotlib.pyplot as plt
 import simple_gaussian_reasterization as sgr
 import torchvision
-
+from pytorch_ssim import gau_loss
 
 class GS2DNet(torch.autograd.Function):
     @staticmethod
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
-    optimizer = optim.Adam([u, cov2d, alpha, color], lr=0.01, eps=1e-15)
+    optimizer = optim.Adam([u, cov2d, alpha, color], lr=0.001, eps=1e-15)
     # image = gs2dnet.apply(u, cov2d, alpha, color)
     # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
     # plt.show()
@@ -136,16 +136,18 @@ if __name__ == "__main__":
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    for i in range(100):
+    for i in range(1000):
         image = gs2dnet.apply(u, cov2d, alpha, color)
-        loss = criterion(image, image_gt)
+        loss = gau_loss(image, image_gt)
+        optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
-        print(loss.item())
-        if (i % 1 == 0):
+        if (i % 10 == 0):
+            print("step:%d loss:%f" % (i, loss.item()))
             # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
             im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
             im.set_data(im_cpu)
-            # fig.canvas.flush_events()
+            fig.canvas.flush_events()
             plt.pause(0.1)
+    plt.show()
