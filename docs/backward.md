@@ -19,31 +19,95 @@ $$
 
 The value of $\lambda$ ranges between 0 and 1. When $\lambda$ is close to 0, the loss function $\mathcal{L}$ is more similar to L1 loss, whereas when $\lambda$ is close to 1, $\mathcal{L}$ is more similar to D-SSIM loss.
 
-In order to solve this optimization problem, it is necessary to find the partial derivatives of the loss function with respect to each input parameter. This is because these partial derivatives provide information about how the loss changes as each input parameter is varied.
+In order to solve this optimization problem, it is necessary to find the Jacobians of the loss function with respect to each input parameter. This is because these Jacobians provide information about how the loss changes as each input parameter is varied.
 
 In the following documents, we will describe how to calculate these Jacobians.
 
 
 ## Jacobians
-The computation of the $\gamma$ in (2) has already been dicrbed in [forward.md](forward.md), so the Jacobian for each parameter can be computed using the chain rule.
-
-### The Jacobian of alpha
+The computation of the $\gamma$ in (2) has already been described in forward.md, so the Jacobian for each parameter can be computed using the chain rule.
 
 $$
 \newcommand{\diff}[2]{\frac{\partial #1}{\partial #2}} %diff 
 $$
 
+### The Jacobian of rotation
+
 $$
 \begin{aligned}
-\diff{\mathcal{L}}{\alpha} &= \sum_{j}{
+\diff{\mathcal{L}}{q_i} &= \sum_{j}{
     \diff{\mathcal{L}}{\gamma_j}
-    \diff{\gamma_j}{\alpha_{ij}^{\prime}}
-    \diff{\alpha_{ij}^{\prime}}{\alpha_i}} 
+    \diff{\gamma_j}{\sigma_i^{\prime}}
+    \diff{\sigma_i^{\prime}}{\sigma_i}}
+    \diff{\sigma_i}{q_i}
 \end{aligned}
 \tag{3}
 $$
 
-The computation of $\frac{\partial \mathcal{L}}{\partial \gamma_j}$ can be performed using PyTorch's automatic differentiation, so we will not discuss it here.
+### The Jacobian of scale
+
+$$
+\begin{aligned}
+\diff{\mathcal{L}}{s_i} &= \sum_{j}{
+    \diff{\mathcal{L}}{\gamma_j}
+    \diff{\gamma_j}{\sigma_i^{\prime}}
+    \diff{\sigma_i^{\prime}}{\sigma_i}}
+    \diff{\sigma_i}{s_i}
+\end{aligned}
+\tag{4}
+$$
+
+### The Jacobian of spherical harmonics parameters
+
+$$
+\begin{aligned}
+\diff{\mathcal{L}}{h_i} &= \sum_{j}{
+    \diff{\mathcal{L}}{\gamma_j}
+    \diff{\gamma_j}{c_i}
+    \diff{c_i}{h_i}} 
+\end{aligned}
+\tag{5}
+$$
+
+### The Jacobian of alpha
+
+$$
+\begin{aligned}
+\diff{\mathcal{L}}{\alpha_i} &= \sum_{j}{
+    \diff{\mathcal{L}}{\gamma_j}
+    \diff{\gamma_j}{\alpha_{ij}^{\prime}}
+    \diff{\alpha_{ij}^{\prime}}{\alpha_i}} 
+\end{aligned}
+\tag{6}
+$$
+
+### The Jacobian of location
+
+$$
+\begin{aligned}
+\diff{\mathcal{L}}{p_{w,i}} 
+&= \sum_{j}{
+    \diff{\mathcal{L}}{\gamma_j}
+    \diff{\gamma_j}{\alpha_{ij}^{\prime}}
+    \diff{\alpha_{ij}^{\prime}}{u_{i}}}
+    \diff{u_{i}}{p_{c,i}}
+    \diff{p_{c,i}}{p_{w,i}} \\
+&+  \sum_{j}{
+    \diff{\mathcal{L}}{\gamma_j}
+    \diff{\gamma_j}{c_i}
+    \diff{c_i}{p_{w,i}}} \\
+&+  \sum_{j}{
+    \diff{\mathcal{L}}{\gamma_j}
+    \diff{\gamma_j}{\alpha_{ij}^{\prime}}
+    \diff{\alpha_{ij}^{\prime}}{\sigma_i^{\prime}}
+    \diff{\sigma_i^{\prime}}{p_{c,i}}
+    \diff{p_{c,i}}{p_{w,i}}
+    }
+\end{aligned}
+\tag{7}
+$$
+
+next, let me disccus all the partial derivatives mentioned in above. The computation of $\frac{\partial \mathcal{L}}{\partial \gamma_j}$ can be performed using PyTorch's automatic differentiation, so we will not discuss it here.
 
 __dgamma_dalphaprime__
 
@@ -95,7 +159,7 @@ __dalphaprime_dalpha__
 
 Next, let me discuss the $\diff{\alpha_{ij}^{\prime}}{\alpha_i}$.
 
-The $\alpha_{ij}^{\prime}$ is calculated using the following equation:
+The $\alpha_{ij}^{\prime}$ is calculated using the following equation (see forward.md (5)):
 
 $$
 \alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, x_{j}) = 
