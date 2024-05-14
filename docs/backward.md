@@ -1,16 +1,14 @@
 # The Backward Process of 3D Gaussian Splatting
 
-This document describes the **backward process** of 3D Gaussian Splatting, which is the process of training 3D Gaussians by given 2D image.
-The training process can generally be treated as an optimization problem, aiming to find a set of parameters that minimize an overall loss function $\mathcal{L}$ (or objective function).
-
+This document describes the **backward process** of 3D Gaussian Splatting, which involves training 3D Gaussians using a given 2D image. The training process can generally be treated as an optimization problem, aiming to find a set of parameters that minimize an overall loss function $\mathcal{L}$ (or objective function).
 $$
 \underset{x}{\textrm{argmin}} \quad \mathcal{L} = \mathcal{L}(\gamma, \gamma_{gt}) \\\\
 \tag{1}
 $$
 
-where, $\gamma$ is the output image of forward process, and $\gamma_{gt}$ is the given groud truth image.
+where $\gamma$ is the output image from the forward process, and $\gamma_{gt}$ is the given ground truth image.
 
-The $\mathcal{L}$ for 3D Gaussian Splatting is defined as a combination of L1 loss($\mathcal{L}_1$) and D-SSIM loss($\mathcal{L}_{D-SSIM}$).
+The loss function $\mathcal{L}$ for 3D Gaussian Splatting is defined as a combination of L1 loss ($\mathcal{L}1$) and D-SSIM loss ($\mathcal{L}{D-SSIM}$).
 
 $$
 \mathcal{L} = (1 - \lambda) \mathcal{L}_1 + \lambda \mathcal{L}_{D-SSIM}
@@ -19,19 +17,18 @@ $$
 
 The value of $\lambda$ ranges between 0 and 1. When $\lambda$ is close to 0, the loss function $\mathcal{L}$ is more similar to L1 loss, whereas when $\lambda$ is close to 1, $\mathcal{L}$ is more similar to D-SSIM loss.
 
-In order to solve this optimization problem, it is necessary to find the Jacobians of the loss function with respect to each input parameter. This is because these Jacobians provide information about how the loss changes as each input parameter is varied.
+To solve this optimization problem, it is necessary to find the Jacobians of the loss function with respect to each input parameter. These Jacobians provide information about how the loss changes as each input parameter is varied.
 
-In the following documents, we will describe how to calculate these Jacobians.
-
+In the following sections, we will describe how to calculate these Jacobians.
 
 ## Jacobians
-The computation of the $\gamma$ in (2) has already been described in forward.md, so the Jacobian for each parameter can be computed using the chain rule.
+The computation of $\gamma$ in (2) has already been described in `forward.md`, so the Jacobian for each parameter can be computed using the chain rule.
 
 $$
 \newcommand{\diff}[2]{\frac{\partial #1}{\partial #2}} %diff 
 $$
 
-### The Jacobian of rotation
+### The Jacobian of Rotation
 
 $$
 \begin{aligned}
@@ -44,7 +41,7 @@ $$
 \tag{3}
 $$
 
-### The Jacobian of scale
+### The Jacobian of Scale
 
 $$
 \begin{aligned}
@@ -57,7 +54,7 @@ $$
 \tag{4}
 $$
 
-### The Jacobian of spherical harmonics parameters
+### The Jacobian of Spherical Harmonics Parameters
 
 $$
 \begin{aligned}
@@ -69,7 +66,7 @@ $$
 \tag{5}
 $$
 
-### The Jacobian of alpha
+### The Jacobian of Alpha
 
 $$
 \begin{aligned}
@@ -81,7 +78,7 @@ $$
 \tag{6}
 $$
 
-### The Jacobian of location
+### The Jacobian of Location
 
 $$
 \begin{aligned}
@@ -107,13 +104,41 @@ $$
 \tag{7}
 $$
 
-next, let me disccus all the partial derivatives mentioned in above. The computation of $\frac{\partial \mathcal{L}}{\partial \gamma_j}$ can be performed using PyTorch's automatic differentiation, so we will not discuss it here.
+Next, let's discuss all the partial derivatives mentioned above. The computation of $\frac{\partial \mathcal{L}}{\partial \gamma_j}$ can be performed using PyTorch's automatic differentiation, so we will not discuss it here.
 
-__dgamma_dalphaprime__
 
-first, let me discuss the $\diff{\gamma_j}{\alpha_{ij}^{\prime}}$.
+### The Partial Derivatives of Transform Function (F.1.1)
 
-according to (5) in forward.md, we compute the $\gamma_j$ following equation.
+$$
+\diff{p_{c,i}}{p_{w,i}} =
+R_{cw}
+\tag{B.1.1}
+$$
+
+### The Partial Derivatives of Projection Function (F.1.2)
+
+$$
+\diff{u_i}{p_{c,i}} =
+\begin{bmatrix} 
+f_x/z & 0 & -f_x x/z^2 \\\\ 
+0 & f_y/z & -f_y y/z^2
+\end{bmatrix}  \\\\
+\tag{B.1.2}
+$$
+x, y, z are the elements of $p_c$.
+
+
+### The Partial Derivatives of Computing 3D Covariance (F.2)
+
+
+### The Partial Derivatives of Computing 2D Covariance (F.3)
+
+
+### The Partial Derivatives of Computing Spherical Harmonics (F.4)
+
+### The Partial Derivatives of Computing Color of Pixel (F.5)
+
+according to (F.5) in forward.md, we compute the $\gamma_j$ by following equation.
 
 
 $$
@@ -137,14 +162,13 @@ $$
 &\gamma_{1,j} = \alpha_{1,j}^{\prime} c_1 + (1 - \alpha_{1,j}^{\prime}) \gamma_{2,j}  \\
 &\gamma_{j} = \gamma_{1,j}
 \end{aligned}
-\tag{4}
 $$
 
 Therefore, we can calculate the partial derivatives of $\gamma_j$ with respect to each $\gamma_{i,j}$ iteratively.
 
 $$
 \diff{\gamma_j}{\alpha_{i,j}^{\prime}} = \tau_{i,j}(c_i - \gamma_{i+1,j})
-\tag{4}
+\tag{B.5.a}
 $$
 
 
@@ -152,14 +176,10 @@ Similarly, The partial derivatives of $\gamma_j$ with respect to $c_{i}$ can be 
 
 $$
 \diff{\gamma_j}{c_i} = \tau_{i,j}\alpha_{i,j}^{\prime}
-\tag{5}
+\tag{B.5.b}
 $$
 
-__dalphaprime_dalpha__
-
-Next, let me discuss the $\diff{\alpha_{ij}^{\prime}}{\alpha_i}$.
-
-The $\alpha_{ij}^{\prime}$ is calculated using the following equation (see forward.md (5)):
+The $\alpha_{ij}^{\prime}$ is calculated using the following equation (see forward.md (F.5.1)):
 
 $$
 \alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, x_{j}) = 
