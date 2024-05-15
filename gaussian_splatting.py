@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import time
 import math
+import collections
 
 # https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
 SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
@@ -21,6 +22,29 @@ SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
 SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
 SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
 SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(35/(2*pi))  minus
+
+
+class Camera:
+    def __init__(self, id, width, height, K, Rcw, tcw):
+        self.id = id
+        self.width = width
+        self.height = height
+        self.K = K
+        self.Rcw = Rcw
+        self.tcw = tcw
+        self.cam_center = -np.linalg.inv(Rcw) @ tcw
+        self.focal_x = K[0, 0]
+        self.focal_y = K[1, 1]
+
+
+def projection_matrix(focal_x, focal_y, width, height, z_near=0.1, z_far=100):
+    P = np.zeros([4, 4])
+    P[0, 0] = 2 * focal_x / width
+    P[1, 1] = 2 * focal_x / width
+    P[2, 2] = -(z_near + z_far) / (z_far - z_near)
+    P[2, 3] = -(2 * z_near * z_far) / (z_far - z_near)
+    P[3, 0] = -1
+    return P
 
 
 def upper_triangular(mat):
@@ -132,11 +156,16 @@ def compute_cov_3d(scale, rot):
     return cov3d
 
 
-def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
+def compute_cov_2d(pc, K, cov3d, Rcw, u):
     x = pc[:, 0]
     y = pc[:, 1]
     z = pc[:, 2]
-
+    focal_x = K[0, 0]
+    focal_y = K[1, 1]
+    c_x = K[0, 2]
+    c_y = K[1, 2]
+    u_ndc = (u - np.array([c_x, c_y]))/np.array([2*c_x, 2*c_y])
+    out_idx = np.where(np.max(u_ndc, axis=1) > 1.3)[0]
     J = np.zeros([pc.shape[0], 3, 3])
     z2 = z * z
     J[:, 0, 0] = focal_x / z
@@ -144,8 +173,7 @@ def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
     J[:, 1, 1] = focal_y / z
     J[:, 1, 2] = -(focal_y * y) / z2
 
-    W = Rcw
-    T = J @ W
+    T = J @ Rcw
 
     Sigma = symmetric_matrix(cov3d)
 
@@ -154,6 +182,7 @@ def compute_cov_2d(pc, focal_x, focal_y, cov3d, Rcw):
     Sigma_prime[:, 1, 1] += 0.3
 
     cov2d = upper_triangular(Sigma_prime[:, :2, :2])
+    cov2d[out_idx] = 0
     return cov2d
 
 
@@ -161,11 +190,9 @@ def focal2fov(focal, pixels):
     return 2*math.atan(pixels/(2*focal))
 
 
-def project(pw, Tcw, K):
+def project(pw, Rcw, tcw, K):
     # project the mean of 2d gaussian to image.
     # forward.md (1.1) (1.2)
-    Rcw = Tcw[:3, :3]
-    tcw = Tcw[:3, 3]
     pc = (Rcw @ pw.T).T + tcw
     depth = pc[:, 2]
     pc_proj = (K @ pc.T).T
@@ -174,9 +201,9 @@ def project(pw, Tcw, K):
     return u, pc
 
 
-def splat(us, cov2d, alpha, depth, color, H, W):
-    image = np.zeros([H, W, 3])
-    image_T = np.ones([H, W])
+def splat(height, width, us, cov2d, alpha, depth, color):
+    image = np.zeros([height, width, 3])
+    image_T = np.ones([height, width])
 
     # forward.md 5.3
     # compute inverse of cov2d
@@ -191,8 +218,8 @@ def splat(us, cov2d, alpha, depth, color, H, W):
     # sort by depth
     sort_idx = np.argsort(depth)
 
-    idx_map = np.array((np.meshgrid(np.arange(0, W), np.arange(0, H))))
-    win_size = np.array([W, H])
+    idx_map = np.array((np.meshgrid(np.arange(0, width), np.arange(0, height))))
+    win_size = np.array([width, height])
 
     for j, i in enumerate(sort_idx):
         if (j % 100000 == 0):
@@ -209,10 +236,10 @@ def splat(us, cov2d, alpha, depth, color, H, W):
             continue
 
         r = areas[i]
-        x0 = int(np.maximum(np.minimum(u[0] - r[0], W), 0))
-        x1 = int(np.maximum(np.minimum(u[0] + r[0], W), 0))
-        y0 = int(np.maximum(np.minimum(u[1] - r[1], H), 0))
-        y1 = int(np.maximum(np.minimum(u[1] + r[1], H), 0))
+        x0 = int(np.maximum(np.minimum(u[0] - r[0], width), 0))
+        x1 = int(np.maximum(np.minimum(u[0] + r[0], width), 0))
+        y0 = int(np.maximum(np.minimum(u[1] - r[1], height), 0))
+        y1 = int(np.maximum(np.minimum(u[1] + r[1], height), 0))
 
         if ((x1 - x0) * (y1 - y0) == 0):
             continue
@@ -243,7 +270,7 @@ def splat(us, cov2d, alpha, depth, color, H, W):
     return image
 
 
-def splat_gpu(u, cov2d, alpha, depth, color, H, W):
+def splat_gpu(height, width, u, cov2d, alpha, depth, color):
     import torch
     import simple_gaussian_reasterization as sgr
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
@@ -251,21 +278,23 @@ def splat_gpu(u, cov2d, alpha, depth, color, H, W):
     alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
     depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.rasterize(u, cov2d, alpha, depth, color, H, W)
-    image = res[0].to('cpu').detach().numpy().copy()
-    image = image.transpose(1, 2, 0)
-    # exit()
-    return image
+    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
+    res_cpu = []
+    for r in res:
+        res_cpu.append(r.to('cpu').numpy())
+    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
+    return res_cpu
 
 
-def blend(color, alpha, u, depth, K, cov2d, H, W):
+def blend(height, width, u, cov2d, alpha, depth, color):
     try:
         import torch
         import simple_gaussian_reasterization as sgr
         print("use CUDA")
-        image = splat_gpu(u, cov2d, alpha, depth, color, H, W)
+        res = splat_gpu(height, width, u, cov2d, alpha, depth, color)
+        image = res[0]
     except ImportError:
         print("cannot find simple_gaussian_reasterization, using CPU mode.")
         print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(u, cov2d, alpha, depth, color, H, W)
+        image = splat(height, width, u, cov2d, alpha, depth, color)
     return image

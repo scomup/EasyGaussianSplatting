@@ -1,6 +1,6 @@
 # The Forward Process of 3D Gaussian Splatting
 
-This document describes the **forward process** of 3D Gaussian Splatting, which is the process of rendering trained 3D Gaussians onto a 2D scene.
+This document describes the **forward process** of 3D Gaussian Splatting, which is the process of rendering trained 3D Gaussians onto a 2D image.
 
 First, the required input data is defined as parameters and settings.
 
@@ -26,27 +26,27 @@ The settings are values related to the configuration of a virtual camera, which 
 
 ## Pipeline
 
-The overall pipeline for rendering a 2D scene from a set of 3D Gaussians is as follows:
+The overall pipeline for rendering a 2D image from a set of 3D Gaussians is as follows:
 
-1. Calculate the 2D coordinates when projecting the mean of the 3D Gaussian onto the 2D scene.
+1. Calculate the 2D coordinates when projecting the mean of the 3D Gaussian onto the 2D image.
 2. Compute the 3D covariance of the 3D Gaussian.
-3. Calculate the 2D covariance when projecting the 3D covariance onto the 2D scene.
+3. Calculate the 2D covariance when projecting the 3D covariance onto the 2D image.
 4. Calculate the color of the 3D Gaussian based on spherical harmonics.
-5. Render the 2D scene using the information calculated in steps 1-4.
+5. Render the 2D image using the information calculated in steps 1-4.
 
 ## 1. Project the Mean of 3D Gaussian
 
-We use the camera's rotation ($R_{cw}$) and translation ($t_{cw}$) to transform the mean ($p_w$) of the 3D Gaussian to a point in the camera coordinate system ($p_c$). This process is shown in equation (1.1).
+We use the camera's rotation ($R_{cw}$) and translation ($t_{cw}$) to transform the mean ($p_w$) of the 3D Gaussian to a point in the camera coordinate system ($p_c$). This process is shown in equation (F.1.1).
 
 $$
 \begin{aligned}
 p_c & = \mathrm{T}_{cw}(p_w) \\
 & = R_{cw} p_w + t_{cw}
 \end{aligned}
-\tag{1.1}
+\tag{F.1.1}
 $$
 
-Then, we calculate the pixel ($u$) coordinates when projecting the point ($p_c$) onto the 2D scene.
+Then, we calculate the pixel ($u$) coordinates when projecting the point ($p_c$) onto the 2D image.
 
 $$
 \begin{aligned}
@@ -54,21 +54,21 @@ u(p_c) &=
 \begin{bmatrix} x f_x /z + c_x \\ y f_y /z + c_y 
 \end{bmatrix} 
 \end{aligned}
-\tag{1.2}
+\tag{F.1.2}
 $$
 
 Here, each component of ($p_c$) is represented as $x$, $y$, and $z$, respectively.
 
 ## 2. Calculate the 3D Gaussian from Rotation and Color
 
-The 3D covariance $\Sigma$ of the 3D Gaussian is expressed not directly as a matrix but as a composition of rotation $q$ and scaling $s$. The composition calculation is shown in equation (2).
+The 3D covariance $\Sigma$ of the 3D Gaussian is expressed not directly as a matrix but as a composition of rotation $q$ and scaling $s$. The composition calculation is shown in equation (F.2).
 
 $$
 \begin{aligned}
 \Sigma(q, s) &= RSS^TR^T \\
 \sigma(q, s) & = \mathrm{upper\_triangular}(\Sigma)
 \end{aligned}
-\tag{2}
+\tag{F.2}
 $$
 
 Here, $R$ is the matrix representation of the quaternion $q$. $S$ is a diagonal matrix formed from the vector $s$.
@@ -82,7 +82,7 @@ R &=
 2(q_xq_z - q_yq_w) & 2(q_yq_z + q_xq_w) & 1 - 2(q_x^2 + q_y^2)
 \end{bmatrix}
 \end{aligned}
-\tag{2.1}
+\tag{F.2.1}
 $$
 
 $$
@@ -94,19 +94,19 @@ s_0 & 0 & 0  \\
 0 & 0 & s_2 
 \end{bmatrix}
 \end{aligned}
-\tag{2.2}
+\tag{F.2.2}
 $$
 
 ## 3. Project the 3D Covariance to 2D Image as a 2D Covariance
 
-When a 3D Gaussian is projected onto a 2D scene, it can be represented as a 2D Gaussian distribution. Equation (3) shows the formula for calculating the covariance matrix of this 2D Gaussian distribution.
+When a 3D Gaussian is projected onto a 2D image, it can be represented as a 2D Gaussian distribution. Equation (F.3) shows the formula for calculating the covariance matrix of this 2D Gaussian distribution.
 
 $$
 \begin{aligned}
 \Sigma^{\prime}(\sigma, p_c) &= J R_{cw}\Sigma R_{cw}^T J^T \\
 \sigma^{\prime}(\sigma, p_c) &= \mathrm{upper\_triangular}(\Sigma^{\prime})
 \end{aligned}
-\tag{3}
+\tag{F.3}
 $$
 
 **Proof of Equation (3)**
@@ -115,10 +115,10 @@ Let $\mathbb{p}_w$ be a set of 3D points in world coordinates, and let $m_w$ be 
 
 $$
 \Sigma = \mathrm{E}[(\mathbb{p}_w-m_w)(\mathbb{p}_w-m_w)^T]
-\tag{3.1}
+\tag{F.3.1}
 $$
 
-The covariance matrix of points in camera coordinates can be calculated using equation (3.2):
+The covariance matrix of points in camera coordinates can be calculated using equation (F.3.2):
 
 $$
 \begin{aligned}
@@ -128,30 +128,30 @@ $$
 &= R_{cw} \mathrm{E}[(\mathbb{p}_w - m_w)(\mathbb{p}_w-m_w)^T] R_{cw}^T \\
 &= R_{cw} \Sigma R_{cw}^T \\
 \end{aligned}
-\tag{3.2}
+\tag{F.3.2}
 $$
 
-The covariance matrix of points in image coordinates can be calculated using equation (3.3):
+The covariance matrix of points in image coordinates can be calculated using equation (F.3.3):
 
 $$
 \begin{aligned}
 \Sigma^{\prime} 
 &= \mathrm{E}[(\mathrm{u}(\mathbb{p}_c)-\mathrm{u}(m_c))(\mathrm{u}(\mathbb{p}_c)-\mathrm{u}(m_c))^T] 
 \end{aligned}
-\tag{3.3}
+\tag{F.3.3}
 $$
 
-Here, $m_c$ is the mean of $\mathbb{p}_c$, and $\mathbb{p}_c - m_c$ is a small value, which is defined as $\delta$. Although $\mathrm{u}$ (Equation 1.2) is a nonlinear function, there exists an approximate calculation using the Jacobian matrix $J$ of $\mathrm{u}$ as follows:
+Here, $m_c$ is the mean of $\mathbb{p}_c$, and $\mathbb{p}_c - m_c$ is a small value, which is defined as $\delta$. Although $\mathrm{u}$ (Equation F.1.2) is a nonlinear function, there exists an approximate calculation using the Jacobian matrix $J$ of $\mathrm{u}$ as follows:
 
 $$
 \begin{aligned}
 &\mathrm{u}(m_c + \delta) = \mathrm{u}(m_c) +  J \delta　\\
 &\mathrm{u}(\mathbb{p}_c) - \mathrm{u}(m_c) = J(\mathbb{p}_c - m_c)
 \end{aligned}
-\tag{3.4}
+\tag{F.3.4}
 $$
 
-Substituting equations (3.4) and (3.2) into equation (3.3), the 2D covariance can be calculated as follows:
+Substituting equations (F.3.4) and (F.3.2) into equation (F.3.3), the 2D covariance can be calculated as follows:
 
 $$
 \begin{aligned}
@@ -160,7 +160,7 @@ $$
 &= J\Sigma_c J^T \\
 &= J R_{cw} \Sigma R_{cw}^T J^T \\
 \end{aligned}
-\tag{3.5}
+\tag{F.3.5}
 $$
 
 The Jacobian of $\mathrm{u}$ is given by:
@@ -170,7 +170,7 @@ J = \begin{bmatrix}
 \frac{f_x}{x} & 0 & -\frac{f_x  x}{z^2} \\
 0 & \frac{f_y}{z} & -\frac{f_y  y}{z^2}
 \end{bmatrix}
-\tag{3.6}
+\tag{F.3.6}
 $$
 
 ## 4. Calculate the Color from Spherical Harmonics
@@ -181,28 +181,33 @@ The color calculation using spherical harmonics is given by the following equati
 
 $$
 \mathrm{c}(r, h) = \sum_{l=0}^{l_{\text{max}}}{\sum_{m=-l}^{l}{h_{lm}\mathrm{Y}_{l}^{m}(r)}}
-\tag{4}
+\tag{F.4}
 $$
 
 Here, $r$ is the unit direction vector between the camera and the 3D Gaussian, and $Y_l^m$ represents the $l$-th dimension $m$-th base function.
 
 ## 5. Calculate the Color for Each Pixel
 
-Using the information obtained from steps 1 to 4, calculate the final values (RGB colors) for all pixels in the 2D scene.
+Using the information obtained from steps 1 to 4, calculate the final values (RGB colors) for all pixels in the 2D image.
 
 $$
 \gamma_{j} 
-= \sum_{i \in N} \alpha_{ij}^{\prime}(x_{j}, \alpha_i, \Sigma^{\prime}) c_i \tau_{ij}
-\tag{5}
+= \sum_{i \in N} \alpha_{ij}^{\prime} c_i \tau_{ij}
+\tag{F.5}
 $$
 
 Where $\alpha_{ij}^{\prime}$ represents the opacity of the $i$-th 3D Gaussian at pixel $j$, and is calculated using the following equation:
 
 $$
-\alpha_{ij}^{\prime} = \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1} (u_{i}-x_{j})^T\right) \alpha_i
-\tag{5.1}
+\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, u_{i}) = 
+\exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \alpha_i
+\tag{F.5.1}
 $$
 
+where:
+$$
+\Sigma^{\prime}_i = \mathrm{symmetric\_matrix}(\sigma^{\prime})
+ $$
 The opacity increases as the Mahalanobis distance between the mean of the 2D Gaussian ($u_{i}$) and the current pixel ($x_{j}$) gets closer.
 
 As light from objects farther away from the camera travels through multiple objects and ends up in the camera, the light becomes weaker. As a result, the contribution to the final color decreases as the distance from the camera increases.
@@ -214,7 +219,7 @@ $$
  &\tau_{ij} = \prod_{k=1}^{i-1} (1 - \alpha_{kj}^{\prime}) \\
  &\tau_{1j}= 1
  \end{aligned}
-\tag{5.2}
+\tag{F.5.2}
 $$
 
 
@@ -227,7 +232,7 @@ $$
     c & -b \\
     -b & a
 \end{bmatrix}
-\tag{5.3}
+\tag{F.5.3}
 $$
 
 where a, b, and c are the upper triangular elements of the 2D covariance.

@@ -2,30 +2,31 @@
 #include <iostream>
 #include <vector>
 
-std::vector<torch::Tensor> rasterizGuassian2DCUDA(
-    torch::Tensor u,
-    torch::Tensor cov2d,
-    torch::Tensor alpha,
-    torch::Tensor depth,
-    torch::Tensor color,
-    int H,
-    int W);
+std::vector<torch::Tensor> forward(
+    const int H,
+    const int W,
+    const torch::Tensor u,
+    const torch::Tensor cov2d,
+    const torch::Tensor alpha,
+    const torch::Tensor depth,
+    const torch::Tensor color);
 
-// forward.md 5.
-// Use CUDA rasterization for acceleration
-std::vector<at::Tensor> rasterizGuassian2D(
-    torch::Tensor u,
-    torch::Tensor cov2d,
-    torch::Tensor alpha,
-    torch::Tensor depth,
-    torch::Tensor color,
-    int H,
-    int W)
-{
-  return rasterizGuassian2DCUDA(u, cov2d, alpha, depth, color, H, W);
-}
+std::vector<torch::Tensor> backward(
+    const int H,
+    const int W,
+    const torch::Tensor us,
+    const torch::Tensor cov2d,
+    const torch::Tensor alphas,
+    const torch::Tensor depths,
+    const torch::Tensor colors,
+    const torch::Tensor contrib,
+    const torch::Tensor final_tau,
+    const torch::Tensor patch_range_per_tile,
+    const torch::Tensor gs_id_per_patch,
+    const torch::Tensor dloss_dgammas);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-  m.def("rasterize", &rasterizGuassian2D, "rasterize 2d guassian (CUDA)");
+  m.def("forward", &forward, "rasterize 2d guassian (CUDA)");
+  m.def("backward", &backward, "rasterize 2d guassian (CUDA)");
 }

@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.optim as optim
 
-
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), 'viewer'))
@@ -231,12 +230,11 @@ def sh2color(sh, ray_dir, dim=36):
 
 # spherical harmonics
 class SHNet(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, sh):
         color, dCdSH = sh2color(sh, xyz)
         ctx.save_for_backward(dCdSH)
-        return color.reshape(3, H, W)
+        return color.reshape(3, height, width)
 
     @staticmethod
     def backward(ctx, dL_dC):
@@ -249,11 +247,11 @@ if __name__ == "__main__":
     sh = np.zeros([36, 3], dtype=np.float32)  # 1. 4, 9, 16, 25, 36
     sh = torch.from_numpy(sh).to(device).requires_grad_()
 
-    W = int(979)  # 1957  # 979
-    H = int(546)  # 1091  # 546
+    width = int(979)  # 1957  # 979
+    height = int(546)  # 1091  # 546
 
-    theta = torch.linspace(0, torch.pi, H, dtype=torch.float32, device=device)
-    phi = torch.linspace(0, 2 * torch.pi, W, dtype=torch.float32, device=device)
+    theta = torch.linspace(0, torch.pi, height, dtype=torch.float32, device=device)
+    phi = torch.linspace(0, 2 * torch.pi, width, dtype=torch.float32, device=device)
     angle = torch.stack((torch.meshgrid(theta, phi)), axis=2)
     x = torch.sin(angle[:, :, 0]) * torch.cos(angle[:, :, 1])
     y = torch.sin(angle[:, :, 0]) * torch.sin(angle[:, :, 1])
@@ -263,17 +261,16 @@ if __name__ == "__main__":
     shnet = SHNet
 
     image_gt = torchvision.io.read_image("imgs/Solarsystemscope_texture_8k_earth_daymap.jpg").to(device)
-    image_gt = torchvision.transforms.functional.resize(image_gt, [H, W]) / 255.
+    image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
-    optimizer = optim.SGD([sh], lr=1.)
-
+    optimizer = optim.Adam([sh], lr=0.1, eps=1e-15)
     for i in range(100):
         image = shnet.apply(sh)
         loss = criterion(image, image_gt)
-        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        optimizer.zero_grad()
         print(loss.item())
 
     sh = sh.to('cpu').detach().numpy()
@@ -330,23 +327,23 @@ if __name__ == "__main__":
     xyz = xyz.to('cpu').detach().numpy()
 
     image, _ = sh2color(sh, xyz, 1)
-    image = image.reshape(3, H, W)
+    image = image.reshape(3, height, width)
     ax[0, 1].imshow(image.transpose(1, 2, 0))
 
     image, _ = sh2color(sh, xyz, 4)
-    image = image.reshape(3, H, W)
+    image = image.reshape(3, height, width)
     ax[0, 2].imshow(image.transpose(1, 2, 0))
 
     image, _ = sh2color(sh, xyz, 8)
-    image = image.reshape(3, H, W)
+    image = image.reshape(3, height, width)
     ax[1, 0].imshow(image.transpose(1, 2, 0))
 
     image, _ = sh2color(sh, xyz, 16)
-    image = image.reshape(3, H, W)
+    image = image.reshape(3, height, width)
     ax[1, 1].imshow(image.transpose(1, 2, 0))
 
     image, _ = sh2color(sh, xyz)
-    image = image.reshape(3, H, W)
+    image = image.reshape(3, height, width)
     ax[1, 2].imshow(image.transpose(1, 2, 0))
 
     plt.show()

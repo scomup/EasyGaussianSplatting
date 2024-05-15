@@ -136,20 +136,20 @@ class GaussianItem(gl.GLGraphicsItem.GLGraphicsItem):
         self.ssbo_dp = glGenBuffers(1)
         self.ssbo_pp = glGenBuffers(1)
 
-        W = self._GLGraphicsItem__view.deviceWidth()
-        H = self._GLGraphicsItem__view.deviceHeight()
+        width = self._GLGraphicsItem__view.deviceWidth()
+        height = self._GLGraphicsItem__view.deviceHeight()
 
         # set constant parameter for gaussian shader
         project_matrix = np.array(self._GLGraphicsItem__view.projectionMatrix().data(), np.float32).reshape([4, 4]).T
-        focal_x = project_matrix[0, 0] * W / 2
-        focal_y = project_matrix[1, 1] * H / 2
+        focal_x = project_matrix[0, 0] * width / 2
+        focal_y = project_matrix[1, 1] * height / 2
         glUseProgram(self.prep_program)
         set_uniform_mat4(self.prep_program, project_matrix, 'projection_matrix')
         set_uniform_v2(self.prep_program, [focal_x, focal_y], 'focal')
         glUseProgram(0)
 
         glUseProgram(self.program)
-        set_uniform_v2(self.program, [W, H], 'win_size')
+        set_uniform_v2(self.program, [width, height], 'win_size')
         set_uniform_1int(self.program, 0, "render_mod")
         glUseProgram(0)
 
