@@ -142,8 +142,7 @@ x, y, z are the elements of $p_c$.
 ### 5. Derivatives of Final Colors
 
 
- we compute the $\gamma_j$ by following equation (Refer to F.5).
-
+We compute $\gamma_j$ using the following equation (Refer to F.5):
 
 $$
 \gamma_j = \sum_{i \in N} \alpha_{ij}^{\prime} c_i \tau_{ij}
@@ -153,7 +152,7 @@ $$
  \tau_{ij} = \prod^{i-1}_{k=1} (1 - \alpha_{kj}^{\prime})
 $$
 
-The above equation can be re-written in the following iterative way.
+The above equation can be rewritten in the following iterative way.
 
 Where N represents the number of 3D Gaussians and $\gamma_{i,j}$ represents the current color by considering 3D Gaussians from i to N (the farthest one).
 
@@ -175,8 +174,7 @@ $$
 \tag{B.5a}
 $$
 
-
-Similarly, The partial derivatives of $\gamma_j$ with respect to $c_{i}$ can be calculated as follows.
+Similarly, the partial derivatives of $\gamma_j$ with respect to $c_{i}$ can be calculated as follows.
 
 $$
 \diff{\gamma_j}{c_i} = \tau_{i,j}\alpha_{i,j}^{\prime}
@@ -200,12 +198,12 @@ $$
 where: 
 $$
 \begin{aligned}
-g = g(u_i, \sigma_i) &\equiv \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \\\\
-&= \exp(- 0.5 \omega_0 d_0^2 - 0.5 \omega_2 d_1^2 - \omega_1 d_0d_1)
+g = g(u_i, \sigma_i^{\prime}) &\equiv \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \\\\
+&= \exp(- 0.5 \omega_0^{\prime} d_0^2 - 0.5 \omega_2^{\prime} d_1^2 - \omega_1^{\prime} d_0d_1)
 \end{aligned}
 $$
 
-$\omega_0$, $\omega_1$, $\omega_2$ are the upper triangular elements of the inverse of 2d covariance, and $d_0$, $d_1$ are the 2 element of $u_{i}-x_{j}$.
+$\omega_0^{\prime}$, $\omega_1^{\prime}$, $\omega_2^{\prime}$ are the upper triangular elements of the inverse of 2D covariance, and $d_0$, $d_1$ are the 2 elements of $u_{i}-x_{j}$.
 
 Therefore, the partial derivatives of $\alpha^\prime_{ij}$ with respect to $\alpha$ can be easily computed as follows.
 
@@ -216,32 +214,47 @@ $$
 
 Since $g$ is a function with respect to $u_i$ and $\sigma_i$, the partial derivatives of $\alpha^{\prime}_{ij}$ with respect to $u_i$ and $\sigma_i$ can be written in the following form.
 
-
 $$
 \diff{\alpha^{\prime}_{ij}}{u_i} = a \diff{g}{u_i}
 \tag{B.5.2b}
 $$
 
 $$
-\diff{\alpha^{\prime}_{ij}}{\sigma_i} = a \diff{g}{\sigma_i^{-1}}\diff{\sigma_i^{-1}}{\sigma_i}
+\diff{\alpha^{\prime}_{ij}}{\sigma_i^{\prime}} = a \diff{g}{\omega_i^{\prime}}\diff{\omega_i^{\prime}}{\sigma_i^{\prime}}
 \tag{B.5.2c}
 $$
 
+where:
+
 $$
-G = \exp(- 0.5 \omega_0 d_0^2 - 0.5 \omega_2 d_1^2 - \omega_1 d_0d_1) \\
-\diff{G}{\omega} =
+\diff{g}{\omega_i^{\prime}} =
 \begin{bmatrix}
 -0.5d_0^2\\
 -d_0d_1\\
 -0.5d_1^2\\
-\end{bmatrix}G
+\end{bmatrix}g
 $$
 
 
 $$
-\diff{G}{u} =
+\diff{g}{u_i} =
 \begin{bmatrix}
--\omega_0 d_0 -\omega_1 d_1 \\
- -\omega_2 d_1 -\omega_1 d_0\\
-\end{bmatrix}G
+-\omega_0^{\prime} d_0 -\omega_1^{\prime} d_1 \\
+ -\omega_2^{\prime} d_1 -\omega_1^{\prime} d_0\\
+\end{bmatrix}g
 $$
+
+The partial derivatives of $\omega_i$ with respect to $\sigma_i$.
+
+$$
+\diff{\omega_i^{\prime}}{\sigma_i^{\prime}} = 
+\det(\sigma_i^{\prime}) =
+\begin{bmatrix}
+-c^2\det^{-2} & 2bc\det^{-2} & -ac\det^{-2} + \det^{-1} \\
+ bc\det^{-2} & -2b^2 \det^{-2} - \det^{-1} & ab \det^{-2} \\
+-ac\det^{-2} + \det^{-1} & 2ab \det^{-2}  & -a^2 \det^{-2} \\
+\end{bmatrix}
+\tag{B.5.3}
+$$
+
+where a, b, and c are the upper triangular elements of the 2D covariance, and $\det$ is the determinant of the 2D covariance.
