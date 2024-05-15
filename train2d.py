@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
     gs2dnet = GS2DNet
 
-    image_gt = torchvision.io.read_image("test.png").to(device)
+    image_gt = torchvision.io.read_image("imgs/test.png").to(device)
     image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()

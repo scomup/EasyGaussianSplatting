@@ -81,7 +81,9 @@ if __name__ == "__main__":
     color = sh2color(gs['sh'], ray_dir)
 
     # step5. Blend the 2d Gaussian to image
-    image = splat(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
+    res = splat_gpu(height, width, u, cov2d, gs['alpha'], depth, color)
+    image = res[0]
+
     plt.imshow(image)
     # from PIL import Image
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
