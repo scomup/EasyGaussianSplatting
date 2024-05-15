@@ -8,7 +8,7 @@ $$
 
 where $\gamma$ is the output image from the forward process, and $\gamma_{gt}$ is the given ground truth image.
 
-The loss function $\mathcal{L}$ for 3D Gaussian Splatting is defined as a combination of L1 loss ($\mathcal{L}1$) and D-SSIM loss ($\mathcal{L}{D-SSIM}$).
+The loss function $\mathcal{L}$ for 3D Gaussian Splatting is defined as a combination of L1 loss ($\mathcal{L}1$) and D-SSIM loss ($\mathcal{L}_{D-SSIM}$).
 
 $$
 \mathcal{L} = (1 - \lambda) \mathcal{L}_1 + \lambda \mathcal{L}_{D-SSIM}
@@ -107,7 +107,9 @@ $$
 Next, let's discuss all the partial derivatives mentioned above. The computation of $\frac{\partial \mathcal{L}}{\partial \gamma_j}$ can be performed using PyTorch's automatic differentiation, so we will not discuss it here.
 
 
-### The Partial Derivatives of Transform Function (F.1.1)
+### 1. Derivatives of Transform and Projection Function
+
+The partial derivatives of transform function.
 
 $$
 \diff{p_{c,i}}{p_{w,i}} =
@@ -115,7 +117,7 @@ R_{cw}
 \tag{B.1.1}
 $$
 
-### The Partial Derivatives of Projection Function (F.1.2)
+The partial derivatives of projection function.
 
 $$
 \diff{u_i}{p_{c,i}} =
@@ -128,17 +130,19 @@ $$
 x, y, z are the elements of $p_c$.
 
 
-### The Partial Derivatives of Computing 3D Covariance (F.2)
+### 2. Derivatives of 3D Covariances
 
 
-### The Partial Derivatives of Computing 2D Covariance (F.3)
+### 3. Derivatives of 2D Covariances
 
 
-### The Partial Derivatives of Computing Spherical Harmonics (F.4)
+### 4. Derivatives of Spherical Harmonics
 
-### The Partial Derivatives of Computing Color of Pixel (F.5)
 
-according to (F.5) in forward.md, we compute the $\gamma_j$ by following equation.
+### 5. Derivatives of Final Colors
+
+
+ we compute the $\gamma_j$ by following equation (Refer to F.5).
 
 
 $$
@@ -149,9 +153,9 @@ $$
  \tau_{ij} = \prod^{i-1}_{k=1} (1 - \alpha_{kj}^{\prime})
 $$
 
-The above equation can be written in the following iterative way.
+The above equation can be re-written in the following iterative way.
 
-Where N represents the number of 3D Gaussians and $\gamma_{i,j}$ represents the current color by considering 3D Gaussians from i to N.
+Where N represents the number of 3D Gaussians and $\gamma_{i,j}$ represents the current color by considering 3D Gaussians from i to N (the farthest one).
 
 $$
 \begin{aligned}
@@ -168,7 +172,7 @@ Therefore, we can calculate the partial derivatives of $\gamma_j$ with respect t
 
 $$
 \diff{\gamma_j}{\alpha_{i,j}^{\prime}} = \tau_{i,j}(c_i - \gamma_{i+1,j})
-\tag{B.5.a}
+\tag{B.5a}
 $$
 
 
@@ -176,26 +180,52 @@ Similarly, The partial derivatives of $\gamma_j$ with respect to $c_{i}$ can be 
 
 $$
 \diff{\gamma_j}{c_i} = \tau_{i,j}\alpha_{i,j}^{\prime}
-\tag{B.5.b}
+\tag{B.5b}
 $$
 
-The $\alpha_{ij}^{\prime}$ is calculated using the following equation (see forward.md (F.5.1)):
+The $\alpha_{ij}^{\prime}$ is calculated using the following equation (Refer to F.5.1):
 
 $$
-\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, x_{j}) = 
+\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, u_{i}) = 
 \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \alpha_i
 $$
 
+We define $\exp(...)$ as $g$, and rewrite F.5.1 as follows.
 
+$$
+\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, u_{i}) = 
+g \alpha_i
+$$
 
-opacity of the Gaussian
+where: 
+$$
+\begin{aligned}
+g = g(u_i, \sigma_i) &\equiv \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \\\\
+&= \exp(- 0.5 \omega_0 d_0^2 - 0.5 \omega_2 d_1^2 - \omega_1 d_0d_1)
+\end{aligned}
+$$
+
+$\omega_0$, $\omega_1$, $\omega_2$ are the upper triangular elements of the inverse of 2d covariance, and $d_0$, $d_1$ are the 2 element of $u_{i}-x_{j}$.
+
+Therefore, the partial derivatives of $\alpha^\prime_{ij}$ with respect to $\alpha$ can be easily computed as follows.
+
+$$
+\diff{\alpha^{\prime}_{ij}}{\alpha_i} = g
+\tag{B.5.1a}
+$$
+
+Since $g$ is a function with respect to $u_i$ and $\sigma_i$, the partial derivatives of $\alpha^{\prime}_{ij}$ with respect to $u_i$ and $\sigma_i$ can be written in the following form.
 
 
 $$
-\alpha^{\prime} = G \alpha \\
-\diff{\alpha^{\prime}}{\alpha} = G
+\diff{\alpha^{\prime}_{ij}}{u_i} = a \diff{g}{u_i}
+\tag{B.5.2b}
 $$
 
+$$
+\diff{\alpha^{\prime}_{ij}}{\sigma_i} = a \diff{g}{\sigma_i^{-1}}\diff{\sigma_i^{-1}}{\sigma_i}
+\tag{B.5.2c}
+$$
 
 $$
 G = \exp(- 0.5 \omega_0 d_0^2 - 0.5 \omega_2 d_1^2 - \omega_1 d_0d_1) \\

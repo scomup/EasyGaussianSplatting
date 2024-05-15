@@ -128,7 +128,7 @@ $$
 &= R_{cw} \mathrm{E}[(\mathbb{p}_w - m_w)(\mathbb{p}_w-m_w)^T] R_{cw}^T \\
 &= R_{cw} \Sigma R_{cw}^T \\
 \end{aligned}
-\tag{3.2}
+\tag{F.3.2}
 $$
 
 The covariance matrix of points in image coordinates can be calculated using equation (F.3.3):
@@ -138,7 +138,7 @@ $$
 \Sigma^{\prime} 
 &= \mathrm{E}[(\mathrm{u}(\mathbb{p}_c)-\mathrm{u}(m_c))(\mathrm{u}(\mathbb{p}_c)-\mathrm{u}(m_c))^T] 
 \end{aligned}
-\tag{3.3}
+\tag{F.3.3}
 $$
 
 Here, $m_c$ is the mean of $\mathbb{p}_c$, and $\mathbb{p}_c - m_c$ is a small value, which is defined as $\delta$. Although $\mathrm{u}$ (Equation F.1.2) is a nonlinear function, there exists an approximate calculation using the Jacobian matrix $J$ of $\mathrm{u}$ as follows:
@@ -199,7 +199,7 @@ $$
 Where $\alpha_{ij}^{\prime}$ represents the opacity of the $i$-th 3D Gaussian at pixel $j$, and is calculated using the following equation:
 
 $$
-\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, x_{j}) = 
+\alpha_{ij}^{\prime}(\alpha_i, \sigma^{\prime}_i, u_{i}) = 
 \exp\left(-0.5 (u_{i}-x_{j}) \Sigma^{\prime-1}_i (u_{i}-x_{j})^T\right) \alpha_i
 \tag{F.5.1}
 $$
