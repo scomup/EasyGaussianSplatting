@@ -131,8 +131,7 @@ x, y, z are the elements of $p_c$.
 
 
 ### 2. Derivatives of 3D Covariances
-
-we rewrite (F.2) as follows:
+We can rewrite equation (F.2) as follows:
 
 $$
 \sigma = \mathrm{upper\_triangular}(MM^T)
@@ -144,21 +143,22 @@ $$
 M = M(q, s) = R(q)S(s)
 $$
 
-The partial derivatives of 3D Covariances with respect to q.
+The partial derivatives of 3D Covariances with respect to $q$ are given by:
 
 $$
 \diff{\sigma}{q} = \diff{\sigma}{M} \diff{M}{q}
 \tag{B.2a}
 $$
 
-The partial derivatives of 3D Covariances with respect to s.
+The partial derivatives of 3D Covariances with respect to $s$ are given by:
 
 $$
 \diff{\sigma}{s} = \diff{\sigma}{M} \diff{M}{s}
 \tag{B.2b}
 $$
 
-$\diff{\sigma}{M}$, $\diff{M}{q}$ and $\diff{M}{s}$ are shown following.
+The matrices $\frac{\partial \sigma}{\partial M}$, $\frac{\partial M}{\partial q}$, and $\frac{\partial M}{\partial s}$ are as follows:
+
 $$
 \diff{\sigma}{M} = 
 \begin{bmatrix} 
@@ -171,8 +171,7 @@ m_2 &  & m_0 \\
 \end{bmatrix} 
 $$
 
-$m_0$, $m_1$, $m_2$ represent the first, second, and third rows of $M$.
-
+Here, $m_0$, $m_1$, and $m_2$ represent the first, second, and third rows of $M$.
 
 $$
 \diff{M}{q} = 
@@ -198,11 +197,12 @@ $$
 \end{bmatrix} 
 $$
 
-$r_0$, $r_1$, $r_2$ represent the first, second, and third rows of $R$, and $\mathrm{diag}(a)$ creates a diagonal matrix from vector $a$.
+Here, $r_0$, $r_1$, and $r_2$ represent the first, second, and third rows of $R$, and $\mathrm{diag}(a)$ creates a diagonal matrix from vector $a$.
+
 
 ### 3. Derivatives of 2D Covariances
 
-We rewrite (F.3) as follows:
+The equation (F.3) can be expressed as:
 
 $$
 \sigma^{\prime}(\sigma, p_c) = \mathrm{upper\_triangular}( M \Sigma(\sigma) M^T )
@@ -214,7 +214,7 @@ $$
 M = M(p_c) =  J(p_c) R_{cw}
 $$
 
-The partial derivatives of 2D covariances with respect to 3D covariances:
+The partial derivatives of 2D covariances with respect to 3D covariances are given by:
 
 $$
 \diff{\sigma^{\prime}}{\sigma} =
@@ -227,7 +227,7 @@ m_{10}^2 & 2m_{10}m_{11} & 2m_{10}m_{12} & m_{11}^2 & 2m_{11}m_{12} & m_{12}^2
 $$
 
 
-The partial derivatives of 2D covariances with respect to $p_c$:
+The partial derivatives of 2D covariances with respect to $p_c$ are given by:
 
 $$
 \diff{\sigma^{\prime}}{p_c} = \diff{\sigma^{\prime}}{M} \diff{M}{p_c}
@@ -253,9 +253,9 @@ $$
 \end{bmatrix} 
 $$
 
-$r_{c0}$, $r_{c1}$, $r_{c2}$ represent the first, second, and third columns of $R_{cw}$.
+Here, $r_{c0}$, $r_{c1}$, $r_{c2}$ represent the first, second, and third columns of $R_{cw}$.
 
-$a$, $b$, $c$, $d$, $e$, $f$ represent the elements of  of $\sigma$.
+The elements $a$, $b$, $c$, $d$, $e$, $f$ represent the elements of $\sigma$.
 
 
 
