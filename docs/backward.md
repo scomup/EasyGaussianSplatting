@@ -132,8 +132,131 @@ x, y, z are the elements of $p_c$.
 
 ### 2. Derivatives of 3D Covariances
 
+we rewrite (F.2) as follows:
+
+$$
+\sigma = \mathrm{upper\_triangular}(MM^T)
+$$
+
+where:
+
+$$
+M = M(q, s) = R(q)S(s)
+$$
+
+The partial derivatives of 3D Covariances with respect to q.
+
+$$
+\diff{\sigma}{q} = \diff{\sigma}{M} \diff{M}{q}
+\tag{B.2a}
+$$
+
+The partial derivatives of 3D Covariances with respect to s.
+
+$$
+\diff{\sigma}{s} = \diff{\sigma}{M} \diff{M}{s}
+\tag{B.2b}
+$$
+
+$\diff{\sigma}{M}$, $\diff{M}{q}$ and $\diff{M}{s}$ are shown following.
+$$
+\diff{\sigma}{M} = 
+\begin{bmatrix} 
+2m_0 &  &   \\
+m_1 & m_0    \\
+m_2 &  & m_0 \\
+ & 2m_1 &  \\
+  & m_2 & m_1 \\
+ & & 2m_2
+\end{bmatrix} 
+$$
+
+$m_0$, $m_1$, $m_2$ represent the first, second, and third rows of $M$.
+
+
+$$
+\diff{M}{q} = 
+\begin{bmatrix} 
+0&        0&      -4s_0q_y&  -4s_0 q_z \\
+-2s_1 q_z&  2s_1 q_y&  2s_1 q_x&  -2s_1 q_w \\
+2s_2  q_y&   2s_2 q_z&  2s_2 q_w&  2s_2 q_x \\
+2s_0  q_z&   2s_0 q_y&  2s_0 q_x&  2s_0 q_w \\
+0&       -4s_1 q_x&  0     & -4s_1 q_z \\
+-2s_2 q_x& -2s_2w&  2s_2 q_z&  2s_2 q_y \\
+-2s_0 q_y&  2s_0z& -2s_0 q_w&  2s_0 q_x \\
+2s_1  q_x&   2s_1w&  2s_1 q_z&  2s_1 q_y \\
+0&       -4s_2 q_x& -4s_2 q_y&  0
+\end{bmatrix} 
+$$
+
+$$
+\diff{M}{s} = 
+\begin{bmatrix} 
+\mathrm{diag}(r_0)  \\
+\mathrm{diag}(r_1)  \\
+\mathrm{diag}(r_2) 
+\end{bmatrix} 
+$$
+
+$r_0$, $r_1$, $r_2$ represent the first, second, and third rows of $R$, and $\mathrm{diag}(a)$ creates a diagonal matrix from vector $a$.
 
 ### 3. Derivatives of 2D Covariances
+
+We rewrite (F.3) as follows:
+
+$$
+\sigma^{\prime}(\sigma, p_c) = \mathrm{upper\_triangular}( M \Sigma(\sigma) M^T )
+$$
+
+where:
+
+$$
+M = M(p_c) =  J(p_c) R_{cw}
+$$
+
+The partial derivatives of 2D covariances with respect to 3D covariances:
+
+$$
+\diff{\sigma^{\prime}}{\sigma} =
+\begin{bmatrix}
+m_{00}^2 & 2m_{00}m_{01} & 2m_{00}m_{02} & m_{01}^2 & 2m_{01}m_{02} & m_{02}^2 \\
+m_{00}m_{10} & m_{00}m_{11} + m_{01}m_{10} & m_{00}m_{12} + m_{02}m_{10} & m_{01}m_{11} & m_{01}m_{12} + m_{02}m_{11} & m_{02}m_{12} \\
+m_{10}^2 & 2m_{10}m_{11} & 2m_{10}m_{12} & m_{11}^2 & 2m_{11}m_{12} & m_{12}^2
+\end{bmatrix}
+ \tag{B.3a}
+$$
+
+
+The partial derivatives of 2D covariances with respect to $p_c$:
+
+$$
+\diff{\sigma^{\prime}}{p_c} = \diff{\sigma^{\prime}}{M} \diff{M}{p_c}
+ \tag{B.3b}
+$$
+
+where:
+
+$$
+\diff{\sigma^{\prime}}{M} =
+\begin{bmatrix}
+2am_{00} + 2bm_{01} + 2cm_{02} & 2bm_{00} + 2dm_{01} + 2em_{02} & 2cm_{00} + 2em_{01} + 2fm_{02} & 0 & 0 & 0 \\
+am_{10} + bm_{11} + cm_{12} & bm_{10} + dm_{11} + em_{12} & cm_{10} + em_{11} + fm_{12} & am_{00} + bm_{01} + cm_{02} & bm_{00} + dm_{01} + em_{02} & cm_{00} + em_{01} + fm_{02} \\
+0 & 0 & 0 & 2am_{10} + 2bm_{11} + 2cm_{12} & 2bm_{10} + 2dm_{11} + 2em_{12} & 2cm_{10} + 2em_{11} + 2fm_{12}
+\end{bmatrix} 
+$$
+
+$$
+\diff{M}{p_c} =
+\begin{bmatrix} 
+-f_x r_{c0}/x^2 - f_x r_{c2}/z^2 & 0 & 2 f_x r_{c2} x/z^3 \\
+0 & -f_y r_{c2}/z^2 & (-f_y z r_{c1} + 2 f_y r_{c2} y)/z^3 \\
+\end{bmatrix} 
+$$
+
+$r_{c0}$, $r_{c1}$, $r_{c2}$ represent the first, second, and third columns of $R_{cw}$.
+
+$a$, $b$, $c$, $d$, $e$, $f$ represent the elements of  of $\sigma$.
+
 
 
 ### 4. Derivatives of Spherical Harmonics

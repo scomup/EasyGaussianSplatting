@@ -20,16 +20,27 @@ def numerical_derivative(func, param, idx, plus=lambda a, b: a + b, minus=lambda
     return J
 
 
-def calc_m(rot, s, calc_J=False):
-    R = rot.reshape([3, 3])
+def calc_m(q, s, calc_J=False):
+    w, x, y, z = q
+    s0, s1, s2 = s
+    R = np.array([
+        [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
+        [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
+        [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
+    ])
     S = np.diag(s)
     M = R @ S
     m = M.reshape(-1)
     if (calc_J):
-        dm_rot = np.zeros([9, 9])
-        dm_rot[0:3, 0:3] = S
-        dm_rot[3:6, 3:6] = S
-        dm_rot[6:9, 6:9] = S
+        dm_rot = np.array([[0,        0,      -4*s0*y,  -4*s0*z],
+                           [-2*s1*z,  2*s1*y,  2*s1*x,  -2*s1*w],
+                           [2*s2*y,   2*s2*z,  2*s2*w,  2*s2*x],
+                           [2*s0*z,   2*s0*y,  2*s0*x,  2*s0*w],
+                           [0,       -4*s1*x,  0,      -4*s1*z],
+                           [-2*s2*x, -2*s2*w,  2*s2*z,  2*s2*y],
+                           [-2*s0*y,  2*s0*z, -2*s0*w,  2*s0*x],
+                           [2*s1*x,   2*s1*w,  2*s1*z,  2*s1*y],
+                           [0,       -4*s2*x, -4*s2*y,  0]])
         dm_s = np.zeros([9, 3])
         dm_s[0:3, :] = np.diag(R[0])
         dm_s[3:6, :] = np.diag(R[1])
@@ -48,7 +59,7 @@ def calc_mmt(m, calc_J=False):
         # a, b, c, d, e, f, g, h, i = m
         # |a b c| |a d g|   |aa+bb+cc  ad+be+cg  ag+bh+ci|
         # |d e f| |b e h| = |          dd+ee+ff  dg+eh+fi|
-        # |g h i| |c f i|   |                    gg+hh+ii| 
+        # |g h i| |c f i|   |                    gg+hh+ii|
         dmmt_m = np.zeros([6, 9])
         dmmt_m[0, 0:3] = M[0]*2
         dmmt_m[1, 0:3] = M[1]
@@ -59,7 +70,7 @@ def calc_mmt(m, calc_J=False):
         dmmt_m[4, 3:6] = M[2]
         dmmt_m[4, 6:9] = M[1]
         dmmt_m[5, 6:9] = M[2]*2
-        return m, dmmt_m
+        return mmt, dmmt_m
     else:
         return mmt
 
@@ -75,53 +86,36 @@ def calc_rot(q, calc_J=False):
         [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
     ]).reshape(-1)
     if (calc_J):
-        drot_dq = np.zeros([9, 4])
-        drot_dq[0, 2] = -4*y
-        drot_dq[0, 3] = -4*z
-        drot_dq[1, 0] = -2*z
-        drot_dq[1, 1] = 2*y
-        drot_dq[1, 2] = 2*x
-        drot_dq[1, 3] = -2*w
-        drot_dq[2, 0] = 2*y
-        drot_dq[2, 1] = 2*z
-        drot_dq[2, 2] = 2*w
-        drot_dq[2, 3] = 2*x
-        drot_dq[3, 0] = 2*z
-        drot_dq[3, 1] = 2*y
-        drot_dq[3, 2] = 2*x
-        drot_dq[3, 3] = 2*w
-        drot_dq[4, 1] = -4*x
-        drot_dq[4, 3] = -4*z
-        drot_dq[5, 0] = -2*x
-        drot_dq[5, 1] = -2*w
-        drot_dq[5, 2] = 2*z
-        drot_dq[5, 3] = 2*y
-        drot_dq[6, 0] = -2*y
-        drot_dq[6, 1] = 2*z
-        drot_dq[6, 2] = -2*w
-        drot_dq[6, 3] = 2*x
-        drot_dq[7, 0] = 2*x
-        drot_dq[7, 1] = 2*w
-        drot_dq[7, 2] = 2*z
-        drot_dq[7, 3] = 2*y
-        drot_dq[8, 1] = -4*x
-        drot_dq[8, 2] = -4*y
+        drot_dq = np.array([[0, 0, -4*y, -4*z],
+                            [-2*z, 2*y, 2*x, -2*w],
+                            [2*y, 2*z, 2*w, 2*x],
+                            [2*z, 2*y, 2*x, 2*w],
+                            [0, -4*x, 0, -4*z],
+                            [-2*x, -2*w, 2*z, 2*y],
+                            [-2*y, 2*z, -2*w, 2*x],
+                            [2*x, 2*w, 2*z, 2*y],
+                            [0, -4*x, -4*y, 0]])
         return R, drot_dq
     else:
         return R
 
+
+def calc_cov(q, s, calc_J=False):
+    m, dm_mq, dm_ds = calc_m(q, s, True)
+    cov, dcov_dm = calc_mmt(m, True)
+    if (calc_J):
+        return cov, dcov_dm @ dm_mq, dcov_dm @ dm_ds
+    else:
+        return cov
+
+
 if __name__ == "__main__":
-    q = np.array([ 0.606, -0.002, -0.755, 0.252])
-    s  = np.array([ 1.2, 3.2, 0.5])
-    drot_dq_numerical = numerical_derivative(calc_rot, [q], 0)
-    rot, drot_dq = calc_rot(q, True)
-    # print(drot_dq_numerical)
-    # print(drot_dq)
+    q = np.array([0.606, -0.002, -0.755, 0.252])
+    s = np.array([1.2, 3.2, 0.5])
 
-    dm_drot_numerical = numerical_derivative(calc_m, [rot, s], 0)
-    dm_ds_numerical = numerical_derivative(calc_m, [rot, s], 1)
-    m, d_mrot, dm_ds = calc_m(rot, s, True)
+    dcov_dq_numerical = numerical_derivative(calc_cov, [q, s], 0)
+    dcov_ds_numerical = numerical_derivative(calc_cov, [q, s], 1)
+    cov, dcov_dq, dcov_ds = calc_cov(q, s, True)
 
-    dmmt_dm_numerical = numerical_derivative(calc_mmt, [m], 0)
-    mmt, dmmt_m = calc_mmt(m, True)
-    pass
+    print(np.max(np.abs(dcov_dq_numerical - dcov_dq)))
+    print(np.max(np.abs(dcov_ds - dcov_ds)))
