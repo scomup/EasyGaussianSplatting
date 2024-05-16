@@ -1,4 +1,27 @@
 from gaussian_splatting import *
+import torch
+import simple_gaussian_reasterization as sgr
+
+
+def compute_cov_3d_gpu(scale, rot):
+    scale = torch.from_numpy(scale).type(torch.float32).to('cuda')
+    rot = torch.from_numpy(rot).type(torch.float32).to('cuda')
+    res = sgr.computeCov3D(rot, scale)
+    return res[0].to('cpu').numpy()
+
+
+def splat_gpu(height, width, u, cov2d, alpha, depth, color):
+    u = torch.from_numpy(u).type(torch.float32).to('cuda')
+    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
+    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
+    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
+    color = torch.from_numpy(color).type(torch.float32).to('cuda')
+    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
+    res_cpu = []
+    for r in res:
+        res_cpu.append(r.to('cpu').numpy())
+    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
+    return res_cpu
 
 
 if __name__ == "__main__":
@@ -44,6 +67,8 @@ if __name__ == "__main__":
 
         gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
 
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
+    gs = load_ply(ply_fn)
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
     Rcw = np.array([[0.89699204,  0.06525223,  0.43720409],
@@ -71,6 +96,9 @@ if __name__ == "__main__":
 
     # step2. Calcuate the 3d Gaussian.
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
+    cov3d_gpu = compute_cov_3d_gpu(gs['scale'], gs['rot'])
+    print(np.max(np.abs(cov3d - cov3d_gpu)))
+    exit()
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
     cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw, u)

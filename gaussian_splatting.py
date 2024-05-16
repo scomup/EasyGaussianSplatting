@@ -268,33 +268,3 @@ def splat(height, width, us, cov2d, alpha, depth, color):
     print("add patch time %f\n" % time_diff)
 
     return image
-
-
-def splat_gpu(height, width, u, cov2d, alpha, depth, color):
-    import torch
-    import simple_gaussian_reasterization as sgr
-    u = torch.from_numpy(u).type(torch.float32).to('cuda')
-    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
-    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
-    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
-    color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
-    res_cpu = []
-    for r in res:
-        res_cpu.append(r.to('cpu').numpy())
-    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
-    return res_cpu
-
-
-def blend(height, width, u, cov2d, alpha, depth, color):
-    try:
-        import torch
-        import simple_gaussian_reasterization as sgr
-        print("use CUDA")
-        res = splat_gpu(height, width, u, cov2d, alpha, depth, color)
-        image = res[0]
-    except ImportError:
-        print("cannot find simple_gaussian_reasterization, using CPU mode.")
-        print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(height, width, u, cov2d, alpha, depth, color)
-    return image

@@ -384,3 +384,60 @@ std::vector<torch::Tensor> forward(
 
     return {image, contrib, final_tau, patch_range_per_tile, gsid_per_patch_torch};
 }
+
+
+__global__ void computeCov3D(
+    int32_t gs_num,
+    const float *__restrict__ q,
+    const float *__restrict__ s,
+    float *__restrict__ cov3d)
+{
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i >= gs_num)
+		return;
+
+    float w = q[i * 4 + 0];
+    float x = q[i * 4 + 1];
+    float y = q[i * 4 + 2];
+    float z = q[i * 4 + 3];
+    float s0 = s[i * 3 + 0];
+    float s1 = s[i * 3 + 1];
+    float s2 = s[i * 3 + 2];
+    float x2 = x * x;
+    float y2 = y * y;
+    float z2 = z * z;
+
+    Matrix<3, 3> RS = {
+        (1.f - 2.f * (y2 + z2)) * s0, (2.f * (x * y - z * w)) * s1, (2.f * (x * z + y * w)) * s2,
+        (2.f * (x * y + z * w)) * s0, (1.f - 2.f * (x2 + z2)) * s1, (2.f * (y * z - x * w)) * s2,
+        (2.f * (x * z - y * w)) * s0, (2.f * (y * z + x * w)) * s1, (1.f - 2.f * (x2 + y2)) * s2};
+
+    Matrix<3, 3> Sigma = RS * RS.transpose();
+
+    cov3d[i * 6 + 0] = Sigma(0, 0);
+    cov3d[i * 6 + 1] = Sigma(0, 1);
+    cov3d[i * 6 + 2] = Sigma(0, 2);
+    cov3d[i * 6 + 3] = Sigma(1, 1);
+    cov3d[i * 6 + 4] = Sigma(1, 2);
+    cov3d[i * 6 + 5] = Sigma(2, 2);
+}
+
+std::vector<torch::Tensor> computeCov3D(const torch::Tensor q, const torch::Tensor s)
+{
+    auto float_opts = q.options().dtype(torch::kFloat32);
+    auto int_opts = q.options().dtype(torch::kInt32);
+    int gs_num = q.sizes()[0]; 
+    torch::Tensor cov3ds = torch::full({gs_num, 6}, 0.0, float_opts);
+
+    computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+        gs_num,
+        q.contiguous().data_ptr<float>(),
+        s.contiguous().data_ptr<float>(),
+        cov3ds.contiguous().data_ptr<float>());
+    cudaDeviceSynchronize();
+
+    // the total number of 2d gaussian.
+    return {cov3ds};
+
+}

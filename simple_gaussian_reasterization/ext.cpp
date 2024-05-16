@@ -11,6 +11,8 @@ std::vector<torch::Tensor> forward(
     const torch::Tensor depth,
     const torch::Tensor color);
 
+std::vector<torch::Tensor> computeCov3D(const torch::Tensor q, const torch::Tensor s);
+
 std::vector<torch::Tensor> backward(
     const int H,
     const int W,
@@ -27,6 +29,7 @@ std::vector<torch::Tensor> backward(
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
-  m.def("forward", &forward, "rasterize 2d guassian (CUDA)");
-  m.def("backward", &backward, "rasterize 2d guassian (CUDA)");
+  m.def("forward", &forward, "create 2d image");
+  m.def("backward", &backward, "compute jacobians");
+  m.def("computeCov3D", &computeCov3D, "compute 3D covariances");
 }
