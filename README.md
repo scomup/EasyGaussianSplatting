@@ -2,7 +2,7 @@
 
 ## What is this? 
 
-For learning purposes, we offer a set of tools and documentation to study 3D Gaussian Splatting. we also plan to provide an unofficial implementation of paper [3D Gaussian Splatting
+For learning purposes, we offer a set of tools and documentation to study 3D Gaussian Splatting. We also plan to provide an unofficial implementation of the paper [3D Gaussian Splatting
 for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/).
 
 
@@ -10,25 +10,28 @@ for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-ga
 
 * Detailed documentation to demonstrate the mathematical principles of 3D Gaussian Splatting
     - [x] [Documentation for forward (render image)](docs/forward.pdf)
-    - [ ] Documentation for backword (training)
+    - [x] [Documentation for backward (training)](docs/backward.pdf)
 
-- Based on our the documentation, re-implement 3D Gaussian Splatting.
-    - [x] forward (render image)
-    - [ ] backword (training)
+- Based on our documentation, re-implement 3D Gaussian Splatting.
+    - [x] Forward on CPU
+    - [x] Forward on GPU
+    - [] Backward on CPU
+    - [] Backward on GPU
 
 - Provide tools for learning 3D Gaussian Splatting.
-    - [x] a simple viewer based on pyqtgraph for showing 3D Gaussian data (trained model). 
+    - [x] A simple viewer based on pyqtgraph for showing 3D Gaussian data (trained model).
+    - [x] A demo showing how spherical harmonics work.
 
 ## Requirements 
 
 ```bash
 pip3 install -r requirements.txt
-pip install simple_gaussian_reasterization/.
+pip install pygauspilt/.
 ```
 
 ## Forward process (render image)
 
-Given camera information, render 3D Gaussian data onto the 2d image by python.
+Given camera information, render 3D Gaussian data onto the 2D image using Python.
 
 ```bash
 python3 forword --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
@@ -37,7 +40,7 @@ python3 forword --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 
 ## 3D Gaussian Viewer 
 
-A 3D Gaussian splatting viewer for showing 3D Gaussian data. 
+A fast 3D Gaussian splatting viewer for showing 3D Gaussian data. 
 
 ```bash
 python3 gaussian_viewer.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
@@ -49,7 +52,7 @@ python3 gaussian_viewer.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 
 ## Spherical harmonics demo
 
-A demo shows how spherical harmonics work.
+A demo showing how spherical harmonics work.
 
 ```bash
 python3 sh_demo.py

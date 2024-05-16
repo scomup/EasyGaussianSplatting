@@ -2,9 +2,9 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 setup(
-    name='simple_gaussian_reasterization',
+    name='pygauspilt',
     ext_modules=[
-        CUDAExtension('simple_gaussian_reasterization', [
+        CUDAExtension('pygauspilt', [
             'ext.cpp',
             'forward.cu',
             'backward.cu',

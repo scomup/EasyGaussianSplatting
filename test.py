@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import simple_gaussian_reasterization as sgr
+import pygauspilt as pg
 import torchvision
 
 u, cov2d, alpha, \
@@ -15,9 +15,9 @@ u, cov2d, alpha, \
     torch.load("temp.torch")
 
 dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
-    sgr.backward(546, 979, u, cov2d, alpha,
-                 depth, color, contrib, final_tau,
-                 patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+    pg.backward(546, 979, u, cov2d, alpha,
+                depth, color, contrib, final_tau,
+                patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
 print("u:\n", torch.max(u))
 print("cov2d:\n", torch.max(cov2d))
 print("alpha:\n", torch.max(alpha))

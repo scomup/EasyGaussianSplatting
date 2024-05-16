@@ -3,13 +3,13 @@ from gaussian_splatting import *
 
 def splat_test(height, width, u, cov2d, alpha, depth, color):
     import torch
-    import simple_gaussian_reasterization as sgr
+    import pygauspilt as pg
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
     cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
     alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
     depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
     color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
+    res = pg.forward(height, width, u, cov2d, alpha, depth, color)
 
     contrib = res[1]
     final_tau = res[2]
@@ -25,7 +25,7 @@ def splat_test(height, width, u, cov2d, alpha, depth, color):
     dloss_dgammas = image.grad
     # dloss_dgammas = torch.ones([3, height, width], dtype=torch.float32).to('cuda')
 
-    jacobians = sgr.backward(height, width, u, cov2d, alpha, depth, color,
+    jacobians = pg.backward(height, width, u, cov2d, alpha, depth, color,
                              contrib, final_tau, patch_offset_per_tile,
                              gs_id_per_patch, dloss_dgammas)
     print("dloss_du:\n", jacobians[0])
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw, u)
+    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw)
 
     # step4. get color info
     ray_dir = pw[:, :3] - camera.cam_center
