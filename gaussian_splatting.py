@@ -156,16 +156,16 @@ def compute_cov_3d(scale, rot):
     return cov3d
 
 
-def compute_cov_2d(pc, K, cov3d, Rcw, u):
+def compute_cov_2d(pc, K, cov3d, Rcw):
     x = pc[:, 0]
     y = pc[:, 1]
     z = pc[:, 2]
     focal_x = K[0, 0]
     focal_y = K[1, 1]
-    c_x = K[0, 2]
-    c_y = K[1, 2]
-    u_ndc = (u - np.array([c_x, c_y]))/np.array([2*c_x, 2*c_y])
-    out_idx = np.where(np.max(u_ndc, axis=1) > 1.3)[0]
+    # c_x = K[0, 2]
+    # c_y = K[1, 2]
+    # u_ndc = (u - np.array([c_x, c_y]))/np.array([2*c_x, 2*c_y])
+    # out_idx = np.where(np.max(u_ndc, axis=1) > 1.3)[0]
     J = np.zeros([pc.shape[0], 3, 3])
     z2 = z * z
     J[:, 0, 0] = focal_x / z
@@ -182,7 +182,7 @@ def compute_cov_2d(pc, K, cov3d, Rcw, u):
     Sigma_prime[:, 1, 1] += 0.3
 
     cov2d = upper_triangular(Sigma_prime[:, :2, :2])
-    cov2d[out_idx] = 0
+    # cov2d[out_idx] = 0
     return cov2d
 
 

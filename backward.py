@@ -117,7 +117,7 @@ if __name__ == "__main__":
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw, u)
+    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw)
 
     # step4. get color info
     ray_dir = pw[:, :3] - camera.cam_center

@@ -11,7 +11,19 @@ std::vector<torch::Tensor> forward(
     const torch::Tensor depth,
     const torch::Tensor color);
 
-std::vector<torch::Tensor> computeCov3D(const torch::Tensor q, const torch::Tensor s);
+std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots, const torch::Tensor scales);
+
+std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
+                                        const torch::Tensor pcs,
+                                        const torch::Tensor Rcw,
+                                        float focal_x,
+                                        float focal_y);
+
+std::vector<torch::Tensor> project(const torch::Tensor pws,
+                                        const torch::Tensor Rcw,
+                                        const torch::Tensor tcw,
+                                        float focal_x, float focal_y,
+                                        float center_x, float center_y);
 
 std::vector<torch::Tensor> backward(
     const int H,
@@ -32,4 +44,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   m.def("forward", &forward, "create 2d image");
   m.def("backward", &backward, "compute jacobians");
   m.def("computeCov3D", &computeCov3D, "compute 3D covariances");
+  m.def("computeCov2D", &computeCov2D, "compute 2D covariances");
+  m.def("project", &project, "project point to image");
 }

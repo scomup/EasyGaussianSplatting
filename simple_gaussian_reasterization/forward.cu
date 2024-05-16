@@ -388,56 +388,201 @@ std::vector<torch::Tensor> forward(
 
 __global__ void computeCov3D(
     int32_t gs_num,
-    const float *__restrict__ q,
-    const float *__restrict__ s,
-    float *__restrict__ cov3d)
+    const float *__restrict__ rots,
+    const float *__restrict__ scales,
+    float *__restrict__ cov3ds)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i >= gs_num)
 		return;
 
-    float w = q[i * 4 + 0];
-    float x = q[i * 4 + 1];
-    float y = q[i * 4 + 2];
-    float z = q[i * 4 + 3];
-    float s0 = s[i * 3 + 0];
-    float s1 = s[i * 3 + 1];
-    float s2 = s[i * 3 + 2];
+    float w = rots[i * 4 + 0];
+    float x = rots[i * 4 + 1];
+    float y = rots[i * 4 + 2];
+    float z = rots[i * 4 + 3];
+    float s0 = scales[i * 3 + 0];
+    float s1 = scales[i * 3 + 1];
+    float s2 = scales[i * 3 + 2];
     float x2 = x * x;
     float y2 = y * y;
     float z2 = z * z;
 
-    Matrix<3, 3> RS = {
+    Matrix<3, 3> M = {
         (1.f - 2.f * (y2 + z2)) * s0, (2.f * (x * y - z * w)) * s1, (2.f * (x * z + y * w)) * s2,
         (2.f * (x * y + z * w)) * s0, (1.f - 2.f * (x2 + z2)) * s1, (2.f * (y * z - x * w)) * s2,
         (2.f * (x * z - y * w)) * s0, (2.f * (y * z + x * w)) * s1, (1.f - 2.f * (x2 + y2)) * s2};
 
-    Matrix<3, 3> Sigma = RS * RS.transpose();
+    Matrix<3, 3> Sigma = M * M.transpose();
 
-    cov3d[i * 6 + 0] = Sigma(0, 0);
-    cov3d[i * 6 + 1] = Sigma(0, 1);
-    cov3d[i * 6 + 2] = Sigma(0, 2);
-    cov3d[i * 6 + 3] = Sigma(1, 1);
-    cov3d[i * 6 + 4] = Sigma(1, 2);
-    cov3d[i * 6 + 5] = Sigma(2, 2);
+    cov3ds[i * 6 + 0] = Sigma(0, 0);
+    cov3ds[i * 6 + 1] = Sigma(0, 1);
+    cov3ds[i * 6 + 2] = Sigma(0, 2);
+    cov3ds[i * 6 + 3] = Sigma(1, 1);
+    cov3ds[i * 6 + 4] = Sigma(1, 2);
+    cov3ds[i * 6 + 5] = Sigma(2, 2);
 }
 
-std::vector<torch::Tensor> computeCov3D(const torch::Tensor q, const torch::Tensor s)
+
+std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots, const torch::Tensor scales)
 {
-    auto float_opts = q.options().dtype(torch::kFloat32);
-    auto int_opts = q.options().dtype(torch::kInt32);
-    int gs_num = q.sizes()[0]; 
+    auto float_opts = rots.options().dtype(torch::kFloat32);
+    auto int_opts = rots.options().dtype(torch::kInt32);
+    int gs_num = rots.sizes()[0]; 
     torch::Tensor cov3ds = torch::full({gs_num, 6}, 0.0, float_opts);
 
     computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        q.contiguous().data_ptr<float>(),
-        s.contiguous().data_ptr<float>(),
+        rots.contiguous().data_ptr<float>(),
+        scales.contiguous().data_ptr<float>(),
         cov3ds.contiguous().data_ptr<float>());
     cudaDeviceSynchronize();
 
     // the total number of 2d gaussian.
     return {cov3ds};
+}
 
+__global__ void computeCov2D(
+    int32_t gs_num,
+    const float *__restrict__ cov3ds,
+    const float *__restrict__ pcs,
+    const float *__restrict__ Rcw,
+    const float focal_x,
+    const float focal_y,
+    float *__restrict__ cov2ds)
+{
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i >= gs_num)
+		return;
+
+    const float x = pcs[i * 3 + 0];
+    const float y = pcs[i * 3 + 1];
+    const float z = pcs[i * 3 + 2];
+    const float cov3d0 = cov3ds[i * 6 + 0];
+    const float cov3d1 = cov3ds[i * 6 + 1];
+    const float cov3d2 = cov3ds[i * 6 + 2];
+    const float cov3d3 = cov3ds[i * 6 + 3];
+    const float cov3d4 = cov3ds[i * 6 + 4];
+    const float cov3d5 = cov3ds[i * 6 + 5];
+
+    float z2 = z * z;
+
+    Matrix<3, 3> W = {
+        Rcw[0], Rcw[1], Rcw[2],
+        Rcw[3], Rcw[4], Rcw[5],
+        Rcw[6], Rcw[7], Rcw[8]};
+
+    Matrix<2, 3> J = {
+        focal_x / z, 0.0f, -(focal_x * x) / z2,
+        0.0f, focal_y / z, -(focal_y * y) / z2};
+
+    Matrix<3, 3> Sigma = {
+        cov3d0, cov3d1, cov3d2,
+        cov3d1, cov3d3, cov3d4,
+        cov3d2, cov3d4, cov3d5};
+
+    Matrix<2, 3> M = J * W;
+
+    Matrix<2, 2> Sigma_prime = M * Sigma * M.transpose();
+
+    // make sure the cov2d is not too small.
+    cov2ds[i * 3 + 0] = Sigma_prime(0, 0) + 0.3;
+    cov2ds[i * 3 + 1] = Sigma_prime(0, 1);
+    cov2ds[i * 3 + 2] = Sigma_prime(1, 1) + 0.3;
+}
+
+std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
+                                        const torch::Tensor pcs,
+                                        const torch::Tensor Rcw,
+                                        float focal_x, float focal_y)
+{
+    auto float_opts = pcs.options().dtype(torch::kFloat32);
+    auto int_opts = pcs.options().dtype(torch::kInt32);
+    int gs_num = pcs.sizes()[0]; 
+    torch::Tensor cov2ds = torch::full({gs_num, 3}, 0.0, float_opts);
+
+    computeCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+        gs_num,
+        cov3ds.contiguous().data_ptr<float>(),
+        pcs.contiguous().data_ptr<float>(),
+        Rcw.contiguous().data_ptr<float>(),
+        focal_x,
+        focal_y,
+        cov2ds.contiguous().data_ptr<float>());
+    cudaDeviceSynchronize();
+
+    // the total number of 2d gaussian.
+    return {cov2ds};
+}
+
+
+__global__ void project(
+    int32_t gs_num,
+    const float *__restrict__ pws,
+    const float *__restrict__ Rcw,
+    const float *__restrict__ tcw,
+    const float focal_x,
+    const float focal_y,
+    const float center_x,
+    const float center_y,
+    float *__restrict__ us,
+    float *__restrict__ pcs)
+{
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (i >= gs_num)
+		return;
+
+    Matrix<3, 1> pw = {pws[i * 3 + 0], pws[i * 3 + 1], pws[i * 3 + 2]}; 
+
+    Matrix<3, 1> _tcw = {tcw[0], tcw[1], tcw[2]}; 
+
+    Matrix<3, 3> _Rcw = {
+        Rcw[0], Rcw[1], Rcw[2],
+        Rcw[3], Rcw[4], Rcw[5],
+        Rcw[6], Rcw[7], Rcw[8]};
+
+    Matrix<3, 1> pc = _Rcw * pw + _tcw;
+
+    const float x = pc(0);
+    const float y = pc(1);
+    const float z = pc(2);
+
+    const float u0 = x * focal_x / z + center_x;
+    const float u1 = y * focal_y / z + center_y;
+
+    // make sure the cov2d is not too small.
+    us[i * 2 + 0] = u0;
+    us[i * 2 + 1] = u1;
+    pcs[i * 3 + 0] = x;
+    pcs[i * 3 + 1] = y;
+    pcs[i * 3 + 2] = z;
+}
+
+std::vector<torch::Tensor> project(const torch::Tensor pws,
+                                        const torch::Tensor Rcw,
+                                        const torch::Tensor tcw,
+                                        float focal_x, float focal_y,
+                                        float center_x, float center_y)
+{
+    auto float_opts = pws.options().dtype(torch::kFloat32);
+    auto int_opts = pws.options().dtype(torch::kInt32);
+    int gs_num = pws.sizes()[0]; 
+    torch::Tensor us = torch::full({gs_num, 2}, 0.0, float_opts);
+    torch::Tensor pcs = torch::full({gs_num, 3}, 0.0, float_opts);
+
+    project<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+        gs_num,
+        pws.contiguous().data_ptr<float>(),
+        Rcw.contiguous().data_ptr<float>(),
+        tcw.contiguous().data_ptr<float>(),
+        focal_x,  focal_y,
+        center_x, center_y,
+        us.contiguous().data_ptr<float>(),
+        pcs.contiguous().data_ptr<float>());
+    cudaDeviceSynchronize();
+
+    // the total number of 2d gaussian.
+    return {us, pcs};
 }

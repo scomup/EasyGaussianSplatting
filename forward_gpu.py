@@ -3,10 +3,28 @@ import torch
 import simple_gaussian_reasterization as sgr
 
 
+def project_gpu(pw, Rcw, tcw, K):
+    pw = torch.from_numpy(pw).type(torch.float32).to('cuda')
+    Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
+    tcw = torch.from_numpy(tcw).type(torch.float32).to('cuda')
+    u, pc = sgr.project(pw, Rcw, tcw, K[0, 0], K[1, 1], K[0, 2], K[1, 2])
+    return u.to('cpu').numpy(), pc.to('cpu').numpy()
+
+
 def compute_cov_3d_gpu(scale, rot):
     scale = torch.from_numpy(scale).type(torch.float32).to('cuda')
     rot = torch.from_numpy(rot).type(torch.float32).to('cuda')
     res = sgr.computeCov3D(rot, scale)
+    return res[0].to('cpu').numpy()
+
+
+def compute_cov_2d_gpu(pc, K, cov3d, Rcw):
+    pc = torch.from_numpy(pc).type(torch.float32).to('cuda')
+    cov3d = torch.from_numpy(cov3d).type(torch.float32).to('cuda')
+    Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
+    focal_x = K[0, 0]
+    focal_y = K[1, 1]
+    res = sgr.computeCov2D(cov3d, pc, Rcw, focal_x, focal_y)
     return res[0].to('cpu').numpy()
 
 
@@ -69,6 +87,7 @@ if __name__ == "__main__":
 
     ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
     gs = load_ply(ply_fn)
+
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
     Rcw = np.array([[0.89699204,  0.06525223,  0.43720409],
@@ -91,6 +110,9 @@ if __name__ == "__main__":
     # step1. Transform pw to camera frame,
     # and project it to iamge.
     u, pc = project(pw, camera.Rcw, camera.tcw, camera.K)
+    u_gpu, pc_gpu = project_gpu(pw, camera.Rcw, camera.tcw, camera.K)
+    print(np.max(np.abs(u - u_gpu)))
+    print(np.max(np.abs(pc - pc_gpu)))
 
     depth = pc[:, 2]
 
@@ -98,10 +120,16 @@ if __name__ == "__main__":
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
     cov3d_gpu = compute_cov_3d_gpu(gs['scale'], gs['rot'])
     print(np.max(np.abs(cov3d - cov3d_gpu)))
+
+    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw)
+    cov2d_gpu = compute_cov_2d_gpu(pc, camera.K, cov3d, camera.Rcw)
+    print(cov2d)
+    print(cov2d_gpu)
+    print(np.max(np.abs(cov2d - cov2d_gpu)))
     exit()
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw, u)
+    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw)
 
     # step4. get color info
     ray_dir = pw[:, :3] - camera.cam_center

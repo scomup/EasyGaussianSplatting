@@ -84,6 +84,18 @@ struct Matrix
     return elements[row * Width + col];
   }
 
+  // Function to access elements.
+  __host__ __device__ const float &operator()(int n) const
+  {
+    return elements[n];
+  }
+
+  // Function to modify elements.
+  __host__ __device__ float &operator()(int n)
+  {
+    return elements[n];
+  }
+
   template <int OtherWidth>
   __host__ __device__ Matrix<Height, OtherWidth> operator*(const Matrix<Width, OtherWidth> &other) const
   {
@@ -98,6 +110,20 @@ struct Matrix
         {
           res(i, j) += (*this)(i, k) * other(k, j);
         }
+      }
+    }
+    return res;
+  }
+
+  __host__ __device__ Matrix<Height, Width> operator+(const Matrix<Height, Width> &other) const
+  {
+    Matrix<Height, Width> res;
+    
+    for (int i = 0; i < Height; ++i)
+    {
+      for (int j = 0; j < Width; ++j)
+      {
+        res(i, j) = (*this)(i, j) + other(i, j);
       }
     }
     return res;
