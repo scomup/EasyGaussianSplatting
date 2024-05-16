@@ -15,8 +15,8 @@ for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-ga
 - Based on our documentation, re-implement 3D Gaussian Splatting.
     - [x] Forward on CPU
     - [x] Forward on GPU
-    - [] Backward on CPU
-    - [] Backward on GPU
+    - [ ] Backward on CPU
+    - [ ] Backward on GPU
 
 - Provide tools for learning 3D Gaussian Splatting.
     - [x] A simple viewer based on pyqtgraph for showing 3D Gaussian data (trained model).
