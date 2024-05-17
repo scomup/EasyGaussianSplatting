@@ -33,8 +33,14 @@ pip install pygauspilt/.
 
 Given camera information, render 3D Gaussian data onto the 2D image using Python.
 
+CPU version.
 ```bash
-python3 forword --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
+python3 forword.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
+```
+
+GPU version.
+```bash
+python3 forword_gpu.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 ```
 ![forword demo](imgs/forword.png)
 
