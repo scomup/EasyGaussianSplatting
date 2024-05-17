@@ -86,14 +86,17 @@ def symmetric_matrix(upper):
     return mat
 
 
-def sh2color(sh, ray_dir):
+def sh2color(sh, pw, twc):
     sh_dim = sh.shape[1]
     color = SH_C0_0 * sh[:, 0:3] + 0.5
     if (sh_dim <= 3):
         return color
+    ray_dir = pw - twc
+    ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
     x = ray_dir[:, 0][:, np.newaxis]
     y = ray_dir[:, 1][:, np.newaxis]
     z = ray_dir[:, 2][:, np.newaxis]
+
     color = color + \
         SH_C1_0 * y * sh[:, 3:6] + \
         SH_C1_1 * z * sh[:, 6:9] + \
@@ -116,6 +119,7 @@ def sh2color(sh, ray_dir):
 
     if (sh_dim <= 27):
         return color
+
     color = color +  \
         SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
         SH_C3_1 * xy * z * sh[:, 30:33] + \
@@ -185,10 +189,6 @@ def compute_cov_2d(pc, K, cov3d, Rcw):
     cov2d = upper_triangular(Sigma_prime[:, :2, :2])
     # cov2d[out_idx] = 0
     return cov2d
-
-
-def focal2fov(focal, pixels):
-    return 2*math.atan(pixels/(2*focal))
 
 
 def project(pw, Rcw, tcw, K):
