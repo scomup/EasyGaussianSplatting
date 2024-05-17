@@ -418,7 +418,7 @@ def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
 
 
 if __name__ == "__main__":
-    gs_data = np.zeros([4, 59])
+    gs_data = np.random.rand(4, 59)
     gs_data0 = np.array([[0.,  0.,  0.,  # xyz
                         1.,  0.,  0., 0.,  # rot
                         0.5,  0.5,  0.5,  # size
@@ -513,11 +513,15 @@ if __name__ == "__main__":
 
         # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
         colors[i], dcolor_dshs[i] = sh2color(gs['sh'][i], pws[i], cam_center, True)
-        dcolor_dshs_numerical = numerical_derivative(
+        sh2color(gs['sh'][i], pws[i], cam_center)
+        sh2color(gs['sh'][i], pws[i]+np.array([1, 0, 0]), cam_center)
+
+        dcolor_dsh_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], cam_center], 0)
+        dcolor_dpc_numerical = numerical_derivative(
+            sh2color, [gs['sh'][i], pws[i], cam_center], 1)
         print("check dcolor%d_dsh%d: " % (i, i), check(
-            dcolor_dshs_numerical[0, range(0, 48, 3)], dcolor_dshs[i]))
-        # dcolor_dshs_numerical[:3, 3*10:3*10+3]
+            dcolor_dsh_numerical[0, range(0, 48, 3)], dcolor_dshs[i]))
     # ---------------------------------
     idx = np.argsort(pcs[:, 2])
     idxb = np.argsort(idx)
