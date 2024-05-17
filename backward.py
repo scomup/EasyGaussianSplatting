@@ -1,9 +1,9 @@
-from gaussian_splatting import *
+from gausplat import *
 
 
 def splat_test(height, width, u, cov2d, alpha, depth, color):
     import torch
-    import pygauspilt as pg
+    import pygausplat as pg
     u = torch.from_numpy(u).type(torch.float32).to('cuda')
     cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
     alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')

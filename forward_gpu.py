@@ -1,6 +1,8 @@
-from gaussian_splatting import *
 import torch
-import pygauspilt as pg
+import pygausplat as pg
+import numpy as np
+import matplotlib.pyplot as plt
+from read_ply import *
 
 
 def sh2color_gpu(sh, pw, twc):

@@ -2,9 +2,9 @@ from setuptools import setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 setup(
-    name='pygauspilt',
+    name='pygausplat',
     ext_modules=[
-        CUDAExtension('pygauspilt', [
+        CUDAExtension('pygausplat', [
             'ext.cpp',
             'kernel.cu',
             'forward.cu',

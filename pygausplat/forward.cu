@@ -1,5 +1,5 @@
 /* Copyright:
- * This file is part of pygauspilt.
+ * This file is part of pygausplat.
  * (c) Liu Yang
  * For the full license information, please view the LICENSE file.
  */

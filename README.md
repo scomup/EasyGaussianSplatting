@@ -26,7 +26,7 @@ for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-ga
 
 ```bash
 pip3 install -r requirements.txt
-pip install pygauspilt/.
+pip install pygausplat/.
 ```
 
 ## Forward process (render image)
