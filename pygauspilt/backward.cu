@@ -1,7 +1,13 @@
+/* Copyright:
+ * This file is part of pygauspilt.
+ * (c) Liu Yang
+ * For the full license information, please view the LICENSE file.
+ */
+
 #include <thrust/sort.h>
 #include <thrust/device_vector.h>
 #include <torch/extension.h>
-#include "common.h"
+#include "common.cuh"
 
 inline __device__ void fetch2sharedBack(
     int32_t n,

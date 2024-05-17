@@ -3,6 +3,14 @@ import torch
 import pygauspilt as pg
 
 
+def sh2color_gpu(sh, pw, twc):
+    pw = torch.from_numpy(pw).type(torch.float32).to('cuda')
+    sh = torch.from_numpy(sh).type(torch.float32).to('cuda')
+    twc = torch.from_numpy(twc).type(torch.float32).to('cuda')
+    color = pg.sh2Color(sh, pw, twc)[0]
+    return color.to('cpu').numpy()
+
+
 def project_gpu(pw, Rcw, tcw, K):
     pw = torch.from_numpy(pw).type(torch.float32).to('cuda')
     Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
@@ -102,23 +110,18 @@ if __name__ == "__main__":
     center_x = width / 2
     center_y = height / 2
 
-    pw = gs['pos']
-    ray_dir = pw[:, :3] - np.linalg.inv(Rcw)@(-tcw)
-    ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
-    color = sh2color(gs['sh'], ray_dir)
-
     pw = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
     rot = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
     scale = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
     alpha = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
+    sh = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
     Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
     tcw = torch.from_numpy(tcw).type(torch.float32).to('cuda')
+    twc = torch.linalg.inv(Rcw)@(-tcw)
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    pw, Rcw, tcw,
     u, pc = pg.project(pw, Rcw, tcw, focal_x, focal_y, center_x, center_y)
-
     depth = pc[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
@@ -128,16 +131,11 @@ if __name__ == "__main__":
     cov2d = pg.computeCov2D(cov3d, pc, Rcw, focal_x, focal_y)[0]
 
     # step4. get color info
-    color = torch.from_numpy(color).type(torch.float32).to('cuda')
+    color = pg.sh2Color(sh, pw, twc)[0]
 
     # step5. Blend the 2d Gaussian to image
     image = pg.forward(height, width, u, cov2d, alpha, depth, color)[0]
     image = image.to('cpu').numpy()
 
     plt.imshow(image.transpose([1, 2, 0]))
-    # from PIL import Image
-    # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
-    # print(pil_img.mode)
-    # pil_img.save('test.png')
-
     plt.show()

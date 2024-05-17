@@ -1,3 +1,9 @@
+/* Copyright:
+ * This file is part of pygauspilt.
+ * (c) Liu Yang
+ * For the full license information, please view the LICENSE file.
+ */
+
 #include <torch/extension.h>
 #include <iostream>
 #include <vector>
@@ -20,10 +26,10 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
                                         float focal_y);
 
 std::vector<torch::Tensor> project(const torch::Tensor pws,
-                                        const torch::Tensor Rcw,
-                                        const torch::Tensor tcw,
-                                        float focal_x, float focal_y,
-                                        float center_x, float center_y);
+                                   const torch::Tensor Rcw,
+                                   const torch::Tensor tcw,
+                                   float focal_x, float focal_y,
+                                   float center_x, float center_y);
 
 std::vector<torch::Tensor> backward(
     const int H,
@@ -39,6 +45,10 @@ std::vector<torch::Tensor> backward(
     const torch::Tensor gs_id_per_patch,
     const torch::Tensor dloss_dgammas);
 
+std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
+                                    const torch::Tensor pws,
+                                    const torch::Tensor twc);
+
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
   m.def("forward", &forward, "create 2d image");
@@ -46,4 +56,5 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
   m.def("computeCov3D", &computeCov3D, "compute 3D covariances");
   m.def("computeCov2D", &computeCov2D, "compute 2D covariances");
   m.def("project", &project, "project point to image");
+  m.def("sh2Color", &sh2Color, "covert SH to color");
 }

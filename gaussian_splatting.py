@@ -89,7 +89,6 @@ def symmetric_matrix(upper):
 def sh2color(sh, ray_dir):
     sh_dim = sh.shape[1]
     color = SH_C0_0 * sh[:, 0:3] + 0.5
-
     if (sh_dim <= 3):
         return color
     x = ray_dir[:, 0][:, np.newaxis]
@@ -116,14 +115,16 @@ def sh2color(sh, ray_dir):
         SH_C2_4 * (xx - yy) * sh[:, 24:27]
 
     if (sh_dim <= 27):
-        color = color +  \
-            SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
-            SH_C3_1 * xy * z * sh[:, 30:33] + \
-            SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
-            SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
-            SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
-            SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
-            SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
+        return color
+    color = color +  \
+        SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
+        SH_C3_1 * xy * z * sh[:, 30:33] + \
+        SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
+        SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
+        SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
+        SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
+        SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
+
     return color
 
 

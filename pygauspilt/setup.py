@@ -6,6 +6,7 @@ setup(
     ext_modules=[
         CUDAExtension('pygauspilt', [
             'ext.cpp',
+            'kernel.cu',
             'forward.cu',
             'backward.cu',
         ])
