@@ -2,55 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import numpy as np
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
-# More information about real spherical harmonics can be obtained from:
-# https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
-# https://github.com/NVlabs/tiny-cuda-nn/blob/master/scripts/gen_sh.py
-
-SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
-
-SH_C1_0 = -0.4886025119029199  # Y1,-1: sqrt(3/(4*pi))       minus
-SH_C1_1 = 0.4886025119029199   # Y1,0:  sqrt(3/(4*pi))       plus
-SH_C1_2 = -0.4886025119029199  # Y1,1:  sqrt(3/(4*pi))       minus
-
-SH_C2_0 = 1.0925484305920792   # Y2,-2: 1/2 * sqrt(15/pi)    plus
-SH_C2_1 = -1.0925484305920792  # Y2,-1: 1/2 * sqrt(15/pi)    minus
-SH_C2_2 = 0.31539156525252005  # Y2,0:  1/4*sqrt(5/pi)       plus
-SH_C2_3 = -1.0925484305920792  # Y2,1:  1/2*sqrt(15/pi)      minus
-SH_C2_4 = 0.5462742152960396   # Y2,2:  1/4*sqrt(15/pi)      plus
-
-SH_C3_0 = -0.5900435899266435  # Y3,-3: 1/4*sqrt(35/(2*pi))  minus
-SH_C3_1 = 2.890611442640554    # Y3,-2: 1/2*sqrt(105/pi)     plus
-SH_C3_2 = -0.4570457994644658  # Y3,-1: 1/4*sqrt(21/(2*pi))  minus
-SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
-SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
-SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
-SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(35/(2*pi))  minus
-
-SH_C4_0 = 2.5033429417967046  # Y4,-4:  3/4*sqrt(35/pi)       plus
-SH_C4_1 = -1.7701307697799304  # Y4,-3:  3/4*sqrt(35/(2*pi))  minus
-SH_C4_2 = 0.9461746957575601  # Y4,-2:  3/4*sqrt(5/pi)        plus
-SH_C4_3 = -0.6690465435572892  # Y4,-1:  3/4*sqrt(5/(2*pi))   minus
-SH_C4_4 = 0.10578554691520431  # Y4,0:  3/16*sqrt(1/pi)       plus
-SH_C4_5 = -0.6690465435572892  # Y4,1:  3/4*sqrt(5/(2*pi))    minus
-SH_C4_6 = 0.47308734787878004  # Y4,2:  3/8*sqrt(5/pi)        plus
-SH_C4_7 = -1.7701307697799304  # Y4,3:  3/4*sqrt(35/(2*pi))   minus
-SH_C4_8 = 0.6258357354491761  # Y4,4:  3/16*sqrt(35/pi)       plus
-
-SH_C5_0 = -0.65638205684017015
-SH_C5_1 = 8.3026492595241645
-SH_C5_2 = -0.48923829943525038
-SH_C5_3 = 4.7935367849733241
-SH_C5_4 = -0.45294665119569694
-SH_C5_5 = 0.1169503224534236
-SH_C5_6 = -0.45294665119569694
-SH_C5_7 = 2.3967683924866621
-SH_C5_8 = -0.48923829943525038
-SH_C5_9 = 2.0756623148810411
-SH_C5_10 = -0.65638205684017015
+from sh_coef import *
 
 
 def upper_triangular(mat):
@@ -320,6 +272,7 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
 def sh2color(sh, pw, twc, calc_J=False):
     sh_dim = sh.shape[0]
     dc_dsh = np.zeros([sh.shape[0]//3])
+    dc_dpw = np.zeros([3, 3])
     dc_dsh[0] = SH_C0_0
     color = dc_dsh[0] * sh[0:3] + 0.5
     if (sh_dim > 3):
@@ -373,6 +326,8 @@ def sh2color(sh, pw, twc, calc_J=False):
                     dc_dsh[14] * sh[42:45] + \
                     dc_dsh[15] * sh[45:48]
     if (calc_J):
+        dr_dpc = np.zeros([3, 3])
+
         return color, dc_dsh
     else:
         return color
@@ -481,8 +436,8 @@ if __name__ == "__main__":
     cov2ds = np.zeros([gs_num, 3])
     dpc_dpws = np.zeros([gs_num, 3, 3])
     du_dpcs = np.zeros([gs_num, 2, 3])
-    dcov3d_dqs = np.zeros([gs_num, 6, 4])
-    dcov3d_dss = np.zeros([gs_num, 6, 3])
+    dcov3d_drots = np.zeros([gs_num, 6, 4])
+    dcov3d_dscales = np.zeros([gs_num, 6, 3])
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
     dcolor_dshs = np.zeros([gs_num, gs['sh'].shape[1]//3])
@@ -498,11 +453,11 @@ if __name__ == "__main__":
         print("check du%d_dpc%d: " % (i, i), check(du_dpc_numerical, du_dpcs[i]))
 
         # step2. Calcuate the 3d Gaussian.
-        cov3ds[i], dcov3d_dqs[i], dcov3d_dss[i] = compute_cov_3d(gs['rot'][i], gs['scale'][i], True)
+        cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(gs['rot'][i], gs['scale'][i], True)
         dcov3d_dq_numerical = numerical_derivative(compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 0)
         dcov3d_ds_numerical = numerical_derivative(compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 1)
-        print("check dcov3d%d_dq%d: " % (i, i), check(dcov3d_dq_numerical, dcov3d_dqs[i]))
-        print("check dcov3d%d_ds%d: " % (i, i), check(dcov3d_ds_numerical, dcov3d_dss[i]))
+        print("check dcov3d%d_dq%d: " % (i, i), check(dcov3d_dq_numerical, dcov3d_drots[i]))
+        print("check dcov3d%d_ds%d: " % (i, i), check(dcov3d_ds_numerical, dcov3d_dscales[i]))
 
         cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(cov3ds[i], pcs[i], Rcw, fx, fy, True)
         dcov2d_dcov3d_numerical = numerical_derivative(compute_cov_2d, [cov3ds[i], pcs[i], Rcw, fx, fy], 0)
@@ -580,7 +535,7 @@ if __name__ == "__main__":
         print("check dgamma_du_%d: " % i, check(
             dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]))
 
-    loss, dloss_dalpha, dloss_dcov2d, dloss_dcolor, dloss_du = calc_loss(
+    loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
         alphas, cov2ds, colors, us, width, height, True)
     dloss_dalpha_numerial = numerical_derivative(
         calc_loss, [alphas, cov2ds, colors, us, width, height], 0)
@@ -591,10 +546,24 @@ if __name__ == "__main__":
     dloss_du_numerial = numerical_derivative(
         calc_loss, [alphas, cov2ds, colors, us, width, height], 3)
 
-    print("check dloss_dalpha: ", check(dloss_dalpha_numerial, dloss_dalpha))
-    print("check dloss_dcov2d: ", check(dloss_dcov2d_numerial, dloss_dcov2d))
-    print("check dloss_dcolor: ", check(dloss_dcolor_numerial, dloss_dcolor))
-    print("check dloss_du: ", check(dloss_du_numerial, dloss_du))
+    print("check dloss_dalpha: ", check(dloss_dalpha_numerial, dloss_dalphas))
+    print("check dloss_dcov2d: ", check(dloss_dcov2d_numerial, dloss_dcov2ds))
+    print("check dloss_dcolor: ", check(dloss_dcolor_numerial, dloss_dcolors))
+    print("check dloss_du: ", check(dloss_du_numerial, dloss_dus))
+
+    dloss_dcov2ds = dloss_dcov2ds.reshape([gs_num, 1, 3])
+    dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
+    dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
+    dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
+
+    dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
+    dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
+    dloss_dshs = dloss_dcolors @ dcov2d_dcov3ds
+    dloss_dalphas = dloss_dalphas
+    dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
+                 dloss_dcolors @ dcolor_dpc_numerical @ dpc_dpws + \
+                 dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
+                 
 
     # gs_num = gs.shape[0]
     # print("dloss_du:\n", dloss_du.reshape([gs_num, 2])[idxb])
