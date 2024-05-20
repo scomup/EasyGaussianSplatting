@@ -339,8 +339,8 @@ def sh2color(sh, pw, twc, calc_J=False):
             dr_dpc[0, 1] = -d[0]*d[1]*normd3_inv
             dr_dpc[0, 2] = -d[0]*d[2]*normd3_inv
             dr_dpc[1, 2] = -d[1]*d[2]*normd3_inv
-            dr_dpc[0, 1] = dr_dpc[1, 0]
-            dr_dpc[0, 2] = dr_dpc[2, 0]
+            dr_dpc[1, 0] = dr_dpc[0, 1]
+            dr_dpc[2, 0] = dr_dpc[0, 2]
             dr_dpc[2, 1] = dr_dpc[1, 2]
 
             dc_dr = np.zeros([3, 3])
@@ -348,34 +348,35 @@ def sh2color(sh, pw, twc, calc_J=False):
             dc_dr[:, 1] += SH_C1_0 * sh[1]
             dc_dr[:, 2] += SH_C1_1 * sh[2]
             if (sh_dim > 12):
-                xx = x * x
-                yy = y * y
-                zz = z * z
-                xy = x * y
-                yz = y * z
-                xz = x * z
                 dc_dr[:, 0] += SH_C2_0 * y * sh[4] - SH_C2_2 * 2 * \
                     x * sh[6] + SH_C2_3 * z * sh[7] + SH_C2_4 * 2 * x * sh[8]
                 dc_dr[:, 1] += SH_C2_0 * x * sh[4] + SH_C2_1 * z * sh[5] - \
                     SH_C2_2 * 2.0 * y * sh[6] - SH_C2_4 * 2 * y * sh[8]
                 dc_dr[:, 2] += SH_C2_1 * y * sh[5] + SH_C2_2 * \
                     (4.0 * z) * sh[6] + SH_C2_3 * x * sh[7]
-                print(dc_dr @ dr_dpc)
-
+                if (sh_dim > 27):
+                    dc_dr[:, 0] += 6.0*SH_C3_0*sh[9]*x*y\
+                        + SH_C3_1*sh[10]*yz\
+                        - 2*SH_C3_2*sh[11]*xy\
+                        - 6.0*SH_C3_3*sh[12]*xz\
+                        + SH_C3_4*sh[13]*(4.0 * zz - 3.0 * xx - yy)\
+                        + 2*SH_C3_5*sh[14]*xz\
+                        + SH_C3_6*sh[15]*(3*xx-3*yy)
+                    dc_dr[:, 1] += SH_C3_0*sh[9]*(-2*yy + 3.0*xx - yy)\
+                        + SH_C3_1*sh[10]*xz\
+                        + SH_C3_2*sh[11]*(-xx - yy + 4.0*zz - 2*yy)\
+                        - 6.0*SH_C3_3*sh[12]*yz\
+                        + SH_C3_4*sh[13]*(- 2 * xy)\
+                        - 2*SH_C3_5*sh[14]*yz\
+                        - 6.0*SH_C3_6*sh[15]*xy
+                    dc_dr[:, 2] += SH_C3_1*sh[10]*xy\
+                        + 8.0*SH_C3_2*sh[11]*yz\
+                        + SH_C3_3*sh[12]*(-3.0*xx - 3.0*yy + 6.0*zz)\
+                        + 8.0*SH_C3_4*sh[13]*xz\
+                        + SH_C3_5*sh[14]*(xx - yy)
         return color, dc_dsh, dc_dr @ dr_dpc
     else:
         return color
-
-
-sh = np.arange(27)
-# sh = np.array([1, 2, 3])
-pw = np.array([0.5, 0.6, -1.0])
-twc = np.array([0.23, -0.4, 0.45])
-dc_dpw0 = numerical_derivative(sh2color, [sh, pw, twc], 1)
-print(dc_dpw0)
-_, _, dc_dr = sh2color(sh, pw, twc, True)
-print("diff:", dc_dpw0 - dc_dr)
-exit(0)
 
 
 def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
@@ -486,6 +487,7 @@ if __name__ == "__main__":
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
     dcolor_dshs = np.zeros([gs_num, gs['sh'].shape[1]//3])
+    dcolor_dpcs = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
         # step1. Transform pw to camera frame,
         # and project it to iamge.
@@ -512,16 +514,16 @@ if __name__ == "__main__":
         print("check dcov2d%d_dpc%d: " % (i, i), check(dcov2d_dpc_numerical, dcov2d_dpcs[i]))
 
         # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-        colors[i], dcolor_dshs[i] = sh2color(gs['sh'][i], pws[i], cam_center, True)
-        sh2color(gs['sh'][i], pws[i], cam_center)
-        sh2color(gs['sh'][i], pws[i]+np.array([1, 0, 0]), cam_center)
-
+        colors[i], dcolor_dshs[i], dcolor_dpcs[i] = sh2color(gs['sh'][i], pws[i], cam_center, True)
         dcolor_dsh_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], cam_center], 0)
         dcolor_dpc_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], cam_center], 1)
         print("check dcolor%d_dsh%d: " % (i, i), check(
             dcolor_dsh_numerical[0, range(0, 48, 3)], dcolor_dshs[i]))
+        print("check dcolor%d_dsh%d: " % (i, i), check(
+            dcolor_dpc_numerical, dcolor_dpcs[i]))
+
     # ---------------------------------
     idx = np.argsort(pcs[:, 2])
     idxb = np.argsort(idx)
