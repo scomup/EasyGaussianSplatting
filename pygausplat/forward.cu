@@ -181,22 +181,44 @@ std::vector<torch::Tensor> project(const torch::Tensor pws,
 
 std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
                                     const torch::Tensor pws,
-                                        const torch::Tensor twc)
+                                    const torch::Tensor twc,
+                                    const bool calc_J)
 {
     auto float_opts = pws.options().dtype(torch::kFloat32);
     int gs_num = pws.sizes()[0]; 
     int sh_dim = shs.sizes()[1]; 
     torch::Tensor colors = torch::full({gs_num, 3}, 0.0, float_opts);
 
-    sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
-        gs_num,
-        shs.contiguous().data_ptr<float>(),
-        pws.contiguous().data_ptr<float>(),
-        twc.contiguous().data_ptr<float>(),
-        sh_dim,
-        colors.contiguous().data_ptr<float>());
+    if (calc_J)
+    {
+        torch::Tensor dc_dshs = torch::full({gs_num, 3, sh_dim}, 0.0, float_opts);
+        torch::Tensor dc_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
+    
+        sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            shs.contiguous().data_ptr<float>(),
+            pws.contiguous().data_ptr<float>(),
+            twc.contiguous().data_ptr<float>(),
+            sh_dim,
+            colors.contiguous().data_ptr<float>(),
+            true,
+            dc_dshs.contiguous().data_ptr<float>(),
+            dc_dpws.contiguous().data_ptr<float>());
         cudaDeviceSynchronize();
 
-    // the total number of 2d gaussian.
-    return {colors};
+        return {colors, dc_dshs, dc_dpws};
+    }
+    else
+    {
+        sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            shs.contiguous().data_ptr<float>(),
+            pws.contiguous().data_ptr<float>(),
+            twc.contiguous().data_ptr<float>(),
+            sh_dim,
+            colors.contiguous().data_ptr<float>());
+        cudaDeviceSynchronize();
+
+        return {colors};
+    }
 }

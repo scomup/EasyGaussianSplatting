@@ -328,7 +328,6 @@ def sh2color(sh, pw, twc, calc_J=False):
                     dc_dsh[14] @ sh[14] + \
                     dc_dsh[15] @ sh[15]
     if (calc_J):
-        dc_dpc = np.zeros([3, 3])
         if (sh_dim > 3):
             dr_dpw = np.zeros([3, 3])
             normd3_inv = 1/normd**3

@@ -47,7 +47,8 @@ std::vector<torch::Tensor> backward(
 
 std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
                                     const torch::Tensor pws,
-                                    const torch::Tensor twc);
+                                    const torch::Tensor twc,
+                                    const bool calc_J = false);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {

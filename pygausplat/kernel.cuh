@@ -96,4 +96,7 @@ __global__ void sh2Color(
     const float *__restrict__ pws,
     const float *__restrict__ twc,
     const int sh_dim,
-    float *__restrict__ colors);
+    float *__restrict__ colors,
+    const bool calc_J = false,
+    float *__restrict__ dc_dshs = nullptr,
+    float *__restrict__ dc_dpws = nullptr);

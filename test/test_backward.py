@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
+import pygausplat as pg
 import numpy as np
 import sys
 import os
@@ -56,6 +56,41 @@ if __name__ == "__main__":
     cy = height/2.
     image_gt = np.zeros([height, width, 3])
 
-    loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
-        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
-    print(dloss_dscales)
+    pws = gs['pos']
+    gs_num = gs['pos'].shape[0]
+
+    colors = np.zeros([gs_num, 3])
+    us = np.zeros([gs_num, 2])
+    pcs = np.zeros([gs_num, 3])
+    cov3ds = np.zeros([gs_num, 6])
+    cov2ds = np.zeros([gs_num, 3])
+    dpc_dpws = np.zeros([gs_num, 3, 3])
+    du_dpcs = np.zeros([gs_num, 2, 3])
+    dcov3d_drots = np.zeros([gs_num, 6, 4])
+    dcov3d_dscales = np.zeros([gs_num, 6, 3])
+    dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
+    dcov2d_dpcs = np.zeros([gs_num, 3, 3])
+    dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
+    dcolor_dpws = np.zeros([gs_num, 3, 3])
+    for i in range(gs_num):
+        pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
+        us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
+        cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
+            gs['rot'][i], gs['scale'][i], True)
+        cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
+            cov3ds[i], pcs[i], Rcw, fx, fy, True)
+        colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
+            gs['sh'][i], pws[i], twc, True)
+
+    pw_gpu = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
+    rot_gpu = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
+    scale_gpu = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
+    alpha_gpu = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
+    sh_gpu = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
+    Rcw_gpu = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
+    tcw_gpu = torch.from_numpy(tcw).type(torch.float32).to('cuda')
+    twc_gpu = torch.from_numpy(twc).type(torch.float32).to('cuda')
+
+    color_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(sh_gpu, pw_gpu, twc_gpu, True)
+    print(np.max(np.abs(dcolor_dshs_gpu.cpu().numpy() - dcolor_dshs)))
+    print(np.max(np.abs(dcolor_dpws_gpu.cpu().numpy() - dcolor_dpws)))

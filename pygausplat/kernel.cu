@@ -20,8 +20,8 @@ inline __device__ void fetch2shared(
     float *shared_alpha,
     float3 *shared_color)
 {
-    int i = blockDim.x * threadIdx.y + threadIdx.x;  // block idx
-    int j = range.x + n * BLOCK_SIZE + i;  // patch idx
+    int i = blockDim.x * threadIdx.y + threadIdx.x; // block idx
+    int j = range.x + n * BLOCK_SIZE + i;           // patch idx
     if (j < range.y)
     {
         int gs_id = gs_id_per_patch[j];
@@ -30,7 +30,7 @@ inline __device__ void fetch2shared(
         shared_cinv2d[i].x = cinv2d[gs_id * 3];
         shared_cinv2d[i].y = cinv2d[gs_id * 3 + 1];
         shared_cinv2d[i].z = cinv2d[gs_id * 3 + 2];
-        shared_alpha[i] =   alphas[gs_id];
+        shared_alpha[i] = alphas[gs_id];
         shared_color[i].x = colors[gs_id * 3];
         shared_color[i].y = colors[gs_id * 3 + 1];
         shared_color[i].z = colors[gs_id * 3 + 2];
@@ -47,24 +47,24 @@ __global__ void createKey(const int gs_num,
 {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-	if (idx >= gs_num)
-		return;
+    if (idx >= gs_num)
+        return;
     uint32_t off = (idx == 0) ? 0 : patch_offset_per_gs[idx - 1];
     uint4 rect = rects[idx];
 
-		for (uint y = rect.y; y < rect.w; y++)
-		{
-			for (uint x = rect.x; x < rect.z; x++)
-			{
-				uint64_t key = (y * grid.x + x);
-				key <<= 32;
-                uint32_t depth_cm = depths[idx] * 1000; // mm
-				key |= depth_cm;
-				patch_keys[off] = key;
-				gs_id_per_patch[off] = idx;
-				off++;
-			}
-		}
+    for (uint y = rect.y; y < rect.w; y++)
+    {
+        for (uint x = rect.x; x < rect.z; x++)
+        {
+            uint64_t key = (y * grid.x + x);
+            key <<= 32;
+            uint32_t depth_cm = depths[idx] * 1000; // mm
+            key |= depth_cm;
+            patch_keys[off] = key;
+            gs_id_per_patch[off] = idx;
+            off++;
+        }
+    }
 }
 
 __global__ void getRect(
@@ -80,30 +80,30 @@ __global__ void getRect(
 {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
 
-	if (idx >= gs_num)
-		return;
+    if (idx >= gs_num)
+        return;
 
     float d = depths[idx];
-    float2 u = {us[idx*2], us[idx*2 + 1]};
+    float2 u = {us[idx * 2], us[idx * 2 + 1]};
 
-    float x_norm =  u.x / width * 2.f - 1.f;
-    float y_norm =  u.y / height * 2.f - 1.f;
+    float x_norm = u.x / width * 2.f - 1.f;
+    float y_norm = u.y / height * 2.f - 1.f;
     if (abs(x_norm) > 1.3 || abs(y_norm) > 1.3 || d < 0.1 || d > 100)
     {
         gs_rects[idx] = {0, 0, 0, 0};
         patch_num_per_gs[idx] = 0;
-		return;
+        return;
     }
 
-    float xs = areas[idx*2];
-    float ys = areas[idx*2 + 1];
+    float xs = areas[idx * 2];
+    float ys = areas[idx * 2 + 1];
 
     uint4 rect = {
-		min(grid.x, max((int)0, (int)((u.x - xs) / BLOCK))),  // min_x
-		min(grid.y, max((int)0, (int)((u.y - ys) / BLOCK))),  // min_y
-        min(grid.x, max((int)0, (int)(DIV_ROUND_UP(u.x + xs, BLOCK)))),  // max_x
-		min(grid.y, max((int)0, (int)(DIV_ROUND_UP(u.y + ys, BLOCK))))   // max_y
-	};
+        min(grid.x, max((int)0, (int)((u.x - xs) / BLOCK))),            // min_x
+        min(grid.y, max((int)0, (int)((u.y - ys) / BLOCK))),            // min_y
+        min(grid.x, max((int)0, (int)(DIV_ROUND_UP(u.x + xs, BLOCK)))), // max_x
+        min(grid.y, max((int)0, (int)(DIV_ROUND_UP(u.y + ys, BLOCK))))  // max_y
+    };
 
     gs_rects[idx] = rect;
     patch_num_per_gs[idx] = (rect.z - rect.x) * (rect.w - rect.y);
@@ -125,19 +125,18 @@ __global__ void getRange(
     uint32_t prv_tile = patch_keys[prv_patch] >> 32;
 
     if (cur_patch == 0)
-        patch_range_per_tile[2*cur_tile] = 0;
+        patch_range_per_tile[2 * cur_tile] = 0;
     else if (cur_patch == patch_num - 1)
-        patch_range_per_tile[2*cur_tile + 1] = patch_num;
+        patch_range_per_tile[2 * cur_tile + 1] = patch_num;
 
     if (prv_tile != cur_tile)
     {
-        patch_range_per_tile[2*prv_tile + 1] = cur_patch;
-        patch_range_per_tile[2*cur_tile] = cur_patch;
+        patch_range_per_tile[2 * prv_tile + 1] = cur_patch;
+        patch_range_per_tile[2 * cur_tile] = cur_patch;
     }
 }
 
-
-__global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
+__global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     const int width,
     const int height,
     const int *__restrict__ patch_range_per_tile,
@@ -162,19 +161,18 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     const int2 range = {patch_range_per_tile[2 * tile_idx],
                         patch_range_per_tile[2 * tile_idx + 1]};
 
-	const int gs_num = range.y - range.x;
+    const int gs_num = range.y - range.x;
 
     // not patch for this tile.
     if (gs_num == 0)
         return;
 
-	bool thread_is_finished = !inside;
+    bool thread_is_finished = !inside;
 
-	__shared__ float2 shared_pos2d[BLOCK_SIZE];
-	__shared__ float3 shared_cinv2d[BLOCK_SIZE];
-    __shared__ float  shared_alpha[BLOCK_SIZE];
+    __shared__ float2 shared_pos2d[BLOCK_SIZE];
+    __shared__ float3 shared_cinv2d[BLOCK_SIZE];
+    __shared__ float shared_alpha[BLOCK_SIZE];
     __shared__ float3 shared_color[BLOCK_SIZE];
-
 
     float3 finial_color = {0, 0, 0};
 
@@ -183,7 +181,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
     int cont = 0;
     int cont_tmp = 0;
 
-    // for all 2d gaussian 
+    // for all 2d gaussian
     for (int i = 0; i < gs_num; i++)
     {
         int finished_thread_num = __syncthreads_count(thread_is_finished);
@@ -210,7 +208,7 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
             __syncthreads();
         }
 
-        if(thread_is_finished)
+        if (thread_is_finished)
             continue;
 
         // get 2d gaussian info for current tile (pix share the same info within the tile)
@@ -224,15 +222,15 @@ __global__ void  draw __launch_bounds__(BLOCK * BLOCK)(
 
         // forward.md (5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
-        float maha_dist = max(0.0f,  mahaSqDist(cinv, d));
+        float maha_dist = max(0.0f, mahaSqDist(cinv, d));
 
-        float alpha_prime = min(0.99f, alpha * exp( -0.5f * maha_dist));
+        float alpha_prime = min(0.99f, alpha * exp(-0.5f * maha_dist));
         if (alpha_prime < 0.002f)
             continue;
 
         // forward.md (5)
-        finial_color +=  tau * alpha_prime * color;
-        cont = cont_tmp;   // how many gs contribute to this pixel. 
+        finial_color += tau * alpha_prime * color;
+        cont = cont_tmp; // how many gs contribute to this pixel.
 
         // forward.md (5.2)
         tau = tau * (1.f - alpha_prime);
@@ -270,25 +268,24 @@ __global__ void inverseCov2D(
 
     const int gs_id = blockIdx.x * blockDim.x + threadIdx.x;
 
-	if (gs_id >= gs_num)
-		return;
+    if (gs_id >= gs_num)
+        return;
     // forward.md 5.3
     const float a = cov2d[gs_id * 3];
     const float b = cov2d[gs_id * 3 + 1];
     const float c = cov2d[gs_id * 3 + 2];
 
-    const float det = a*c - b*b;
+    const float det = a * c - b * b;
     if (det == 0.0f)
-		return;
+        return;
 
-    const float det_inv = 1.f/det;
-    cinv2d[gs_id * 3 + 0] =  det_inv * c;
+    const float det_inv = 1.f / det;
+    cinv2d[gs_id * 3 + 0] = det_inv * c;
     cinv2d[gs_id * 3 + 1] = -det_inv * b;
-    cinv2d[gs_id * 3 + 2] =  det_inv * a;
-    areas[gs_id * 2 + 0] =  3 * sqrt(abs(a));
-    areas[gs_id * 2 + 1] =  3 * sqrt(abs(c));
+    cinv2d[gs_id * 3 + 2] = det_inv * a;
+    areas[gs_id * 2 + 0] = 3 * sqrt(abs(a));
+    areas[gs_id * 2 + 1] = 3 * sqrt(abs(c));
 }
-
 
 __global__ void computeCov3D(
     int32_t gs_num,
@@ -299,7 +296,7 @@ __global__ void computeCov3D(
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i >= gs_num)
-		return;
+        return;
 
     float w = rots[i * 4 + 0];
     float x = rots[i * 4 + 1];
@@ -327,7 +324,6 @@ __global__ void computeCov3D(
     cov3ds[i * 6 + 5] = Sigma(2, 2);
 }
 
-
 __global__ void computeCov2D(
     int32_t gs_num,
     const float *__restrict__ cov3ds,
@@ -340,7 +336,7 @@ __global__ void computeCov2D(
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i >= gs_num)
-		return;
+        return;
 
     const float x = pcs[i * 3 + 0];
     const float y = pcs[i * 3 + 1];
@@ -393,11 +389,11 @@ __global__ void project(
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i >= gs_num)
-		return;
+        return;
 
-    Matrix<3, 1> pw = {pws[i * 3 + 0], pws[i * 3 + 1], pws[i * 3 + 2]}; 
+    Matrix<3, 1> pw = {pws[i * 3 + 0], pws[i * 3 + 1], pws[i * 3 + 2]};
 
-    Matrix<3, 1> _tcw = {tcw[0], tcw[1], tcw[2]}; 
+    Matrix<3, 1> _tcw = {tcw[0], tcw[1], tcw[2]};
 
     Matrix<3, 3> _Rcw = {
         Rcw[0], Rcw[1], Rcw[2],
@@ -427,85 +423,231 @@ __global__ void sh2Color(
     const float *__restrict__ pws,
     const float *__restrict__ twc,
     const int sh_dim,
-    float *__restrict__ colors)
+    float *__restrict__ colors,
+    const bool calc_J,
+    float *__restrict__ dc_dshs,
+    float *__restrict__ dc_dpws)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= gs_num)
         return;
 
+    float dc_dsh1, dc_dsh2, dc_dsh3;
+    float dc_dsh4, dc_dsh5, dc_dsh6;
+    float dc_dsh7, dc_dsh8, dc_dsh9;
+    float dc_dsh10, dc_dsh11, dc_dsh12;
+    float dc_dsh13, dc_dsh14, dc_dsh15;
+
+    float3 sh1, sh2, sh3;
+    float3 sh4, sh5, sh6;
+    float3 sh7, sh8, sh9;
+    float3 sh10, sh11, sh12;
+    float3 sh13, sh14, sh15;
+
+    float d0, d1, d2, normd;
+    float x, y, z;
+    float xx, yy, zz, xy, xz, yz;
+
     // level0
-    float3 sh00 = {shs[i * sh_dim + 0], shs[i * sh_dim + 1], shs[i * sh_dim + 2]};
+    float3 sh0 = {shs[i * sh_dim + 0], shs[i * sh_dim + 1], shs[i * sh_dim + 2]};
     float3 color = {0.5f, 0.5f, 0.5f};
-    color += SH_C0_0 * sh00;
+    color += SH_C0_0 * sh0;
 
     if (sh_dim > 3)
     {
         // level1
-        float x = pws[3 * i + 0] - twc[0];
-        float y = pws[3 * i + 1] - twc[1];
-        float z = pws[3 * i + 2] - twc[2];
+        d0 = pws[3 * i + 0] - twc[0];
+        d1 = pws[3 * i + 1] - twc[1];
+        d2 = pws[3 * i + 2] - twc[2];
 
-        float norm = sqrt(x*x + y*y + z*z);
-        x = x / norm;
-        y = y / norm;
-        z = z / norm;
+        normd = sqrt(d0 * d0 + d1 * d1 + d2 * d2);
+        x = d0 / normd;
+        y = d1 / normd;
+        z = d2 / normd;
 
-        float3 sh10 = {shs[i * sh_dim + 3], shs[i * sh_dim + 4], shs[i * sh_dim + 5]};
-        float3 sh11 = {shs[i * sh_dim + 6], shs[i * sh_dim + 7], shs[i * sh_dim + 8]};
-        float3 sh12 = {shs[i * sh_dim + 9], shs[i * sh_dim + 10], shs[i * sh_dim + 11]};
-        color += SH_C1_0 * y * sh10 +
-                 SH_C1_1 * z * sh11 +
-                 SH_C1_2 * x * sh12;
+        sh1 = {shs[i * sh_dim + 3], shs[i * sh_dim + 4], shs[i * sh_dim + 5]};
+        sh2 = {shs[i * sh_dim + 6], shs[i * sh_dim + 7], shs[i * sh_dim + 8]};
+        sh3 = {shs[i * sh_dim + 9], shs[i * sh_dim + 10], shs[i * sh_dim + 11]};
+
+        dc_dsh1 = SH_C1_0 * y;
+        dc_dsh2 = SH_C1_1 * z;
+        dc_dsh3 = SH_C1_2 * x;
+
+        color += dc_dsh1 * sh1 + dc_dsh2 * sh2 + dc_dsh3 * sh3;
 
         if (sh_dim > 12)
         {
             // level2
-            const float xx = x * x;
-            const float yy = y * y;
-            const float zz = z * z;
-            const float xy = x * y;
-            const float yz = y * z;
-            const float xz = x * z;
-            float3 sh20 = {shs[i * sh_dim + 12], shs[i * sh_dim + 13], shs[i * sh_dim + 14]};
-            float3 sh21 = {shs[i * sh_dim + 15], shs[i * sh_dim + 16], shs[i * sh_dim + 17]};
-            float3 sh22 = {shs[i * sh_dim + 18], shs[i * sh_dim + 19], shs[i * sh_dim + 20]};
-            float3 sh23 = {shs[i * sh_dim + 21], shs[i * sh_dim + 22], shs[i * sh_dim + 23]};
-            float3 sh24 = {shs[i * sh_dim + 24], shs[i * sh_dim + 25], shs[i * sh_dim + 26]};
-            color += SH_C2_0 * xy * sh20 +
-                     SH_C2_1 * yz * sh21 +
-                     SH_C2_2 * (2.0f * zz - xx - yy) * sh22 +
-                     SH_C2_3 * xz * sh23 +
-                     SH_C2_4 * (xx - yy) * sh24;
+            xx = x * x;
+            yy = y * y;
+            zz = z * z;
+            xy = x * y;
+            yz = y * z;
+            xz = x * z;
+            sh4 = {shs[i * sh_dim + 12], shs[i * sh_dim + 13], shs[i * sh_dim + 14]};
+            sh5 = {shs[i * sh_dim + 15], shs[i * sh_dim + 16], shs[i * sh_dim + 17]};
+            sh6 = {shs[i * sh_dim + 18], shs[i * sh_dim + 19], shs[i * sh_dim + 20]};
+            sh7 = {shs[i * sh_dim + 21], shs[i * sh_dim + 22], shs[i * sh_dim + 23]};
+            sh8 = {shs[i * sh_dim + 24], shs[i * sh_dim + 25], shs[i * sh_dim + 26]};
+
+            dc_dsh4 = SH_C2_0 * xy;
+            dc_dsh5 = SH_C2_1 * yz;
+            dc_dsh6 = SH_C2_2 * (2.0f * zz - xx - yy);
+            dc_dsh7 = SH_C2_3 * xz;
+            dc_dsh8 = SH_C2_4 * (xx - yy);
+
+            color += dc_dsh4 * sh4 + dc_dsh5 * sh5 + dc_dsh6 * sh6 + dc_dsh7 * sh7 + dc_dsh8 * sh8;
+
             if (sh_dim > 27)
             {
                 // level3
-                float3 sh30 = {shs[i * sh_dim + 27], shs[i * sh_dim + 28], shs[i * sh_dim + 29]};
-                float3 sh31 = {shs[i * sh_dim + 30], shs[i * sh_dim + 31], shs[i * sh_dim + 32]};
-                float3 sh32 = {shs[i * sh_dim + 33], shs[i * sh_dim + 34], shs[i * sh_dim + 35]};
-                float3 sh33 = {shs[i * sh_dim + 36], shs[i * sh_dim + 37], shs[i * sh_dim + 38]};
-                float3 sh34 = {shs[i * sh_dim + 39], shs[i * sh_dim + 40], shs[i * sh_dim + 41]};
-                float3 sh35 = {shs[i * sh_dim + 42], shs[i * sh_dim + 43], shs[i * sh_dim + 44]};
-                float3 sh36 = {shs[i * sh_dim + 45], shs[i * sh_dim + 46], shs[i * sh_dim + 47]};
-                if(i == 0)
-                {
-                    float3 c31 = SH_C3_1 * xy * z * sh31 ;
-                    float3 c32 = SH_C3_2 * y * (4.0f * zz - xx - yy) * sh32;
-                    float3 c33 = SH_C3_3 * z * (2.0f * zz - 3.0f * xx - 3.0f * yy) * sh33;
-                    float3 c34 = SH_C3_4 * x * (4.0f * zz - xx - yy) * sh34;
-                    float3 c35 = SH_C3_5 * z * (xx - yy) * sh35;
-                    float3 c36 = SH_C3_6 * x * (xx - 3.0f * yy) * sh36;
-                    float3 c = color + c31 + c32 + c33 + c34 + c35 + c36;
-                }
-                color += SH_C3_0 * y * (3.0f * xx - yy) * sh30 +
-                         SH_C3_1 * xy * z * sh31 +
-                         SH_C3_2 * y * (4.0f * zz - xx - yy) * sh32 +
-                         SH_C3_3 * z * (2.0f * zz - 3.0f * xx - 3.0f * yy) * sh33 +
-                         SH_C3_4 * x * (4.0f * zz - xx - yy) * sh34 +
-                         SH_C3_5 * z * (xx - yy) * sh35 +
-                         SH_C3_6 * x * (xx - 3.0f * yy) * sh36;
+                sh9 = {shs[i * sh_dim + 27], shs[i * sh_dim + 28], shs[i * sh_dim + 29]};
+                sh10 = {shs[i * sh_dim + 30], shs[i * sh_dim + 31], shs[i * sh_dim + 32]};
+                sh11 = {shs[i * sh_dim + 33], shs[i * sh_dim + 34], shs[i * sh_dim + 35]};
+                sh12 = {shs[i * sh_dim + 36], shs[i * sh_dim + 37], shs[i * sh_dim + 38]};
+                sh13 = {shs[i * sh_dim + 39], shs[i * sh_dim + 40], shs[i * sh_dim + 41]};
+                sh14 = {shs[i * sh_dim + 42], shs[i * sh_dim + 43], shs[i * sh_dim + 44]};
+                sh15 = {shs[i * sh_dim + 45], shs[i * sh_dim + 46], shs[i * sh_dim + 47]};
+
+                dc_dsh9 = SH_C3_0 * y * (3.0f * xx - yy);
+                dc_dsh10 = SH_C3_1 * xy * z;
+                dc_dsh11 = SH_C3_2 * y * (4.0f * zz - xx - yy);
+                dc_dsh12 = SH_C3_3 * z * (2.0f * zz - 3.0f * xx - 3.0f * yy);
+                dc_dsh13 = SH_C3_4 * x * (4.0f * zz - xx - yy);
+                dc_dsh14 = SH_C3_5 * z * (xx - yy);
+                dc_dsh15 = SH_C3_6 * x * (xx - 3.0f * yy);
+
+                color += dc_dsh9 * sh9 + dc_dsh10 * sh10 + dc_dsh11 * sh11 + dc_dsh12 * sh12 +
+                         dc_dsh13 * sh13 + dc_dsh14 * sh14 +  dc_dsh15 * sh15;
             }
         }
     }
+
+    if (calc_J)
+    {
+        const float normd3_inv = 1.f/(normd*normd*normd);
+        const float normd_inv = 1.f/normd;
+        const float dr_dpw00 = -d0*d0*normd3_inv + normd_inv;
+        const float dr_dpw11 = -d1*d1*normd3_inv + normd_inv;
+        const float dr_dpw22 = -d2*d2*normd3_inv + normd_inv;
+        const float dr_dpw01 = -d0*d1*normd3_inv;
+        const float dr_dpw02 = -d0*d2*normd3_inv;
+        const float dr_dpw12 = -d1*d2*normd3_inv;
+        Matrix<3, 3> dr_dpw = {dr_dpw00, dr_dpw01, dr_dpw02, dr_dpw01, dr_dpw11, dr_dpw12, dr_dpw02, dr_dpw12, dr_dpw22};
+        float3 dc_dr0 = {0, 0, 0};
+        float3 dc_dr1 = {0, 0, 0};
+        float3 dc_dr2 = {0, 0, 0};
+
+        dc_dshs[3 * sh_dim * i + 0] = SH_C0_0;
+        dc_dshs[3 * sh_dim * i + 0 + sh_dim + 1] = SH_C0_0;
+        dc_dshs[3 * sh_dim * i + 0 + 2 * sh_dim + 2] = SH_C0_0;
+        // dc_dshs[9 * sh_dim * i + 0] = SH_C0_0;
+        if (sh_dim > 3)
+        {
+            dc_dshs[3 * sh_dim * i + 3 * 1] = dc_dsh1;
+            dc_dshs[3 * sh_dim * i + 3 * 2] = dc_dsh2;
+            dc_dshs[3 * sh_dim * i + 3 * 3] = dc_dsh3;
+
+            dc_dshs[3 * sh_dim * i + 3 * 1 + sh_dim + 1] = dc_dsh1;
+            dc_dshs[3 * sh_dim * i + 3 * 2 + sh_dim + 1] = dc_dsh2;
+            dc_dshs[3 * sh_dim * i + 3 * 3 + sh_dim + 1] = dc_dsh3;
+
+            dc_dshs[3 * sh_dim * i + 3 * 1 + 2 * sh_dim + 2] = dc_dsh1;
+            dc_dshs[3 * sh_dim * i + 3 * 2 + 2 * sh_dim + 2] = dc_dsh2;
+            dc_dshs[3 * sh_dim * i + 3 * 3 + 2 * sh_dim + 2] = dc_dsh3;
+
+
+            dc_dr0 += SH_C1_2 * sh3;
+            dc_dr1 += SH_C1_0 * sh1;
+            dc_dr2 += SH_C1_1 * sh2;
+            if (sh_dim > 12)
+            {
+                dc_dshs[3 * sh_dim * i + 3 * 4] = dc_dsh4;
+                dc_dshs[3 * sh_dim * i + 3 * 5] = dc_dsh5;
+                dc_dshs[3 * sh_dim * i + 3 * 6] = dc_dsh6;
+                dc_dshs[3 * sh_dim * i + 3 * 7] = dc_dsh7;
+                dc_dshs[3 * sh_dim * i + 3 * 8] = dc_dsh8;
+
+                dc_dshs[3 * sh_dim * i + 3 * 4 + sh_dim + 1] = dc_dsh4;
+                dc_dshs[3 * sh_dim * i + 3 * 5 + sh_dim + 1] = dc_dsh5;
+                dc_dshs[3 * sh_dim * i + 3 * 6 + sh_dim + 1] = dc_dsh6;
+                dc_dshs[3 * sh_dim * i + 3 * 7 + sh_dim + 1] = dc_dsh7;
+                dc_dshs[3 * sh_dim * i + 3 * 8 + sh_dim + 1] = dc_dsh8;
+
+                dc_dshs[3 * sh_dim * i + 3 * 4 + 2 * sh_dim + 2] = dc_dsh4;
+                dc_dshs[3 * sh_dim * i + 3 * 5 + 2 * sh_dim + 2] = dc_dsh5;
+                dc_dshs[3 * sh_dim * i + 3 * 6 + 2 * sh_dim + 2] = dc_dsh6;
+                dc_dshs[3 * sh_dim * i + 3 * 7 + 2 * sh_dim + 2] = dc_dsh7;
+                dc_dshs[3 * sh_dim * i + 3 * 8 + 2 * sh_dim + 2] = dc_dsh8;
+
+                dc_dr0 += SH_C2_0 * y * sh4 - SH_C2_2 * 2 * x * sh6 + SH_C2_3 * z * sh7 + SH_C2_4 * 2 * x * sh8;
+                dc_dr1 += SH_C2_0 * x * sh4 + SH_C2_1 * z * sh5 - SH_C2_2 * 2.0 * y * sh6 - SH_C2_4 * 2 * y * sh8;
+                dc_dr2 += SH_C2_1 * y * sh5 + SH_C2_2 * (4.0 * z) * sh6 + SH_C2_3 * x * sh7;
+
+                if (sh_dim > 27)
+                {
+                    dc_dshs[9 * sh_dim * i + 3 * 9] = dc_dsh9;
+                    dc_dshs[9 * sh_dim * i + 3 * 10] = dc_dsh10;
+                    dc_dshs[9 * sh_dim * i + 3 * 11] = dc_dsh11;
+                    dc_dshs[9 * sh_dim * i + 3 * 12] = dc_dsh12;
+                    dc_dshs[9 * sh_dim * i + 3 * 13] = dc_dsh13;
+                    dc_dshs[9 * sh_dim * i + 3 * 14] = dc_dsh14;
+                    dc_dshs[9 * sh_dim * i + 3 * 15] = dc_dsh15;
+                    
+                    dc_dshs[9 * sh_dim * i + 3 * 9  + sh_dim + 1] = dc_dsh9;
+                    dc_dshs[9 * sh_dim * i + 3 * 10 + sh_dim + 1] = dc_dsh10;
+                    dc_dshs[9 * sh_dim * i + 3 * 11 + sh_dim + 1] = dc_dsh11;
+                    dc_dshs[9 * sh_dim * i + 3 * 12 + sh_dim + 1] = dc_dsh12;
+                    dc_dshs[9 * sh_dim * i + 3 * 13 + sh_dim + 1] = dc_dsh13;
+                    dc_dshs[9 * sh_dim * i + 3 * 14 + sh_dim + 1] = dc_dsh14;
+                    dc_dshs[9 * sh_dim * i + 3 * 15 + sh_dim + 1] = dc_dsh15;
+
+                    dc_dshs[9 * sh_dim * i + 3 * 9  + 2 * sh_dim + 2] = dc_dsh9;
+                    dc_dshs[9 * sh_dim * i + 3 * 10 + 2 * sh_dim + 2] = dc_dsh10;
+                    dc_dshs[9 * sh_dim * i + 3 * 11 + 2 * sh_dim + 2] = dc_dsh11;
+                    dc_dshs[9 * sh_dim * i + 3 * 12 + 2 * sh_dim + 2] = dc_dsh12;
+                    dc_dshs[9 * sh_dim * i + 3 * 13 + 2 * sh_dim + 2] = dc_dsh13;
+                    dc_dshs[9 * sh_dim * i + 3 * 14 + 2 * sh_dim + 2] = dc_dsh14;
+                    dc_dshs[9 * sh_dim * i + 3 * 15 + 2 * sh_dim + 2] = dc_dsh15;
+
+                    dc_dr0 += 6.0 * SH_C3_0 * sh9 * x * y +
+                              SH_C3_1 * sh10 * yz -
+                              2 * SH_C3_2 * sh11 * xy -
+                              6.0 * SH_C3_3 * sh12 * xz +
+                              SH_C3_4 * sh13 * (4.0 * zz - 3.0 * xx - yy) +
+                              2 * SH_C3_5 * sh14 * xz +
+                              SH_C3_6 * sh15 * (3 * xx - 3 * yy);
+                    dc_dr1 += SH_C3_0 * sh9 * (-2 * yy + 3.0 * xx - yy) +
+                              SH_C3_1 * sh10 * xz +
+                              SH_C3_2 * sh11 * (-xx - yy + 4.0 * zz - 2 * yy) -
+                              6.0 * SH_C3_3 * sh12 * yz + SH_C3_4 * sh13 * (-2 * xy) -
+                              2 * SH_C3_5 * sh14 * yz -
+                              6.0 * SH_C3_6 * sh15 * xy;
+                    dc_dr2 += SH_C3_1 * sh10 * xy +
+                              8.0 * SH_C3_2 * sh11 * yz +
+                              SH_C3_3 * sh12 * (-3.0 * xx - 3.0 * yy + 6.0 * zz) +
+                              8.0 * SH_C3_4 * sh13 * xz +
+                              SH_C3_5 * sh14 * (xx - yy);
+                }
+            }
+        }
+        Matrix<3, 3> dc_dr = {dc_dr0.x, dc_dr1.x, dc_dr2.x,
+                              dc_dr0.y, dc_dr1.y, dc_dr2.y,
+                              dc_dr0.z, dc_dr1.z, dc_dr2.z};
+        Matrix<3, 3> dc_dpw = dc_dr * dr_dpw;
+        dc_dpws[9 * i + 0] = dc_dpw(0, 0);
+        dc_dpws[9 * i + 1] = dc_dpw(0, 1);
+        dc_dpws[9 * i + 2] = dc_dpw(0, 2);
+        dc_dpws[9 * i + 3] = dc_dpw(1, 0);
+        dc_dpws[9 * i + 4] = dc_dpw(1, 1);
+        dc_dpws[9 * i + 5] = dc_dpw(1, 2);
+        dc_dpws[9 * i + 6] = dc_dpw(2, 0);
+        dc_dpws[9 * i + 7] = dc_dpw(2, 1);
+        dc_dpws[9 * i + 8] = dc_dpw(2, 2);
+    }
+//
+    //}
+
     colors[3 * i + 0] = color.x;
     colors[3 * i + 1] = color.y;
     colors[3 * i + 2] = color.z;
