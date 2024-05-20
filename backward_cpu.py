@@ -379,21 +379,23 @@ def sh2color(sh, pw, twc, calc_J=False):
         return color
 
 
-def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
+def calc_loss(alphas, cov2ds, colors, us, image_gt, calc_J=False):
+    height, width, _ = image_gt.shape
     image = np.zeros([height, width, 3])
     xs = np.indices([width, height]).reshape(2, -1).T
     for x in xs:
         gamma = calc_gamma(alphas, cov2ds, colors, us, x)
         image[x[1], x[0]] = gamma
     criterion = nn.L1Loss()
-    image_tensor = torch.tensor(image.transpose([2, 0, 1]), requires_grad=True)
-    image_gt = torch.zeros([3, height, width], dtype=torch.double)
-    loss = criterion(image_tensor, image_gt)
+    image_gt = torch.tensor(image_gt.transpose([2, 0, 1]))
+    image = torch.tensor(image.transpose([2, 0, 1]))
+    image = image.requires_grad_()
+    loss = criterion(image, image_gt)
     loss_val = loss.detach().numpy().reshape(1)
     if (calc_J):
         contrib = np.ones([height, width])
         loss.backward()
-        dloss_dgammas = image_tensor.grad.detach().numpy()
+        dloss_dgammas = image.grad.detach().numpy()
         gs_num = alphas.shape[0]
         dloss_dalphas = np.zeros([gs_num, 1])
         dloss_dcov2ds = np.zeros([gs_num, 3])
@@ -418,13 +420,14 @@ def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
         return loss_val
 
 
-def backward(rots, scales, shs, alphas, pws, calc_J=False):
+def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt, calc_J=False):
     gs_num = alphas.reshape(-1).shape[0]
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])
     pcs = np.zeros([gs_num, 3])
     cov3ds = np.zeros([gs_num, 6])
     cov2ds = np.zeros([gs_num, 3])
+    twc = np.linalg.inv(Rcw) @ (-tcw)
     if (calc_J is True):
         dpc_dpws = np.zeros([gs_num, 3, 3])
         du_dpcs = np.zeros([gs_num, 2, 3])
@@ -442,9 +445,9 @@ def backward(rots, scales, shs, alphas, pws, calc_J=False):
             cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
                 cov3ds[i], pcs[i], Rcw, fx, fy, True)
             colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
-                shs[i], pws[i], cam_center, True)
+                shs[i], pws[i], twc, True)
         loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
-            alphas, cov2ds, colors, us, width, height, True)
+            alphas, cov2ds, colors, us, image_gt, True)
         dloss_dcov2ds = dloss_dcov2ds.reshape([gs_num, 1, 3])
         dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
         dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
@@ -456,11 +459,6 @@ def backward(rots, scales, shs, alphas, pws, calc_J=False):
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
-        pass
-        # array([[-0.01450955, -0.01342946,  0.00752166, -0.00673319,  0.00402028,
-        #         0.0051299, -0.01094971, -0.0716655,  0.01453515, -0.01989821,
-        #         -0.00567057,  0.00334582]])
-
         return loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws
     else:
         rots = rots.reshape([-1, 4])
@@ -474,8 +472,8 @@ def backward(rots, scales, shs, alphas, pws, calc_J=False):
             cov3ds[i] = compute_cov_3d(
                 rots[i], scales[i], False)
             cov2ds[i] = compute_cov_2d(cov3ds[i], pcs[i], Rcw, fx, fy, False)
-            colors[i] = sh2color(shs[i], pws[i], cam_center, False)
-        loss = calc_loss(alphas, cov2ds, colors, us, width, height, False)
+            colors[i] = sh2color(shs[i], pws[i], twc, False)
+        loss = calc_loss(alphas, cov2ds, colors, us, image_gt, False)
         return loss
 
 
@@ -518,21 +516,15 @@ if __name__ == "__main__":
     Rcw = np.array([[0.89699204,  0.06525223,  0.43720409],
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
-
+    twc = np.linalg.inv(Rcw) @ (-tcw)
     width = int(32)  # 1957  # 979
     height = int(16)  # 1091  # 546
     fx = 16
     fy = 16
     cx = width/2.
     cy = height/2.
-    K = np.array([[fx, 0, cx],
-                  [0, fy, cy],
-                  [0, 0, 1.]])
 
-    Tcw = np.eye(4)
-    Tcw[:3, :3] = Rcw
-    Tcw[:3, 3] = tcw
-    cam_center = np.linalg.inv(Tcw)[:3, 3]
+    image_gt = np.zeros([height, width, 3])
 
     pws = gs['pos']
     gs_num = gs['pos'].shape[0]
@@ -576,11 +568,11 @@ if __name__ == "__main__":
         print("check dcov2d%d_dpc%d: " % (i, i), check(dcov2d_dpc_numerical, dcov2d_dpcs[i]))
 
         # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-        colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(gs['sh'][i], pws[i], cam_center, True)
+        colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(gs['sh'][i], pws[i], twc, True)
         dcolor_dsh_numerical = numerical_derivative(
-            sh2color, [gs['sh'][i], pws[i], cam_center], 0)
+            sh2color, [gs['sh'][i], pws[i], twc], 0)
         dcolor_dpw_numerical = numerical_derivative(
-            sh2color, [gs['sh'][i], pws[i], cam_center], 1)
+            sh2color, [gs['sh'][i], pws[i], twc], 1)
         print("check dcolor%d_dsh%d: " % (i, i), check(
             dcolor_dsh_numerical, dcolor_dshs[i]))
         print("check dcolor%d_dsh%d: " % (i, i), check(
@@ -645,15 +637,15 @@ if __name__ == "__main__":
             dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]))
 
     loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
-        alphas, cov2ds, colors, us, width, height, True)
+        alphas, cov2ds, colors, us, image_gt, True)
     dloss_dalpha_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, width, height], 0)
+        calc_loss, [alphas, cov2ds, colors, us, image_gt], 0)
     dloss_dcov2d_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, width, height], 1)
+        calc_loss, [alphas, cov2ds, colors, us, image_gt], 1)
     dloss_dcolor_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, width, height], 2)
+        calc_loss, [alphas, cov2ds, colors, us, image_gt], 2)
     dloss_du_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, width, height], 3)
+        calc_loss, [alphas, cov2ds, colors, us, image_gt], 3)
 
     print("check dloss_dalpha: ", check(dloss_dalpha_numerial, dloss_dalphas))
     print("check dloss_dcov2d: ", check(dloss_dcov2d_numerial, dloss_dcov2ds))
@@ -661,7 +653,7 @@ if __name__ == "__main__":
     print("check dloss_du: ", check(dloss_du_numerial, dloss_dus))
 
     loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
-        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], True)
+        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
     rots = gs['rot'].reshape(-1)
     scales = gs['scale'].reshape(-1)
     shs = gs['sh'].reshape(-1)
@@ -669,15 +661,15 @@ if __name__ == "__main__":
     pws = gs['pos'].reshape(-1)
 
     dloss_drots_numerial = numerical_derivative(
-        backward, [rots, scales, shs, alphas, pws], 0)
+        backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 0)
     dloss_dscales_numerial = numerical_derivative(
-        backward, [rots, scales, shs, alphas, pws], 1)
+        backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 1)
     dloss_dshs_numerial = numerical_derivative(
-        backward, [rots, scales, shs, alphas, pws], 2)
+        backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 2)
     dloss_dalphas_numerial = numerical_derivative(
-        backward, [rots, scales, shs, alphas, pws], 3)
+        backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 3)
     dloss_dpws_numerial = numerical_derivative(
-        backward, [rots, scales, shs, alphas, pws], 4)
+        backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 4)
     print("check dloss_drots: ", check(dloss_drots_numerial.reshape(-1), dloss_drots.reshape(-1)))
     print("check dloss_dscales: ", check(dloss_dscales_numerial.reshape(-1), dloss_dscales.reshape(-1)))
     print("check dloss_dshs: ", check(dloss_dshs_numerial.reshape(-1), dloss_dshs.reshape(-1)))
