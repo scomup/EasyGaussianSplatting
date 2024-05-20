@@ -274,19 +274,21 @@ def sh2color(sh, pw, twc, calc_J=False):
     dc_dsh = np.zeros([sh.shape[0]//3])
     dc_dpw = np.zeros([3, 3])
     dc_dsh[0] = SH_C0_0
-    color = dc_dsh[0] * sh[0:3] + 0.5
+    sh = sh.reshape([-1, 3])
+    color = dc_dsh[0] * sh[0] + 0.5
     if (sh_dim > 3):
-        ray_dir = pw - twc
-        ray_dir /= np.linalg.norm(ray_dir)
-        x, y, z = ray_dir
+        d = pw - twc
+        normd = np.linalg.norm(d)
+        r = d / normd
+        x, y, z = r
 
         dc_dsh[1] = SH_C1_0 * y
         dc_dsh[2] = SH_C1_1 * z
         dc_dsh[3] = SH_C1_2 * x
         color = color + \
-            dc_dsh[1] * sh[3:6] + \
-            dc_dsh[2] * sh[6:9] + \
-            dc_dsh[3] * sh[9:12]
+            dc_dsh[1] * sh[1] + \
+            dc_dsh[2] * sh[2] + \
+            dc_dsh[3] * sh[3]
 
         if (sh_dim > 12):
             xx = x * x
@@ -302,11 +304,11 @@ def sh2color(sh, pw, twc, calc_J=False):
             dc_dsh[8] = SH_C2_4 * (xx - yy)
 
             color = color + \
-                dc_dsh[4] * sh[12:15] + \
-                dc_dsh[5] * sh[15:18] + \
-                dc_dsh[6] * sh[18:21] + \
-                dc_dsh[7] * sh[21:24] + \
-                dc_dsh[8] * sh[24:27]
+                dc_dsh[4] * sh[4] + \
+                dc_dsh[5] * sh[5] + \
+                dc_dsh[6] * sh[6] + \
+                dc_dsh[7] * sh[7] + \
+                dc_dsh[8] * sh[8]
 
             if (sh_dim > 27):
                 dc_dsh[9] = SH_C3_0 * y * (3.0 * xx - yy)
@@ -318,19 +320,62 @@ def sh2color(sh, pw, twc, calc_J=False):
                 dc_dsh[15] = SH_C3_6 * x * (xx - 3.0 * yy)
 
                 color = color +  \
-                    dc_dsh[9] * sh[27:30] + \
-                    dc_dsh[10] * sh[30:33] + \
-                    dc_dsh[11] * sh[33:36] + \
-                    dc_dsh[12] * sh[36:39] + \
-                    dc_dsh[13] * sh[39:42] + \
-                    dc_dsh[14] * sh[42:45] + \
-                    dc_dsh[15] * sh[45:48]
+                    dc_dsh[9] * sh[9] + \
+                    dc_dsh[10] * sh[10] + \
+                    dc_dsh[11] * sh[11] + \
+                    dc_dsh[12] * sh[12] + \
+                    dc_dsh[13] * sh[13] + \
+                    dc_dsh[14] * sh[14] + \
+                    dc_dsh[15] * sh[15]
     if (calc_J):
-        dr_dpc = np.zeros([3, 3])
+        dc_dpc = np.zeros([3, 3])
+        if (sh_dim > 3):
+            dr_dpc = np.zeros([3, 3])
+            normd3_inv = 1/normd**3
+            normd_inv = 1/normd
+            dr_dpc[0, 0] = -d[0]*d[0]*normd3_inv + normd_inv
+            dr_dpc[1, 1] = -d[1]*d[1]*normd3_inv + normd_inv
+            dr_dpc[2, 2] = -d[2]*d[2]*normd3_inv + normd_inv
+            dr_dpc[0, 1] = -d[0]*d[1]*normd3_inv
+            dr_dpc[0, 2] = -d[0]*d[2]*normd3_inv
+            dr_dpc[1, 2] = -d[1]*d[2]*normd3_inv
+            dr_dpc[0, 1] = dr_dpc[1, 0]
+            dr_dpc[0, 2] = dr_dpc[2, 0]
+            dr_dpc[2, 1] = dr_dpc[1, 2]
 
-        return color, dc_dsh
+            dc_dr = np.zeros([3, 3])
+            dc_dr[:, 0] += SH_C1_2 * sh[3]
+            dc_dr[:, 1] += SH_C1_0 * sh[1]
+            dc_dr[:, 2] += SH_C1_1 * sh[2]
+            if (sh_dim > 12):
+                xx = x * x
+                yy = y * y
+                zz = z * z
+                xy = x * y
+                yz = y * z
+                xz = x * z
+                dc_dr[:, 0] += SH_C2_0 * y * sh[4] - SH_C2_2 * 2 * \
+                    x * sh[6] + SH_C2_3 * z * sh[7] + SH_C2_4 * 2 * x * sh[8]
+                dc_dr[:, 1] += SH_C2_0 * x * sh[4] + SH_C2_1 * z * sh[5] - \
+                    SH_C2_2 * 2.0 * y * sh[6] - SH_C2_4 * 2 * y * sh[8]
+                dc_dr[:, 2] += SH_C2_1 * y * sh[5] + SH_C2_2 * \
+                    (4.0 * z) * sh[6] + SH_C2_3 * x * sh[7]
+                print(dc_dr @ dr_dpc)
+
+        return color, dc_dsh, dc_dr @ dr_dpc
     else:
         return color
+
+
+sh = np.arange(27)
+# sh = np.array([1, 2, 3])
+pw = np.array([0.5, 0.6, -1.0])
+twc = np.array([0.23, -0.4, 0.45])
+dc_dpw0 = numerical_derivative(sh2color, [sh, pw, twc], 1)
+print(dc_dpw0)
+_, _, dc_dr = sh2color(sh, pw, twc, True)
+print("diff:", dc_dpw0 - dc_dr)
+exit(0)
 
 
 def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
