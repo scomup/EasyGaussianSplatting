@@ -271,24 +271,24 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
 
 def sh2color(sh, pw, twc, calc_J=False):
     sh_dim = sh.shape[0]
-    dc_dsh = np.zeros([sh.shape[0]//3])
+    dc_dsh = np.zeros([sh.shape[0]//3, 3, 3])
     dc_dpw = np.zeros([3, 3])
-    dc_dsh[0] = SH_C0_0
+    dc_dsh[0] = np.eye(3) * SH_C0_0
     sh = sh.reshape([-1, 3])
-    color = dc_dsh[0] * sh[0] + 0.5
+    color = dc_dsh[0] @ sh[0] + 0.5
     if (sh_dim > 3):
         d = pw - twc
         normd = np.linalg.norm(d)
         r = d / normd
         x, y, z = r
 
-        dc_dsh[1] = SH_C1_0 * y
-        dc_dsh[2] = SH_C1_1 * z
-        dc_dsh[3] = SH_C1_2 * x
+        dc_dsh[1] = np.eye(3) * SH_C1_0 * y
+        dc_dsh[2] = np.eye(3) * SH_C1_1 * z
+        dc_dsh[3] = np.eye(3) * SH_C1_2 * x
         color = color + \
-            dc_dsh[1] * sh[1] + \
-            dc_dsh[2] * sh[2] + \
-            dc_dsh[3] * sh[3]
+            dc_dsh[1] @ sh[1] + \
+            dc_dsh[2] @ sh[2] + \
+            dc_dsh[3] @ sh[3]
 
         if (sh_dim > 12):
             xx = x * x
@@ -297,36 +297,36 @@ def sh2color(sh, pw, twc, calc_J=False):
             xy = x * y
             yz = y * z
             xz = x * z
-            dc_dsh[4] = SH_C2_0 * xy
-            dc_dsh[5] = SH_C2_1 * yz
-            dc_dsh[6] = SH_C2_2 * (2.0 * zz - xx - yy)
-            dc_dsh[7] = SH_C2_3 * xz
-            dc_dsh[8] = SH_C2_4 * (xx - yy)
+            dc_dsh[4] = np.eye(3) * SH_C2_0 * xy
+            dc_dsh[5] = np.eye(3) * SH_C2_1 * yz
+            dc_dsh[6] = np.eye(3) * SH_C2_2 * (2.0 * zz - xx - yy)
+            dc_dsh[7] = np.eye(3) * SH_C2_3 * xz
+            dc_dsh[8] = np.eye(3) * SH_C2_4 * (xx - yy)
 
             color = color + \
-                dc_dsh[4] * sh[4] + \
-                dc_dsh[5] * sh[5] + \
-                dc_dsh[6] * sh[6] + \
-                dc_dsh[7] * sh[7] + \
-                dc_dsh[8] * sh[8]
+                dc_dsh[4] @ sh[4] + \
+                dc_dsh[5] @ sh[5] + \
+                dc_dsh[6] @ sh[6] + \
+                dc_dsh[7] @ sh[7] + \
+                dc_dsh[8] @ sh[8]
 
             if (sh_dim > 27):
-                dc_dsh[9] = SH_C3_0 * y * (3.0 * xx - yy)
-                dc_dsh[10] = SH_C3_1 * xy * z
-                dc_dsh[11] = SH_C3_2 * y * (4.0 * zz - xx - yy)
-                dc_dsh[12] = SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy)
-                dc_dsh[13] = SH_C3_4 * x * (4.0 * zz - xx - yy)
-                dc_dsh[14] = SH_C3_5 * z * (xx - yy)
-                dc_dsh[15] = SH_C3_6 * x * (xx - 3.0 * yy)
+                dc_dsh[9] = np.eye(3) * SH_C3_0 * y * (3.0 * xx - yy)
+                dc_dsh[10] = np.eye(3) * SH_C3_1 * xy * z
+                dc_dsh[11] = np.eye(3) * SH_C3_2 * y * (4.0 * zz - xx - yy)
+                dc_dsh[12] = np.eye(3) * SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy)
+                dc_dsh[13] = np.eye(3) * SH_C3_4 * x * (4.0 * zz - xx - yy)
+                dc_dsh[14] = np.eye(3) * SH_C3_5 * z * (xx - yy)
+                dc_dsh[15] = np.eye(3) * SH_C3_6 * x * (xx - 3.0 * yy)
 
                 color = color +  \
-                    dc_dsh[9] * sh[9] + \
-                    dc_dsh[10] * sh[10] + \
-                    dc_dsh[11] * sh[11] + \
-                    dc_dsh[12] * sh[12] + \
-                    dc_dsh[13] * sh[13] + \
-                    dc_dsh[14] * sh[14] + \
-                    dc_dsh[15] * sh[15]
+                    dc_dsh[9] @ sh[9] + \
+                    dc_dsh[10] @ sh[10] + \
+                    dc_dsh[11] @ sh[11] + \
+                    dc_dsh[12] @ sh[12] + \
+                    dc_dsh[13] @ sh[13] + \
+                    dc_dsh[14] @ sh[14] + \
+                    dc_dsh[15] @ sh[15]
     if (calc_J):
         dc_dpc = np.zeros([3, 3])
         if (sh_dim > 3):
@@ -374,7 +374,7 @@ def sh2color(sh, pw, twc, calc_J=False):
                         + SH_C3_3*sh[12]*(-3.0*xx - 3.0*yy + 6.0*zz)\
                         + 8.0*SH_C3_4*sh[13]*xz\
                         + SH_C3_5*sh[14]*(xx - yy)
-        return color, dc_dsh, dc_dr @ dr_dpc
+        return color, dc_dsh.transpose([2, 0, 1]).reshape(3, sh_dim), dc_dr @ dr_dpc
     else:
         return color
 
@@ -418,8 +418,70 @@ def calc_loss(alphas, cov2ds, colors, us, width, height, calc_J=False):
         return loss_val
 
 
+def backward(rots, scales, shs, alphas, pws, calc_J=False):
+    gs_num = alphas.reshape(-1).shape[0]
+    colors = np.zeros([gs_num, 3])
+    us = np.zeros([gs_num, 2])
+    pcs = np.zeros([gs_num, 3])
+    cov3ds = np.zeros([gs_num, 6])
+    cov2ds = np.zeros([gs_num, 3])
+    if (calc_J is True):
+        dpc_dpws = np.zeros([gs_num, 3, 3])
+        du_dpcs = np.zeros([gs_num, 2, 3])
+        dcov3d_drots = np.zeros([gs_num, 6, 4])
+        dcov3d_dscales = np.zeros([gs_num, 6, 3])
+        dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
+        dcov2d_dpcs = np.zeros([gs_num, 3, 3])
+        dcolor_dshs = np.zeros([gs_num, 3, shs.shape[1]])
+        dcolor_dpcs = np.zeros([gs_num, 3, 3])
+        for i in range(gs_num):
+            pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
+            us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
+            cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
+                rots[i], scales[i], True)
+            cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
+                cov3ds[i], pcs[i], Rcw, fx, fy, True)
+            colors[i], dcolor_dshs[i], dcolor_dpcs[i] = sh2color(
+                shs[i], pws[i], cam_center, True)
+        loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
+            alphas, cov2ds, colors, us, width, height, True)
+        dloss_dcov2ds = dloss_dcov2ds.reshape([gs_num, 1, 3])
+        dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
+        dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
+        dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
+        dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
+        dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
+        dloss_dshs = dloss_dcolors @ dcolor_dshs
+        dloss_dalphas = dloss_dalphas
+        dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
+            dloss_dcolors @ dcolor_dpcs @ dpc_dpws + \
+            dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
+        pass
+        # array([[-0.01450955, -0.01342946,  0.00752166, -0.00673319,  0.00402028,
+        #         0.0051299, -0.01094971, -0.0716655,  0.01453515, -0.01989821,
+        #         -0.00567057,  0.00334582]])
+
+        return loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws
+    else:
+        rots = rots.reshape([-1, 4])
+        scales = scales.reshape([-1, 3])
+        shs = shs.reshape([-1, 48])
+        alphas = alphas.reshape([-1, 1])
+        pws = pws.reshape([-1, 3])
+        for i in range(gs_num):
+            pcs[i] = transform(pws[i], Rcw, tcw, False)
+            us[i] = project(pcs[i], fx, fy, cx, cy, False)
+            cov3ds[i] = compute_cov_3d(
+                rots[i], scales[i], False)
+            cov2ds[i] = compute_cov_2d(cov3ds[i], pcs[i], Rcw, fx, fy, False)
+            colors[i] = sh2color(shs[i], pws[i], cam_center, False)
+        loss = calc_loss(alphas, cov2ds, colors, us, width, height, False)
+        return loss
+
+
 if __name__ == "__main__":
-    gs_data = np.random.rand(4, 59)
+    # gs_data = np.random.rand(4, 59)
+    gs_data = np.zeros([4, 59])
     gs_data0 = np.array([[0.,  0.,  0.,  # xyz
                         1.,  0.,  0., 0.,  # rot
                         0.5,  0.5,  0.5,  # size
@@ -486,7 +548,7 @@ if __name__ == "__main__":
     dcov3d_dscales = np.zeros([gs_num, 6, 3])
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-    dcolor_dshs = np.zeros([gs_num, gs['sh'].shape[1]//3])
+    dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
     dcolor_dpcs = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
         # step1. Transform pw to camera frame,
@@ -520,7 +582,7 @@ if __name__ == "__main__":
         dcolor_dpc_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], cam_center], 1)
         print("check dcolor%d_dsh%d: " % (i, i), check(
-            dcolor_dsh_numerical[0, range(0, 48, 3)], dcolor_dshs[i]))
+            dcolor_dsh_numerical, dcolor_dshs[i]))
         print("check dcolor%d_dsh%d: " % (i, i), check(
             dcolor_dpc_numerical, dcolor_dpcs[i]))
 
@@ -598,22 +660,26 @@ if __name__ == "__main__":
     print("check dloss_dcolor: ", check(dloss_dcolor_numerial, dloss_dcolors))
     print("check dloss_du: ", check(dloss_du_numerial, dloss_dus))
 
-    dloss_dcov2ds = dloss_dcov2ds.reshape([gs_num, 1, 3])
-    dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
-    dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
-    dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
+    loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
+        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], True)
+    rots = gs['rot'].reshape(-1)
+    scales = gs['scale'].reshape(-1)
+    shs = gs['sh'].reshape(-1)
+    alphas = gs['alpha'].reshape(-1)
+    pws = gs['pos'].reshape(-1)
 
-    dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
-    dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
-    dloss_dshs = dloss_dcolors @ dcov2d_dcov3ds
-    dloss_dalphas = dloss_dalphas
-    dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
-                 dloss_dcolors @ dcolor_dpc_numerical @ dpc_dpws + \
-                 dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
-                 
-
-    # gs_num = gs.shape[0]
-    # print("dloss_du:\n", dloss_du.reshape([gs_num, 2])[idxb])
-    # print("dloss_dcov2d:\n", dloss_dcov2d.reshape([gs_num, 3])[idxb])
-    # print("dloss_dalpha:\n", dloss_dalpha.reshape([gs_num, 1])[idxb])
-    # print("dloss_dcolor:\n", dloss_dcolor.reshape([gs_num, 3])[idxb])
+    dloss_drots_numerial = numerical_derivative(
+        backward, [rots, scales, shs, alphas, pws], 0)
+    dloss_dscales_numerial = numerical_derivative(
+        backward, [rots, scales, shs, alphas, pws], 1)
+    dloss_dshs_numerial = numerical_derivative(
+        backward, [rots, scales, shs, alphas, pws], 2)
+    dloss_dalphas_numerial = numerical_derivative(
+        backward, [rots, scales, shs, alphas, pws], 3)
+    dloss_dpws_numerial = numerical_derivative(
+        backward, [rots, scales, shs, alphas, pws], 4)
+    print("check dloss_drots: ", check(dloss_drots_numerial.reshape(-1), dloss_drots.reshape(-1)))
+    print("check dloss_dscales: ", check(dloss_dscales_numerial.reshape(-1), dloss_dscales.reshape(-1)))
+    print("check dloss_dshs: ", check(dloss_dshs_numerial.reshape(-1), dloss_dshs.reshape(-1)))
+    print("check dloss_dalphas: ", check(dloss_dalphas_numerial.reshape(-1), dloss_dalphas.reshape(-1)))
+    print("check dloss_dpws: ", check(dloss_dpws_numerial.reshape(-1), dloss_dpws.reshape(-1)))
