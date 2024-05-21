@@ -19,13 +19,14 @@ std::vector<torch::Tensor> forward(
 
 std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
                                         const torch::Tensor scales,
-                                        const bool calc_J = false);
+                                        const bool calc_J);
 
 std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
                                         const torch::Tensor pcs,
                                         const torch::Tensor Rcw,
-                                        float focal_x,
-                                        float focal_y);
+                                        const float focal_x,
+                                        const float focal_y,
+                                        const bool calc_J);
 
 std::vector<torch::Tensor> project(const torch::Tensor pws,
                                    const torch::Tensor Rcw,
@@ -50,7 +51,7 @@ std::vector<torch::Tensor> backward(
 std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
                                     const torch::Tensor pws,
                                     const torch::Tensor twc,
-                                    const bool calc_J = false);
+                                    const bool calc_J);
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {

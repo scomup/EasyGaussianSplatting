@@ -171,7 +171,7 @@ def compute_cov_2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
                       [a*m10 + b*m11 + c*m12, b*m10 + d*m11 + e*m12, c*m10 + e*m11 + f*m12,
                           a*m00 + b*m01 + c*m02, b*m00 + d*m01 + e*m02, c*m00 + e*m01 + f*m02],
                       [0, 0, 0, 2*a*m10 + 2*b*m11 + 2*c*m12, 2*b*m10 + 2*d*m11 + 2*e*m12, 2*c*m10 + 2*e*m11 + 2*f*m12]])
-        dM_dpc =\
+        dm_dpc =\
             np.array([[-fx*r00/x**2 - fx*r20/z**2, 0, 2*fx*r20*x/z**3],
                       [-fx*r01/x**2 - fx*r21/z**2, 0, 2*fx*r21*x/z**3],
                       [-fx*r02/x**2 - fx*r22/z**2, 0, 2*fx*r22*x/z**3],
@@ -179,7 +179,7 @@ def compute_cov_2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
                       [0, -fy*r21/z**2, -fy*r11/z**2 + 2*fy*r21*y/z**3],
                       [0, -fy*r22/z**2, -fy*r12/z**2 + 2*fy*r22*y/z**3]])
 
-        return cov2d, dcov2d_dcov3d, dcov2d_dm @ dM_dpc
+        return cov2d, dcov2d_dcov3d, dcov2d_dm @ dm_dpc
     else:
         return cov2d
 
@@ -187,7 +187,7 @@ def compute_cov_2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
 def get_J(pc, fx, fy):
     x, y, z = pc
     z2 = z*z
-    return np.array([[fx/x, 0, -fx*x/z2],
+    return np.array([[fx/z, 0, -fx*x/z2],
                      [0, fy/z, -fy*y/z2]])
 
 

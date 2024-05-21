@@ -149,12 +149,36 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
 std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
                                         const torch::Tensor pcs,
                                         const torch::Tensor Rcw,
-                                        float focal_x, float focal_y)
+                                        const float focal_x,
+                                        const float focal_y,
+                                        const bool calc_J)
 {
     auto float_opts = pcs.options().dtype(torch::kFloat32);
     auto int_opts = pcs.options().dtype(torch::kInt32);
-    int gs_num = pcs.sizes()[0]; 
+    int gs_num = pcs.sizes()[0];
     torch::Tensor cov2ds = torch::full({gs_num, 3}, 0.0, float_opts);
+
+    if (calc_J)
+    {
+        torch::Tensor dcov2d_dcov3ds = torch::full({gs_num, 3, 6}, 0.0, float_opts);
+        torch::Tensor dcov2d_dpcs = torch::full({gs_num, 3, 3}, 0.0, float_opts);
+
+        computeCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            cov3ds.contiguous().data_ptr<float>(),
+            pcs.contiguous().data_ptr<float>(),
+            Rcw.contiguous().data_ptr<float>(),
+            focal_x,
+            focal_y,
+            cov2ds.contiguous().data_ptr<float>(),
+            dcov2d_dcov3ds.contiguous().data_ptr<float>(),
+            dcov2d_dpcs.contiguous().data_ptr<float>());
+        cudaDeviceSynchronize();
+
+        return {cov2ds, dcov2d_dcov3ds, dcov2d_dpcs};
+    }
+    else
+    {
 
     computeCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
@@ -166,8 +190,8 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
         cov2ds.contiguous().data_ptr<float>());
     cudaDeviceSynchronize();
 
-    // the total number of 2d gaussian.
     return {cov2ds};
+    }
 }
 
 std::vector<torch::Tensor> project(const torch::Tensor pws,

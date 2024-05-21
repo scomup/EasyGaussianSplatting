@@ -78,7 +78,9 @@ __global__ void computeCov2D(
     const float *__restrict__ Rcw,
     const float focal_x,
     const float focal_y,
-    float *__restrict__ cov2ds);
+    float *__restrict__ cov2ds,
+    float *__restrict__ dcov2d_dcov3ds = nullptr,
+    float *__restrict__ dcov2d_dpcs = nullptr);
 
 __global__ void project(
     int32_t gs_num,

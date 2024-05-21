@@ -126,13 +126,13 @@ if __name__ == "__main__":
     depth = pc[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
-    cov3d = pg.computeCov3D(rot, scale)[0]
+    cov3d = pg.computeCov3D(rot, scale, False)[0]
 
     # step3. Calcuate the 2d Gaussian.
-    cov2d = pg.computeCov2D(cov3d, pc, Rcw, focal_x, focal_y)[0]
+    cov2d = pg.computeCov2D(cov3d, pc, Rcw, focal_x, focal_y, False)[0]
 
     # step4. get color info
-    color = pg.sh2Color(sh, pw, twc)[0]
+    color = pg.sh2Color(sh, pw, twc, False)[0]
 
     # step5. Blend the 2d Gaussian to image
     image = pg.forward(height, width, u, cov2d, alpha, depth, color)[0]

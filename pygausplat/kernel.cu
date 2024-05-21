@@ -336,7 +336,7 @@ __global__ void computeCov3D(
     cov3ds[i * 6 + 4] = Sigma(1, 2);
     cov3ds[i * 6 + 5] = Sigma(2, 2);
 
-    if(dcov3d_drots != nullptr && dcov3d_dscales != nullptr)
+    if (dcov3d_drots != nullptr && dcov3d_dscales != nullptr)
     {
         Matrix<6, 9> dcov3d_dm = {2 * M(0, 0), 2 * M(0, 1), 2 * M(0, 2), 0, 0, 0, 0, 0, 0,
                                   M(1, 0), M(1, 1), M(1, 2), M(0, 0), M(0, 1), M(0, 2), 0, 0, 0,
@@ -354,16 +354,16 @@ __global__ void computeCov3D(
                                2 * s1 * x, 2 * s1 * w, 2 * s1 * z, 2 * s1 * y,
                                0, -4 * s2 * x, -4 * s2 * y, 0};
         Matrix<9, 3> dm_scale = {R(0, 0), 0, 0,
-                             0, R(0, 1), 0,
-                             0, 0, R(0, 2),
-                             R(1, 0), 0, 0,
-                             0, R(1, 1), 0,
-                             0, 0, R(1, 2),
-                             R(2, 0), 0, 0,
-                             0, R(2, 1), 0,
-                             0, 0, R(2, 2)};
-        Matrix<6, 4> dcov3d_drot =  dcov3d_dm *  dm_rot;
-        Matrix<6, 3> dcov3d_dscale =  dcov3d_dm *  dm_scale;
+                                 0, R(0, 1), 0,
+                                 0, 0, R(0, 2),
+                                 R(1, 0), 0, 0,
+                                 0, R(1, 1), 0,
+                                 0, 0, R(1, 2),
+                                 R(2, 0), 0, 0,
+                                 0, R(2, 1), 0,
+                                 0, 0, R(2, 2)};
+        Matrix<6, 4> dcov3d_drot = dcov3d_dm * dm_rot;
+        Matrix<6, 3> dcov3d_dscale = dcov3d_dm * dm_scale;
         dcov3d_drots[i * 24 + 0] = dcov3d_drot(0, 0);
         dcov3d_drots[i * 24 + 1] = dcov3d_drot(0, 1);
         dcov3d_drots[i * 24 + 2] = dcov3d_drot(0, 2);
@@ -417,7 +417,9 @@ __global__ void computeCov2D(
     const float *__restrict__ Rcw,
     const float focal_x,
     const float focal_y,
-    float *__restrict__ cov2ds)
+    float *__restrict__ cov2ds,
+    float *__restrict__ dcov2d_dcov3ds,
+    float *__restrict__ dcov2d_dpcs)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -427,16 +429,16 @@ __global__ void computeCov2D(
     const float x = pcs[i * 3 + 0];
     const float y = pcs[i * 3 + 1];
     const float z = pcs[i * 3 + 2];
-    const float cov3d0 = cov3ds[i * 6 + 0];
-    const float cov3d1 = cov3ds[i * 6 + 1];
-    const float cov3d2 = cov3ds[i * 6 + 2];
-    const float cov3d3 = cov3ds[i * 6 + 3];
-    const float cov3d4 = cov3ds[i * 6 + 4];
-    const float cov3d5 = cov3ds[i * 6 + 5];
+    const float a = cov3ds[i * 6 + 0];
+    const float b = cov3ds[i * 6 + 1];
+    const float c = cov3ds[i * 6 + 2];
+    const float d = cov3ds[i * 6 + 3];
+    const float e = cov3ds[i * 6 + 4];
+    const float f = cov3ds[i * 6 + 5];
 
     float z2 = z * z;
 
-    Matrix<3, 3> W = {
+    Matrix<3, 3> R = {
         Rcw[0], Rcw[1], Rcw[2],
         Rcw[3], Rcw[4], Rcw[5],
         Rcw[6], Rcw[7], Rcw[8]};
@@ -446,11 +448,18 @@ __global__ void computeCov2D(
         0.0f, focal_y / z, -(focal_y * y) / z2};
 
     Matrix<3, 3> Sigma = {
-        cov3d0, cov3d1, cov3d2,
-        cov3d1, cov3d3, cov3d4,
-        cov3d2, cov3d4, cov3d5};
+        a, b, c,
+        b, d, e,
+        c, e, f};
 
-    Matrix<2, 3> M = J * W;
+    Matrix<2, 3> M = J * R;
+    if (i == 0)
+    {
+        printf("f %f %f\n", focal_x, focal_y);
+        printf("pc %f %f %f\n", x,y,z);
+        printf("J0 %f %f %f\n", J(0,0),J(0,1),J(0,2));
+        printf("J1 %f %f %f\n", J(1,0),J(1,1),J(1,2));
+    }
 
     Matrix<2, 2> Sigma_prime = M * Sigma * M.transpose();
 
@@ -458,6 +467,93 @@ __global__ void computeCov2D(
     cov2ds[i * 3 + 0] = Sigma_prime(0, 0) + 0.3;
     cov2ds[i * 3 + 1] = Sigma_prime(0, 1);
     cov2ds[i * 3 + 2] = Sigma_prime(1, 1) + 0.3;
+
+    if (dcov2d_dcov3ds != nullptr && dcov2d_dpcs != nullptr)
+    {
+        Matrix<3, 6> dcov2d_dcov3d = {M(0, 0) * M(0, 0),
+                                      2 * M(0, 0) * M(0, 1),
+                                      2 * M(0, 0) * M(0, 2),
+                                      M(0, 1) * M(0, 1),
+                                      2 * M(0, 1) * M(0, 2),
+                                      M(0, 2) * M(0, 2),
+                                      M(0, 0) * M(1, 0),
+                                      M(0, 0) * M(1, 1) + M(0, 1) * M(1, 0),
+                                      M(0, 0) * M(1, 2) + M(0, 2) * M(1, 0),
+                                      M(0, 1) * M(1, 1),
+                                      M(0, 1) * M(1, 2) + M(0, 2) * M(1, 1),
+                                      M(0, 2) * M(1, 2),
+                                      M(1, 0) * M(1, 0),
+                                      2 * M(1, 0) * M(1, 1),
+                                      2 * M(1, 0) * M(1, 2),
+                                      M(1, 1) * M(1, 1),
+                                      2 * M(1, 1) * M(1, 2),
+                                      M(1, 2) * M(1, 2)};
+
+        Matrix<3, 6> dcov2d_dm = {2 * a * M(0, 0) + 2 * b * M(0, 1) + 2 * c * M(0, 2),
+                                  2 * b * M(0, 0) + 2 * d * M(0, 1) + 2 * e * M(0, 2),
+                                  2 * c * M(0, 0) + 2 * e * M(0, 1) + 2 * f * M(0, 2),
+                                  0, 0, 0,
+                                  a * M(1, 0) + b * M(1, 1) + c * M(1, 2),
+                                  b * M(1, 0) + d * M(1, 1) + e * M(1, 2),
+                                  c * M(1, 0) + e * M(1, 1) + f * M(1, 2),
+                                  a * M(0, 0) + b * M(0, 1) + c * M(0, 2),
+                                  b * M(0, 0) + d * M(0, 1) + e * M(0, 2),
+                                  c * M(0, 0) + e * M(0, 1) + f * M(0, 2),
+                                  0, 0, 0,
+                                  2 * a * M(1, 0) + 2 * b * M(1, 1) + 2 * c * M(1, 2),
+                                  2 * b * M(1, 0) + 2 * d * M(1, 1) + 2 * e * M(1, 2),
+                                  2 * c * M(1, 0) + 2 * e * M(1, 1) + 2 * f * M(1, 2)};
+        const float xx_inv = 1.f / (x * x);
+        const float zz_inv = 1.f / (z * z);
+        const float z3_inv = zz_inv / z;
+        Matrix<6, 3> dm_dpc = {-focal_x * R(0, 0) * xx_inv - focal_x * R(2, 2) * zz_inv,
+                               0,
+                               2 * focal_x * R(2, 2) * x * z3_inv,
+                               -focal_x * R(0, 0) * xx_inv - focal_x * R(2, 2) * zz_inv,
+                               0,
+                               2 * focal_x * R(2, 2) * x * z3_inv,
+                               -focal_x * R(0, 0) * xx_inv - focal_x * R(2, 2) * zz_inv,
+                               0,
+                               2 * focal_x * R(2, 2) * x * z3_inv,
+                               0,
+                               -focal_y * R(2, 2) * zz_inv,
+                               -focal_y * R(1, 1) * zz_inv + 2 * focal_y * R(2, 2) * y * z3_inv,
+                               0,
+                               -focal_y * R(2, 2) * zz_inv,
+                               -focal_y * R(1, 1) * zz_inv + 2 * focal_y * R(2, 2) * y * z3_inv,
+                               0,
+                               -focal_y * R(2, 2) * zz_inv,
+                               -focal_y * R(1, 1) * zz_inv + 2 * focal_y * R(2, 2) * y * z3_inv};
+        Matrix<3, 3> dcov2d_dpc = dcov2d_dm * dm_dpc;
+        dcov2d_dpcs[i * 9 + 0] = dcov2d_dpc(0, 0);
+        dcov2d_dpcs[i * 9 + 1] = dcov2d_dpc(0, 1);
+        dcov2d_dpcs[i * 9 + 2] = dcov2d_dpc(0, 2);
+        dcov2d_dpcs[i * 9 + 3] = dcov2d_dpc(1, 0);
+        dcov2d_dpcs[i * 9 + 4] = dcov2d_dpc(1, 1);
+        dcov2d_dpcs[i * 9 + 5] = dcov2d_dpc(1, 2);
+        dcov2d_dpcs[i * 9 + 6] = dcov2d_dpc(2, 0);
+        dcov2d_dpcs[i * 9 + 7] = dcov2d_dpc(2, 1);
+        dcov2d_dpcs[i * 9 + 8] = dcov2d_dpc(2, 2);
+
+        dcov2d_dcov3ds[i * 18 + 0] = dcov2d_dcov3d(0, 0);
+        dcov2d_dcov3ds[i * 18 + 1] = dcov2d_dcov3d(0, 1);
+        dcov2d_dcov3ds[i * 18 + 2] = dcov2d_dcov3d(0, 2);
+        dcov2d_dcov3ds[i * 18 + 3] = dcov2d_dcov3d(0, 3);
+        dcov2d_dcov3ds[i * 18 + 4] = dcov2d_dcov3d(0, 4);
+        dcov2d_dcov3ds[i * 18 + 5] = dcov2d_dcov3d(0, 5);
+        dcov2d_dcov3ds[i * 18 + 6] = dcov2d_dcov3d(1, 0);
+        dcov2d_dcov3ds[i * 18 + 7] = dcov2d_dcov3d(1, 1);
+        dcov2d_dcov3ds[i * 18 + 8] = dcov2d_dcov3d(1, 2);
+        dcov2d_dcov3ds[i * 18 + 9] = dcov2d_dcov3d(1, 3);
+        dcov2d_dcov3ds[i * 18 + 10] = dcov2d_dcov3d(1, 4);
+        dcov2d_dcov3ds[i * 18 + 11] = dcov2d_dcov3d(1, 5);
+        dcov2d_dcov3ds[i * 18 + 12] = dcov2d_dcov3d(2, 0);
+        dcov2d_dcov3ds[i * 18 + 13] = dcov2d_dcov3d(2, 1);
+        dcov2d_dcov3ds[i * 18 + 14] = dcov2d_dcov3d(2, 2);
+        dcov2d_dcov3ds[i * 18 + 15] = dcov2d_dcov3d(2, 3);
+        dcov2d_dcov3ds[i * 18 + 16] = dcov2d_dcov3d(2, 4);
+        dcov2d_dcov3ds[i * 18 + 17] = dcov2d_dcov3d(2, 5);
+    }
 }
 
 __global__ void project(
@@ -603,7 +699,7 @@ __global__ void sh2Color(
                 dc_dsh15 = SH_C3_6 * x * (xx - 3.0f * yy);
 
                 color += dc_dsh9 * sh9 + dc_dsh10 * sh10 + dc_dsh11 * sh11 + dc_dsh12 * sh12 +
-                         dc_dsh13 * sh13 + dc_dsh14 * sh14 +  dc_dsh15 * sh15;
+                         dc_dsh13 * sh13 + dc_dsh14 * sh14 + dc_dsh15 * sh15;
             }
         }
     }
@@ -611,14 +707,14 @@ __global__ void sh2Color(
     // calc the jacobians
     if (dcolor_dshs != nullptr && dcolor_dpws != nullptr)
     {
-        const float normd3_inv = 1.f/(normd*normd*normd);
-        const float normd_inv = 1.f/normd;
-        const float dr_dpw00 = -d0*d0*normd3_inv + normd_inv;
-        const float dr_dpw11 = -d1*d1*normd3_inv + normd_inv;
-        const float dr_dpw22 = -d2*d2*normd3_inv + normd_inv;
-        const float dr_dpw01 = -d0*d1*normd3_inv;
-        const float dr_dpw02 = -d0*d2*normd3_inv;
-        const float dr_dpw12 = -d1*d2*normd3_inv;
+        const float normd3_inv = 1.f / (normd * normd * normd);
+        const float normd_inv = 1.f / normd;
+        const float dr_dpw00 = -d0 * d0 * normd3_inv + normd_inv;
+        const float dr_dpw11 = -d1 * d1 * normd3_inv + normd_inv;
+        const float dr_dpw22 = -d2 * d2 * normd3_inv + normd_inv;
+        const float dr_dpw01 = -d0 * d1 * normd3_inv;
+        const float dr_dpw02 = -d0 * d2 * normd3_inv;
+        const float dr_dpw12 = -d1 * d2 * normd3_inv;
         Matrix<3, 3> dr_dpw = {dr_dpw00, dr_dpw01, dr_dpw02, dr_dpw01, dr_dpw11, dr_dpw12, dr_dpw02, dr_dpw12, dr_dpw22};
         float3 dc_dr0 = {0, 0, 0};
         float3 dc_dr1 = {0, 0, 0};
@@ -640,7 +736,6 @@ __global__ void sh2Color(
             dcolor_dshs[3 * sh_dim * i + 3 * 1 + 2 * sh_dim + 2] = dc_dsh1;
             dcolor_dshs[3 * sh_dim * i + 3 * 2 + 2 * sh_dim + 2] = dc_dsh2;
             dcolor_dshs[3 * sh_dim * i + 3 * 3 + 2 * sh_dim + 2] = dc_dsh3;
-
 
             dc_dr0 += SH_C1_2 * sh3;
             dc_dr1 += SH_C1_0 * sh1;
@@ -678,8 +773,8 @@ __global__ void sh2Color(
                     dcolor_dshs[3 * sh_dim * i + 3 * 13] = dc_dsh13;
                     dcolor_dshs[3 * sh_dim * i + 3 * 14] = dc_dsh14;
                     dcolor_dshs[3 * sh_dim * i + 3 * 15] = dc_dsh15;
-                    
-                    dcolor_dshs[3 * sh_dim * i + 3 * 9  + sh_dim + 1] = dc_dsh9;
+
+                    dcolor_dshs[3 * sh_dim * i + 3 * 9 + sh_dim + 1] = dc_dsh9;
                     dcolor_dshs[3 * sh_dim * i + 3 * 10 + sh_dim + 1] = dc_dsh10;
                     dcolor_dshs[3 * sh_dim * i + 3 * 11 + sh_dim + 1] = dc_dsh11;
                     dcolor_dshs[3 * sh_dim * i + 3 * 12 + sh_dim + 1] = dc_dsh12;
@@ -687,7 +782,7 @@ __global__ void sh2Color(
                     dcolor_dshs[3 * sh_dim * i + 3 * 14 + sh_dim + 1] = dc_dsh14;
                     dcolor_dshs[3 * sh_dim * i + 3 * 15 + sh_dim + 1] = dc_dsh15;
 
-                    dcolor_dshs[3 * sh_dim * i + 3 * 9  + 2 * sh_dim + 2] = dc_dsh9;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 9 + 2 * sh_dim + 2] = dc_dsh9;
                     dcolor_dshs[3 * sh_dim * i + 3 * 10 + 2 * sh_dim + 2] = dc_dsh10;
                     dcolor_dshs[3 * sh_dim * i + 3 * 11 + 2 * sh_dim + 2] = dc_dsh11;
                     dcolor_dshs[3 * sh_dim * i + 3 * 12 + 2 * sh_dim + 2] = dc_dsh12;
@@ -730,7 +825,7 @@ __global__ void sh2Color(
         dcolor_dpws[9 * i + 7] = dcolor_dpw(2, 1);
         dcolor_dpws[9 * i + 8] = dcolor_dpw(2, 2);
     }
-//
+    //
     //}
 
     colors[3 * i + 0] = color.x;
