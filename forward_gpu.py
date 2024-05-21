@@ -94,8 +94,8 @@ if __name__ == "__main__":
 
         gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
 
-    ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
-    gs = load_ply(ply_fn)
+    # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
+    # gs = load_ply(ply_fn)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
