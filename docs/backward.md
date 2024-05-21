@@ -1,6 +1,6 @@
 # The Backward Process of 3D Gaussian Splatting
 
-This document describes the **backward process** of 3D Gaussian Splatting, which involves training 3D Gaussians using a given 2D image. The training process can generally be treated as an optimization problem, aiming to find a set of parameters that minimize an overall loss function $\mathcal{L}$ (or objective function).
+This document describes the **backward process** of 3D Gaussian Splatting, which involves training 3D Gaussians using a set of given 2D images. The training process can generally be treated as an optimization problem, aiming to find a set of parameters that minimize an overall loss function $\mathcal{L}$ (or objective function).
 $$
 \underset{x}{\textrm{argmin}} \quad \mathcal{L} = \mathcal{L}(\gamma, \gamma_{gt}) \\\\
 \tag{1}

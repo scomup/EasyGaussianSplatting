@@ -384,28 +384,39 @@ def sh2color(sh, pw, twc, calc_J=False):
         return color
 
 
-def calc_loss(alphas, cinv2ds, colors, us, image_gt, calc_J=False):
-    height, width, _ = image_gt.shape
+def get_loss(image, image_gt):
+    image_gt = torch.tensor(image_gt.transpose([2, 0, 1]))
+    image = torch.tensor(image.transpose([2, 0, 1]))
+    image = image.requires_grad_()
+    criterion = nn.L1Loss()
+    loss = criterion(image, image_gt)
+    loss_val = loss.detach().numpy().reshape(1)
+    loss.backward()
+    dloss_dgammas = image.grad.detach().numpy()
+    return loss_val, dloss_dgammas
+
+
+def get_image(alphas, cinv2ds, colors, us, height, width):
     image = np.zeros([height, width, 3])
     xs = np.indices([width, height]).reshape(2, -1).T
     for x in xs:
         gamma = calc_gamma(alphas, cinv2ds, colors, us, x)
         image[x[1], x[0]] = gamma
-    criterion = nn.L1Loss()
-    image_gt = torch.tensor(image_gt.transpose([2, 0, 1]))
-    image = torch.tensor(image.transpose([2, 0, 1]))
-    image = image.requires_grad_()
-    loss = criterion(image, image_gt)
-    loss_val = loss.detach().numpy().reshape(1)
+    return image
+
+
+def calc_loss(alphas, cinv2ds, colors, us, image_gt, calc_J=False):
+    height, width, _ = image_gt.shape
+    image = get_image(alphas, cinv2ds, colors, us, height, width)
+    loss, dloss_dgammas = get_loss(image, image_gt)
     if (calc_J):
         contrib = np.ones([height, width])
-        loss.backward()
-        dloss_dgammas = image.grad.detach().numpy()
         gs_num = alphas.shape[0]
         dloss_dalphas = np.zeros([gs_num, 1])
         dloss_dcinv2ds = np.zeros([gs_num, 3])
         dloss_dcolors = np.zeros([gs_num, 3])
         dloss_dus = np.zeros([gs_num, 2])
+        xs = np.indices([width, height]).reshape(2, -1).T
         for x in xs:
             gamma, dgamma_dalphas, dgamma_dcinv2ds, dgamma_dcolors, dgamma_dus, cont =\
                 calc_gamma(alphas, cinv2ds, colors, us, x, True)
@@ -416,13 +427,13 @@ def calc_loss(alphas, cinv2ds, colors, us, image_gt, calc_J=False):
                 dloss_dcinv2ds[i] += dloss_dgamma @ dgamma_dcinv2ds[i]
                 dloss_dcolors[i] += dloss_dgamma @ dgamma_dcolors[i]
                 dloss_dus[i] += dloss_dgamma @ dgamma_dus[i]
-        return loss_val, \
+        return loss, \
             dloss_dalphas.reshape(1, -1), \
             dloss_dcinv2ds.reshape(1, -1), \
             dloss_dcolors.reshape(1, -1), \
             dloss_dus.reshape(1, -1)
     else:
-        return loss_val
+        return loss
 
 
 def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt, calc_J=False):

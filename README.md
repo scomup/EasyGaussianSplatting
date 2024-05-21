@@ -19,14 +19,14 @@ for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-ga
     - [ ] Backward on GPU
 
 - Provide tools for learning 3D Gaussian Splatting.
-    - [x] A simple viewer based on pyqtgraph for showing 3D Gaussian data (trained model).
+    - [x] A efficient viewer based on pyqtgraph for showing 3D Gaussian data (trained model).
     - [x] A demo showing how spherical harmonics work.
 
 ## Requirements 
 
 ```bash
 pip3 install -r requirements.txt
-pip install pygausplat/.
+pip3 install pygausplat/.
 ```
 
 ## Forward process (render image)
@@ -46,7 +46,7 @@ python3 forword_gpu.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 
 ## 3D Gaussian Viewer 
 
-A fast 3D Gaussian splatting viewer for showing 3D Gaussian data. 
+A efficient 3D Gaussian splatting viewer for showing 3D Gaussian data. 
 
 ```bash
 python3 gaussian_viewer.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'

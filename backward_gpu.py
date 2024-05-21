@@ -2,15 +2,13 @@ import matplotlib.pyplot as plt
 import torch
 import pygausplat as pg
 import numpy as np
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from sh_coef import *
 from backward_cpu import *
 
 
 if __name__ == "__main__":
-    gs_data = np.random.rand(4, 59)
+    sh_dim = 48
+    gs_data = np.random.rand(4, 11 + sh_dim)
     gs_data0 = np.array([[0.,  0.,  0.,  # xyz
                         0.8537127, 0.4753723, 0.0950745, 0.1901489,  # rot
                         0.5,  0.5,  0.5,  # size
@@ -38,7 +36,7 @@ if __name__ == "__main__":
               ('rot', '<f8', (4,)),
               ('scale', '<f8', (3,)),
               ('alpha', '<f8'),
-              ('sh', '<f8', (48,))]
+              ('sh', '<f8', (sh_dim,))]
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
     gs_num = gs.shape[0]
 
@@ -57,6 +55,10 @@ if __name__ == "__main__":
     image_gt = np.zeros([height, width, 3])
 
     pws = gs['pos']
+    alphas = gs['alpha']
+    rots = gs['rot']
+    scales = gs['scale']
+    shs = gs['sh']
     gs_num = gs['pos'].shape[0]
 
     colors = np.zeros([gs_num, 3])
@@ -71,25 +73,34 @@ if __name__ == "__main__":
     dcov3d_dscales = np.zeros([gs_num, 6, 3])
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-    dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
+    dcolor_dshs = np.zeros([gs_num, 3, sh_dim])
     dcolor_dpws = np.zeros([gs_num, 3, 3])
     dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
         pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
         us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
         cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
-            gs['rot'][i], gs['scale'][i], True)
+            rots[i], scales[i], True)
         cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
             cov3ds[i], pcs[i], Rcw, fx, fy, True)
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
-            gs['sh'][i], pws[i], twc, True)
+            shs[i], pws[i], twc, True)
         cinv2ds[i], dcinv2d_dcov2ds[i] = calc_cinv2d(cov2ds[i], True)
 
-    pws_gpu = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
-    rots_gpu = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
-    scales_gpu = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
-    alphas_gpu = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
-    shs_gpu = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
+    image = get_image(alphas, cinv2ds, colors, us, height, width)
+
+    loss, dloss_dalphas, dloss_dcinv2ds, dloss_dcolors, dloss_dus = calc_loss(
+        alphas, cinv2ds, colors, us, image_gt, True)
+    dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
+    dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num, 1, 3])
+    dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
+    dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
+
+    pws_gpu = torch.from_numpy(pws).type(torch.float32).to('cuda')
+    rots_gpu = torch.from_numpy(rots).type(torch.float32).to('cuda')
+    scales_gpu = torch.from_numpy(scales).type(torch.float32).to('cuda')
+    alphas_gpu = torch.from_numpy(alphas).type(torch.float32).to('cuda')
+    shs_gpu = torch.from_numpy(shs).type(torch.float32).to('cuda')
     Rcw_gpu = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
     tcw_gpu = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc_gpu = torch.from_numpy(twc).type(torch.float32).to('cuda')
@@ -114,6 +125,28 @@ if __name__ == "__main__":
     print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
     print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
 
-    cinv2ds_gpu, areas, dcinv2d_dcov2ds_gpu = pg.inverseCov2D(cov2ds_gpu, True)
+    cinv2ds_gpu, areas_gpu, dcinv2d_dcov2ds_gpu = pg.inverseCov2D(cov2ds_gpu, True)
     print("%s test cinv2d_gpu" % check(cinv2ds_gpu.cpu().numpy(), cinv2ds))
     print("%s test dcinv2d_dcov2ds_gpu" % check(dcinv2d_dcov2ds_gpu.cpu().numpy(), dcinv2d_dcov2ds))
+
+    depths_gpu = torch.from_numpy(np.array([1, 2, 3, 4])).type(torch.float32).to('cuda')
+    image_gpu, contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu =\
+        pg.splat(height, width, us_gpu, cinv2ds_gpu, alphas_gpu, depths_gpu, colors_gpu, areas_gpu)
+    print("%s test image_gpu" %
+          check(image_gpu.cpu().numpy(), image.transpose([2, 0, 1])))
+
+    _, dloss_dgammas = get_loss(image, image_gt)
+    dloss_dgammas_gpu = torch.from_numpy(dloss_dgammas).type(torch.float32).to('cuda')
+
+    dloss_dus_gpu, dloss_dcinv2ds_gpu, dloss_dalphas_gpu, dloss_dcolors_gpu =\
+        pg.splatB(height, width, us_gpu, cinv2ds_gpu, alphas_gpu, depths_gpu, colors_gpu,
+                  contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu, dloss_dgammas_gpu)
+
+    dloss_dalphas = dloss_dalphas.reshape([gs_num])
+    dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num, 3])
+    dloss_dcolors = dloss_dcolors.reshape([gs_num, 3])
+    dloss_dus = dloss_dus.reshape([gs_num, 2])
+    print("%s test dloss_dus_gpu" % check(dloss_dus_gpu.cpu().numpy(), dloss_dus))
+    print("%s test dloss_dcinv2ds_gpu" % check(dloss_dcinv2ds_gpu.cpu().numpy(), dloss_dcinv2ds))
+    print("%s test dloss_dalphas_gpu" % check(dloss_dalphas_gpu.cpu().numpy(), dloss_dalphas))
+    print("%s test dloss_dcolors_gpu" % check(dloss_dcolors_gpu.cpu().numpy(), dloss_dcolors))
