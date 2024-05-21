@@ -101,6 +101,55 @@ std::vector<torch::Tensor> splat(
     return {image, contrib, final_tau, patch_range_per_tile, gsid_per_patch_torch};
 }
 
+std::vector<torch::Tensor> splatB(
+    const int height,
+    const int width,
+    const torch::Tensor us,
+    const torch::Tensor cinv2ds,
+    const torch::Tensor alphas,
+    const torch::Tensor depths,
+    const torch::Tensor colors,
+    const torch::Tensor contrib,
+    const torch::Tensor final_tau, 
+    const torch::Tensor patch_range_per_tile, 
+    const torch::Tensor gs_id_per_patch,
+    const torch::Tensor dloss_dgammas)
+{
+    // backward version of splat.
+    int gs_num = us.sizes()[0]; 
+    dim3 grid(DIV_ROUND_UP(width, BLOCK), DIV_ROUND_UP(height, BLOCK), 1);
+	dim3 block(BLOCK, BLOCK, 1);
+    
+    auto float_opts = us.options().dtype(torch::kFloat32);
+    auto int_opts = us.options().dtype(torch::kInt32);
+    torch::Tensor image = torch::full({3, height, width}, 0.0, float_opts);
+    torch::Tensor dloss_dalphas = torch::full({gs_num}, 0, float_opts);
+    torch::Tensor dloss_dcolors = torch::full({gs_num, 3}, 0, float_opts);
+    torch::Tensor dloss_dcinv2ds = torch::full({gs_num, 3}, 0, float_opts);
+    torch::Tensor dloss_dus = torch::full({gs_num, 2}, 0, float_opts);
+
+    drawB<<<grid, block>>>(
+        width,
+        height,
+        patch_range_per_tile.contiguous().data_ptr<int>(),
+        gs_id_per_patch.contiguous().data_ptr<int>(),
+        us.contiguous().data_ptr<float>(),
+        cinv2ds.contiguous().data_ptr<float>(),
+        alphas.contiguous().data_ptr<float>(),
+        colors.contiguous().data_ptr<float>(),
+        contrib.contiguous().data_ptr<int>(),
+        final_tau.contiguous().data_ptr<float>(),
+        dloss_dgammas.contiguous().data_ptr<float>(),
+        dloss_dus.contiguous().data_ptr<float>(),
+        dloss_dcinv2ds.contiguous().data_ptr<float>(),
+        dloss_dalphas.contiguous().data_ptr<float>(),
+        dloss_dcolors.contiguous().data_ptr<float>());
+    cudaDeviceSynchronize();
+    
+   return {dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors};
+}
+
+
 std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
                                         const torch::Tensor scales,
                                         const bool calc_J)

@@ -18,6 +18,20 @@ std::vector<torch::Tensor> splat(
     const torch::Tensor colors,
     const torch::Tensor areas);
 
+std::vector<torch::Tensor> splatB(
+    const int H,
+    const int W,
+    const torch::Tensor us,
+    const torch::Tensor cinv2ds,
+    const torch::Tensor alphas,
+    const torch::Tensor depths,
+    const torch::Tensor colors,
+    const torch::Tensor contrib,
+    const torch::Tensor final_tau,
+    const torch::Tensor patch_range_per_tile,
+    const torch::Tensor gs_id_per_patch,
+    const torch::Tensor dloss_dgammas);
+
 std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
                                         const bool calc_J);
 
@@ -41,20 +55,6 @@ std::vector<torch::Tensor> project(const torch::Tensor pws,
                                    float center_y,
                                    const bool calc_J);
 
-std::vector<torch::Tensor> backward(
-    const int H,
-    const int W,
-    const torch::Tensor us,
-    const torch::Tensor cov2d,
-    const torch::Tensor alphas,
-    const torch::Tensor depths,
-    const torch::Tensor colors,
-    const torch::Tensor contrib,
-    const torch::Tensor final_tau,
-    const torch::Tensor patch_range_per_tile,
-    const torch::Tensor gs_id_per_patch,
-    const torch::Tensor dloss_dgammas);
-
 std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
                                     const torch::Tensor pws,
                                     const torch::Tensor twc,
@@ -63,7 +63,7 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
 {
   m.def("splat", &splat, "create 2d image");
-  m.def("backward", &backward, "compute jacobians");
+  m.def("splatB", &splatB, "Backward version of splat");
   m.def("inverseCov2D", &inverseCov2D, "inverse 2D covariances");
   m.def("computeCov3D", &computeCov3D, "compute 3D covariances");
   m.def("computeCov2D", &computeCov2D, "compute 2D covariances");

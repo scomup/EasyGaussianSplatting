@@ -845,3 +845,171 @@ __global__ void sh2Color(
     colors[3 * i + 1] = color.y;
     colors[3 * i + 2] = color.z;
 }
+
+
+inline __device__ void fetch2sharedB(
+    int32_t n,
+    const int2 range,
+    const int *__restrict__ gs_id_per_patch,
+    const float *__restrict__ us,
+    const float *__restrict__ cinv2d,
+    const float *__restrict__ alphas,
+    const float *__restrict__ colors,
+    float2 *shared_pos2d,
+    float3 *shared_cinv2d,
+    float *shared_alpha,
+    float3 *shared_color,
+    int *shared_gsid)
+{
+    int i = blockDim.x * threadIdx.y + threadIdx.x;  // block idx
+    int j = range.y - n * BLOCK_SIZE - i - 1;  // patch idx
+
+    if (j >= range.x)
+    {
+        int gs_id = gs_id_per_patch[j];
+        shared_gsid[i] = gs_id;
+        shared_pos2d[i].x = us[gs_id * 2];
+        shared_pos2d[i].y = us[gs_id * 2 + 1];
+        shared_cinv2d[i].x = cinv2d[gs_id * 3];
+        shared_cinv2d[i].y = cinv2d[gs_id * 3 + 1];
+        shared_cinv2d[i].z = cinv2d[gs_id * 3 + 2];
+        shared_alpha[i] =   alphas[gs_id];
+        shared_color[i].x = colors[gs_id * 3];
+        shared_color[i].y = colors[gs_id * 3 + 1];
+        shared_color[i].z = colors[gs_id * 3 + 2];
+    }
+}
+
+__global__ void  drawB __launch_bounds__(BLOCK * BLOCK)(
+    const int width,
+    const int height,
+    const int *__restrict__ patch_range_per_tile,
+    const int *__restrict__ gs_id_per_patch,
+    const float *__restrict__ us,
+    const float *__restrict__ cinv2d,
+    const float *__restrict__ alphas,
+    const float *__restrict__ colors,
+    const int *__restrict__ contrib,
+    const float *__restrict__ final_tau,
+    const float *__restrict__ dloss_dgammas,
+    float *__restrict__ dloss_dus,
+    float *__restrict__ dloss_dcinv2ds,
+    float *__restrict__ dloss_dalphas,
+    float *__restrict__ dloss_dcolors)
+{
+    const uint2 tile = {blockIdx.x, blockIdx.y};
+    const uint2 pix = {tile.x * BLOCK + threadIdx.x,
+                       tile.y * BLOCK + threadIdx.y};
+
+    const int tile_idx = tile.y * gridDim.x + tile.x;
+    const uint32_t pix_idx = width * pix.y + pix.x;
+
+	const bool inside = pix.x < width && pix.y < height;
+	const int2 range = {patch_range_per_tile[2 * tile_idx], 
+                        patch_range_per_tile[2 * tile_idx + 1]};
+    
+	const int gs_num = range.y - range.x;
+
+    // not patch for this tile.
+    if (gs_num == 0)
+        return;
+
+	bool thread_is_finished = !inside;
+
+	__shared__ float2 shared_pos2d[BLOCK_SIZE];
+	__shared__ float3 shared_cinv2d[BLOCK_SIZE];
+    __shared__ float  shared_alpha[BLOCK_SIZE];
+    __shared__ float3 shared_color[BLOCK_SIZE];
+    __shared__ int shared_gsid[BLOCK_SIZE];
+
+
+    float3 gamma_cur2last = {0, 0, 0}; // the accumulated color of the pix from current to last gaussians (backward)
+
+    float3 dloss_dgamma = {dloss_dgammas[0 * height * width + pix_idx],
+                           dloss_dgammas[1 * height * width + pix_idx],
+                           dloss_dgammas[2 * height * width + pix_idx]};
+
+    float tau = final_tau[pix_idx];
+    int cont = contrib[pix_idx];
+
+    // for all 2d gaussian 
+    for (int i = 0; i < gs_num; i++)
+    {
+        int finished_thread_num = __syncthreads_count(thread_is_finished);
+
+        if (finished_thread_num == BLOCK_SIZE)
+            break;
+
+        int j = i % BLOCK_SIZE;
+
+        if (j == 0)
+        {
+            // fetch 2d gaussian data to share memory
+            // fetch to shared memory by backward order 
+            fetch2sharedB(i / BLOCK_SIZE,
+                         range,
+                         gs_id_per_patch,
+                         us,
+                         cinv2d,
+                         alphas,
+                         colors,
+                         shared_pos2d,
+                         shared_cinv2d,
+                         shared_alpha,
+                         shared_color,
+                         shared_gsid);
+            __syncthreads();
+        }
+
+        // becasuse we fetch data by backward, we skip i < gs_num - cont
+        if ( i < gs_num - cont)
+            continue;
+
+        float2 u = shared_pos2d[j];
+        float3 cinv2d = shared_cinv2d[j];
+        float alpha = shared_alpha[j];
+        float3 color = shared_color[j];
+        int gs_id = shared_gsid[j];
+        float2 d = u - pix;
+        float maha_dist = max(0.0f,  mahaSqDist(cinv2d, d));
+        float g = exp(-0.5f * maha_dist);
+        float alpha_prime = min(0.99f, alpha * g);
+
+        if (alpha_prime < 0.002f)
+            continue;
+
+        tau = tau / (1 - alpha_prime);
+
+        float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
+        float dalphaprime_dalpha = g;
+        float dloss_dalphaprime = dot(dloss_dgamma, dgamma_dalphaprime); 
+        float dloss_dalpha = dloss_dalphaprime * dalphaprime_dalpha;
+    
+        atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
+
+        float dgamma_dcolor = tau * alpha_prime;
+        float3 dloss_dcolor = dloss_dgamma * dgamma_dcolor;
+        atomicAdd(&dloss_dcolors[gs_id * 3 + 0], dloss_dcolor.x);
+        atomicAdd(&dloss_dcolors[gs_id * 3 + 1], dloss_dcolor.y);
+        atomicAdd(&dloss_dcolors[gs_id * 3 + 2], dloss_dcolor.z);
+
+        float2 dalphaprime_du = {(-cinv2d.x*d.x - cinv2d.y*d.y) * alpha_prime, 
+                                 (-cinv2d.y*d.x - cinv2d.z*d.y) * alpha_prime};
+        float2 dloss_du = dloss_dalphaprime * dalphaprime_du;
+
+        atomicAdd(&dloss_dus[gs_id * 2 + 0], dloss_du.x);
+        atomicAdd(&dloss_dus[gs_id * 2 + 1], dloss_du.y);
+
+        float3 dalphaprime_dcinv2d = {-0.5f * alpha_prime * (d.x * d.x),
+                                      -alpha_prime * (d.x * d.y),
+                                      -0.5f * alpha_prime * (d.y * d.y)};
+        float3 dloss_dcinv2d = dloss_dalphaprime * dalphaprime_dcinv2d;
+        
+        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 0], dloss_dcinv2d.x);
+        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 1], dloss_dcinv2d.y);
+        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 2], dloss_dcinv2d.z);
+    
+        // update gamma_cur2last for next iteration.
+        gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
+    }
+}
