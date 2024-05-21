@@ -261,7 +261,8 @@ __global__ void inverseCov2D(
     int gs_num,
     const float *__restrict__ cov2ds,
     float *__restrict__ cinv2ds,
-    float *__restrict__ areas)
+    float *__restrict__ areas,
+    float *__restrict__ dcinv2d_dcov2ds)
 {
     // compute inverse of cov2d
     // Determine the drawing area of 2d Gaussian.
@@ -285,6 +286,21 @@ __global__ void inverseCov2D(
     cinv2ds[gs_id * 3 + 2] = det_inv * a;
     areas[gs_id * 2 + 0] = 3 * sqrt(abs(a));
     areas[gs_id * 2 + 1] = 3 * sqrt(abs(c));
+
+    if (dcinv2d_dcov2ds != nullptr)
+    {
+        const float det2_inv = det_inv / det;
+
+        dcinv2d_dcov2ds[gs_id * 9 + 0] = -c * c * det2_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 1] = 2 * b * c * det2_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 2] = -a * c * det2_inv + det_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 3] = b * c * det2_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 4] = -2 * b * b * det2_inv - det_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 5] = a * b * det2_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 6] = -a * c * det2_inv + det_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 7] = 2 * a * b * det2_inv;
+        dcinv2d_dcov2ds[gs_id * 9 + 8] = -a * a * det2_inv;
+    }
 }
 
 __global__ void computeCov3D(

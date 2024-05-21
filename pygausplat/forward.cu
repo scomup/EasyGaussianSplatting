@@ -293,7 +293,16 @@ std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
 
     if (calc_J)
     {
-        return {cinv2ds, areas};
+        torch::Tensor dcinv2d_dcov2d = torch::full({gs_num, 3, 3}, 0.0, float_opts);
+        inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            cov2ds.contiguous().data_ptr<float>(),
+            cinv2ds.contiguous().data_ptr<float>(),
+            areas.contiguous().data_ptr<float>(),
+            dcinv2d_dcov2d.contiguous().data_ptr<float>());
+        cudaDeviceSynchronize();
+
+        return {cinv2ds, areas, dcinv2d_dcov2d};
     }
     else
     {

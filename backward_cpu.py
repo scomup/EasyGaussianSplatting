@@ -201,10 +201,10 @@ def calc_cinv2d(cov2d, calc_J=False):
     cinv2d = np.array([cov2d[2], -cov2d[1], cov2d[0]]) * det_inv
     if (calc_J):
         a, b, c = cov2d
-        det_inv2 = det_inv * det_inv
-        J = np.array([[-c*c*det_inv2, 2*b*c*det_inv2, -a*c*det_inv2 + det_inv],
-                      [b*c*det_inv2, -2*b*b*det_inv2 - det_inv, a*b*det_inv2],
-                      [-a*c*det_inv2 + det_inv, 2*a*b*det_inv2, -a*a*det_inv2]])
+        det2_inv = det_inv * det_inv
+        J = np.array([[-c*c*det2_inv, 2*b*c*det2_inv, -a*c*det2_inv + det_inv],
+                      [b*c*det2_inv, -2*b*b*det2_inv - det_inv, a*b*det2_inv],
+                      [-a*c*det2_inv + det_inv, 2*a*b*det2_inv, -a*a*det2_inv]])
         return cinv2d, J
 
     else:

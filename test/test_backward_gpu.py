@@ -64,6 +64,7 @@ if __name__ == "__main__":
     pcs = np.zeros([gs_num, 3])
     cov3ds = np.zeros([gs_num, 6])
     cov2ds = np.zeros([gs_num, 3])
+    cinv2ds = np.zeros([gs_num, 3])
     dpc_dpws = np.zeros([gs_num, 3, 3])
     du_dpcs = np.zeros([gs_num, 2, 3])
     dcov3d_drots = np.zeros([gs_num, 6, 4])
@@ -72,6 +73,7 @@ if __name__ == "__main__":
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
     dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
     dcolor_dpws = np.zeros([gs_num, 3, 3])
+    dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
         pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
         us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
@@ -81,6 +83,7 @@ if __name__ == "__main__":
             cov3ds[i], pcs[i], Rcw, fx, fy, True)
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
             gs['sh'][i], pws[i], twc, True)
+        cinv2ds[i], dcinv2d_dcov2ds[i] = calc_cinv2d(cov2ds[i], True)
 
     pws_gpu = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
     rots_gpu = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
@@ -111,3 +114,6 @@ if __name__ == "__main__":
     print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
     print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
 
+    cinv2ds_gpu, areas, dcinv2d_dcov2ds_gpu = pg.inverseCov2D(cov2ds_gpu, True)
+    print("%s test cinv2d_gpu" % check(cinv2ds_gpu.cpu().numpy(), cinv2ds))
+    print("%s test dcinv2d_dcov2ds_gpu" % check(dcinv2d_dcov2ds_gpu.cpu().numpy(), dcinv2d_dcov2ds))

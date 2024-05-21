@@ -65,20 +65,20 @@ __global__ void inverseCov2DBack(
 		return;
 
     const float det_inv = 1.0f/(det);
-    const float det_inv2 = 1.0f / ((det * det) + 0.0000001f);
+    const float det2_inv = 1.0f / ((det * det) + 0.0000001f);
 
     cinv2ds[gs_id * 3 + 0] =  det_inv * c;
     cinv2ds[gs_id * 3 + 1] = -det_inv * b;
     cinv2ds[gs_id * 3 + 2] =  det_inv * a;
-    dcinv2d_dcov2ds[gs_id * 9 + 0] = -c*c*det_inv2;
-    dcinv2d_dcov2ds[gs_id * 9 + 1] = 2*b*c*det_inv2;
-    dcinv2d_dcov2ds[gs_id * 9 + 2] = -a*c*det_inv2 + det_inv;
-    dcinv2d_dcov2ds[gs_id * 9 + 3] = b*c*det_inv2;
-    dcinv2d_dcov2ds[gs_id * 9 + 4] = -2*b*b*det_inv2 - det_inv;
-    dcinv2d_dcov2ds[gs_id * 9 + 5] = a*b*det_inv2;
-    dcinv2d_dcov2ds[gs_id * 9 + 6] = -a*c*det_inv2 + det_inv;
-    dcinv2d_dcov2ds[gs_id * 9 + 7] = 2*a*b*det_inv2;
-    dcinv2d_dcov2ds[gs_id * 9 + 8] = -a*a*det_inv2;
+    dcinv2d_dcov2ds[gs_id * 9 + 0] = -c*c*det2_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 1] = 2*b*c*det2_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 2] = -a*c*det2_inv + det_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 3] = b*c*det2_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 4] = -2*b*b*det2_inv - det_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 5] = a*b*det2_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 6] = -a*c*det2_inv + det_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 7] = 2*a*b*det2_inv;
+    dcinv2d_dcov2ds[gs_id * 9 + 8] = -a*a*det2_inv;
 }
 
 __global__ void calcDlossDcov2d(

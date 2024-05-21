@@ -61,7 +61,8 @@ __global__ void inverseCov2D(
     int gs_num,
     const float *__restrict__ cov2d,
     float *__restrict__ cinv2d,
-    float *__restrict__ areas);
+    float *__restrict__ areas,
+    float *__restrict__ dcinv2d_dcov2ds = nullptr);
 
 __global__ void computeCov3D(
     int32_t gs_num,
