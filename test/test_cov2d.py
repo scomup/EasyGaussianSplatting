@@ -60,7 +60,7 @@ def numerical_derivative(func, param, idx, plus=lambda a, b: a + b, minus=lambda
 
 def calc_cov2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
     Cov3d = symmetric_matrix(cov3d)
-    J = clac_J(pc, fx, fy)
+    J = get_J(pc, fx, fy)
     M = J @ Rcw
     Cov2d = M @ Cov3d @ M.T
     cov2d = upper_triangular(Cov2d)
@@ -70,11 +70,7 @@ def calc_cov2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
         a, b, c, d, e, f = cov3d
         x, y, z = pc
         r00, r01, r02, r10, r11, r12, r20, r21, r22 = Rcw.reshape(-1)
-        """
-        array([[ 5435.2087318 ,  7662.9963587 , 26555.51434145,  2700.97807515,  18720.05450423, 32436.44241593],
-               [  739.50905062, -2251.39556278,  2506.25744229, -1954.5921532 ,   -6280.2406319 ,  1709.30434251],
-               [  100.61703506,  -754.50334407,   190.40053303,  1414.46198541,  -713.88531069,    90.07526387]])
-        """
+
         dcov2d_dcov3d =\
             np.array([[m00**2, 2*m00*m01, 2*m00*m02, m01**2, 2*m01*m02, m02**2],
                       [m00*m10, m00*m11 + m01*m10, m00*m12 + m02 * m10, m01*m11, m01*m12 + m02*m11, m02*m12],
@@ -85,23 +81,22 @@ def calc_cov2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
                       [a*m10 + b*m11 + c*m12, b*m10 + d*m11 + e*m12, c*m10 + e*m11 + f*m12,
                           a*m00 + b*m01 + c*m02, b*m00 + d*m01 + e*m02, c*m00 + e*m01 + f*m02],
                       [0, 0, 0, 2*a*m10 + 2*b*m11 + 2*c*m12, 2*b*m10 + 2*d*m11 + 2*e*m12, 2*c*m10 + 2*e*m11 + 2*f*m12]])
-        dM_dpc =\
-            np.array([[-fx*r00/x**2 - fx*r20/z**2, 0, 2*fx*r20*x/z**3],
-                      [-fx*r01/x**2 - fx*r21/z**2, 0, 2*fx*r21*x/z**3],
-                      [-fx*r02/x**2 - fx*r22/z**2, 0, 2*fx*r22*x/z**3],
+        dm_dpc =\
+            np.array([[-fx*r20/z**2, 0, -fx*r00/z**2 + 2*fx*r20*x/z**3],
+                      [-fx*r21/z**2, 0, -fx*r01/z**2 + 2*fx*r21*x/z**3],
+                      [-fx*r22/z**2, 0, -fx*r02/z**2 + 2*fx*r22*x/z**3],
                       [0, -fy*r20/z**2, -fy*r10/z**2 + 2*fy*r20*y/z**3],
                       [0, -fy*r21/z**2, -fy*r11/z**2 + 2*fy*r21*y/z**3],
                       [0, -fy*r22/z**2, -fy*r12/z**2 + 2*fy*r22*y/z**3]])
-
-        return cov2d, dcov2d_dcov3d, dcov2d_dm @ dM_dpc
+        return cov2d, dcov2d_dcov3d, dcov2d_dm @ dm_dpc
     else:
         return cov2d
 
 
-def clac_J(pc, fx, fy):
+def get_J(pc, fx, fy):
     x, y, z = pc
     z2 = z*z
-    return np.array([[fx/x, 0, -fx*x/z2],
+    return np.array([[fx/z, 0, -fx*x/z2],
                      [0, fy/z, -fy*y/z2]])
 
 

@@ -2,26 +2,7 @@ from read_ply import *
 import matplotlib.pyplot as plt
 import numpy as np
 import time
-import math
-import collections
-
-# https://en.wikipedia.org/wiki/Table_of_spherical_harmonics
-SH_C0_0 = 0.28209479177387814  # Y0,0:  1/2*sqrt(1/pi)       plus
-SH_C1_0 = -0.4886025119029199  # Y1,-1: sqrt(3/(4*pi))       minus
-SH_C1_1 = 0.4886025119029199   # Y1,0:  sqrt(3/(4*pi))       plus
-SH_C1_2 = -0.4886025119029199  # Y1,1:  sqrt(3/(4*pi))       minus
-SH_C2_0 = 1.0925484305920792   # Y2,-2: 1/2 * sqrt(15/pi)    plus
-SH_C2_1 = -1.0925484305920792  # Y2,-1: 1/2 * sqrt(15/pi)    minus
-SH_C2_2 = 0.31539156525252005  # Y2,0:  1/4*sqrt(5/pi)       plus
-SH_C2_3 = -1.0925484305920792  # Y2,1:  1/2*sqrt(15/pi)      minus
-SH_C2_4 = 0.5462742152960396   # Y2,2:  1/4*sqrt(15/pi)      plus
-SH_C3_0 = -0.5900435899266435  # Y3,-3: 1/4*sqrt(35/(2*pi))  minus
-SH_C3_1 = 2.890611442640554    # Y3,-2: 1/2*sqrt(105/pi)     plus
-SH_C3_2 = -0.4570457994644658  # Y3,-1: 1/4*sqrt(21/(2*pi))  minus
-SH_C3_3 = 0.3731763325901154   # Y3,0:  1/4*sqrt(7/pi)       plus
-SH_C3_4 = -0.4570457994644658  # Y3,1:  1/4*sqrt(21/(2*pi))  minus
-SH_C3_5 = 1.445305721320277    # Y3,2:  1/4*sqrt(105/pi)     plus
-SH_C3_6 = -0.5900435899266435  # Y3,3:  1/4*sqrt(35/(2*pi))  minus
+from sh_coef import *
 
 
 class Camera:
@@ -86,15 +67,17 @@ def symmetric_matrix(upper):
     return mat
 
 
-def sh2color(sh, ray_dir):
+def sh2color(sh, pw, twc):
     sh_dim = sh.shape[1]
     color = SH_C0_0 * sh[:, 0:3] + 0.5
-
     if (sh_dim <= 3):
         return color
+    ray_dir = pw - twc
+    ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
     x = ray_dir[:, 0][:, np.newaxis]
     y = ray_dir[:, 1][:, np.newaxis]
     z = ray_dir[:, 2][:, np.newaxis]
+
     color = color + \
         SH_C1_0 * y * sh[:, 3:6] + \
         SH_C1_1 * z * sh[:, 6:9] + \
@@ -116,14 +99,17 @@ def sh2color(sh, ray_dir):
         SH_C2_4 * (xx - yy) * sh[:, 24:27]
 
     if (sh_dim <= 27):
-        color = color +  \
-            SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
-            SH_C3_1 * xy * z * sh[:, 30:33] + \
-            SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
-            SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
-            SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
-            SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
-            SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
+        return color
+
+    color = color +  \
+        SH_C3_0 * y * (3.0 * xx - yy) * sh[:, 27:30] + \
+        SH_C3_1 * xy * z * sh[:, 30:33] + \
+        SH_C3_2 * y * (4.0 * zz - xx - yy) * sh[:, 33:36] + \
+        SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * sh[:, 36:39] + \
+        SH_C3_4 * x * (4.0 * zz - xx - yy) * sh[:, 39:42] + \
+        SH_C3_5 * z * (xx - yy) * sh[:, 42:45] + \
+        SH_C3_6 * x * (xx - 3.0 * yy) * sh[:, 45:48]
+
     return color
 
 
@@ -156,16 +142,16 @@ def compute_cov_3d(scale, rot):
     return cov3d
 
 
-def compute_cov_2d(pc, K, cov3d, Rcw, u):
+def compute_cov_2d(pc, K, cov3d, Rcw):
     x = pc[:, 0]
     y = pc[:, 1]
     z = pc[:, 2]
     focal_x = K[0, 0]
     focal_y = K[1, 1]
-    c_x = K[0, 2]
-    c_y = K[1, 2]
-    u_ndc = (u - np.array([c_x, c_y]))/np.array([2*c_x, 2*c_y])
-    out_idx = np.where(np.max(u_ndc, axis=1) > 1.3)[0]
+    # c_x = K[0, 2]
+    # c_y = K[1, 2]
+    # u_ndc = (u - np.array([c_x, c_y]))/np.array([2*c_x, 2*c_y])
+    # out_idx = np.where(np.max(u_ndc, axis=1) > 1.3)[0]
     J = np.zeros([pc.shape[0], 3, 3])
     z2 = z * z
     J[:, 0, 0] = focal_x / z
@@ -182,12 +168,8 @@ def compute_cov_2d(pc, K, cov3d, Rcw, u):
     Sigma_prime[:, 1, 1] += 0.3
 
     cov2d = upper_triangular(Sigma_prime[:, :2, :2])
-    cov2d[out_idx] = 0
+    # cov2d[out_idx] = 0
     return cov2d
-
-
-def focal2fov(focal, pixels):
-    return 2*math.atan(pixels/(2*focal))
 
 
 def project(pw, Rcw, tcw, K):
@@ -267,34 +249,4 @@ def splat(height, width, us, cov2d, alpha, depth, color):
     time_diff = end - start
     print("add patch time %f\n" % time_diff)
 
-    return image
-
-
-def splat_gpu(height, width, u, cov2d, alpha, depth, color):
-    import torch
-    import simple_gaussian_reasterization as sgr
-    u = torch.from_numpy(u).type(torch.float32).to('cuda')
-    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
-    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
-    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
-    color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = sgr.forward(height, width, u, cov2d, alpha, depth, color)
-    res_cpu = []
-    for r in res:
-        res_cpu.append(r.to('cpu').numpy())
-    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
-    return res_cpu
-
-
-def blend(height, width, u, cov2d, alpha, depth, color):
-    try:
-        import torch
-        import simple_gaussian_reasterization as sgr
-        print("use CUDA")
-        res = splat_gpu(height, width, u, cov2d, alpha, depth, color)
-        image = res[0]
-    except ImportError:
-        print("cannot find simple_gaussian_reasterization, using CPU mode.")
-        print("try install it by 'pip install simple_gaussian_reasterization/.'")
-        image = splat(height, width, u, cov2d, alpha, depth, color)
     return image

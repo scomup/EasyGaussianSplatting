@@ -1,7 +1,13 @@
+/* Copyright:
+ * This file is part of pygausplat.
+ * (c) Liu Yang
+ * For the full license information, please view the LICENSE file.
+ */
+
 #include <thrust/sort.h>
 #include <thrust/device_vector.h>
 #include <torch/extension.h>
-#include "common.h"
+#include "common.cuh"
 
 inline __device__ void fetch2sharedBack(
     int32_t n,
@@ -73,8 +79,6 @@ __global__ void inverseCov2DBack(
     dcinv2d_dcov2ds[gs_id * 9 + 6] = -a*c*det_inv2 + det_inv;
     dcinv2d_dcov2ds[gs_id * 9 + 7] = 2*a*b*det_inv2;
     dcinv2d_dcov2ds[gs_id * 9 + 8] = -a*a*det_inv2;
-
-
 }
 
 __global__ void calcDlossDcov2d(

@@ -1,4 +1,4 @@
-from gaussian_splatting import *
+from gausplat import *
 import torch
 import numpy as np
 from torch.autograd import Variable
@@ -6,17 +6,18 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import simple_gaussian_reasterization as sgr
+import pygausplat as pg
 import torchvision
 from pytorch_ssim import gau_loss
+
 
 class GS2DNet(torch.autograd.Function):
     @staticmethod
     def forward(ctx, u, cov2d, alpha, color):
         global depth
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            sgr.forward(camera.height, camera.width,
-                        u, cov2d, alpha, depth, color)
+            pg.forward(camera.height, camera.width,
+                       u, cov2d, alpha, depth, color)
         ctx.save_for_backward(u, cov2d, alpha, color, contrib,
                               final_tau, patch_offset_per_tile, gs_id_per_patch)
         return image
@@ -27,9 +28,9 @@ class GS2DNet(torch.autograd.Function):
         u, cov2d, alpha, color, contrib, \
             final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
         dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
-            sgr.backward(camera.height, camera.width, u, cov2d, alpha,
-                         depth, color, contrib, final_tau,
-                         patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+            pg.backward(camera.height, camera.width, u, cov2d, alpha,
+                        depth, color, contrib, final_tau,
+                        patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
         return dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors
 
 
@@ -45,7 +46,7 @@ def create_guassian2d_data(camera, gs):
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, K, cov3d, camera.Rcw, u)
+    cov2d = compute_cov_2d(pc, K, cov3d, camera.Rcw)
 
     # step4. get color info
     ray_dir = pw[:, :3] - camera.cam_center
@@ -114,18 +115,23 @@ if __name__ == "__main__":
 
     u, cov2d, alpha, color, depth = create_guassian2d_data(camera, gs)
     u = torch.from_numpy(u).type(torch.float32).to(device).requires_grad_()
-    cov2d = torch.from_numpy(cov2d).type(torch.float32).to(device).requires_grad_()
-    alpha = torch.from_numpy(alpha).type(torch.float32).to(device).requires_grad_()
-    depth = torch.from_numpy(depth).type(torch.float32).to(device).requires_grad_()
-    color = torch.from_numpy(color).type(torch.float32).to(device).requires_grad_()
+    cov2d = torch.from_numpy(cov2d).type(
+        torch.float32).to(device).requires_grad_()
+    alpha = torch.from_numpy(alpha).type(
+        torch.float32).to(device).requires_grad_()
+    depth = torch.from_numpy(depth).type(
+        torch.float32).to(device).requires_grad_()
+    color = torch.from_numpy(color).type(
+        torch.float32).to(device).requires_grad_()
 
     image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-        sgr.forward(camera.height, camera.width, u, cov2d, alpha, depth, color)
+        pg.forward(camera.height, camera.width, u, cov2d, alpha, depth, color)
 
     gs2dnet = GS2DNet
 
-    image_gt = torchvision.io.read_image("test.png").to(device)
-    image_gt = torchvision.transforms.functional.resize(image_gt, [height, width]) / 255.
+    image_gt = torchvision.io.read_image("imgs/test.png").to(device)
+    image_gt = torchvision.transforms.functional.resize(
+        image_gt, [height, width]) / 255.
 
     criterion = nn.MSELoss()
     optimizer = optim.Adam([u, cov2d, alpha, color], lr=0.001, eps=1e-15)

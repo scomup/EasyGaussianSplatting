@@ -75,6 +75,15 @@ def calc_mmt(m, calc_J=False):
         return mmt
 
 
+def calc_cov(q, s, calc_J=False):
+    m, dm_mq, dm_ds = calc_m(q, s, True)
+    cov, dcov_dm = calc_mmt(m, True)
+    if (calc_J):
+        return cov, dcov_dm @ dm_mq, dcov_dm @ dm_ds
+    else:
+        return cov
+
+
 def calc_rot(q, calc_J=False):
     w = q[0]
     x = q[1]
@@ -98,16 +107,6 @@ def calc_rot(q, calc_J=False):
         return R, drot_dq
     else:
         return R
-
-
-def calc_cov(q, s, calc_J=False):
-    m, dm_mq, dm_ds = calc_m(q, s, True)
-    cov, dcov_dm = calc_mmt(m, True)
-    if (calc_J):
-        return cov, dcov_dm @ dm_mq, dcov_dm @ dm_ds
-    else:
-        return cov
-
 
 if __name__ == "__main__":
     q = np.array([0.606, -0.002, -0.755, 0.252])

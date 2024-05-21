@@ -1,4 +1,4 @@
-from gaussian_splatting import *
+from gausplat import *
 
 
 if __name__ == "__main__":
@@ -8,13 +8,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.ply:
-        # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
         ply_fn = args.ply
         print("Try to load %s ..." % ply_fn)
         gs = load_ply(ply_fn)
     else:
         print("not fly file.")
-        # exit(0)
         gs_data = np.array([[0.,  0.,  0.,  # xyz
                             1.,  0.,  0., 0.,  # rot
                             0.05,  0.05,  0.05,  # size
@@ -74,16 +72,13 @@ if __name__ == "__main__":
     cov3d = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw, u)
+    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw)
 
     # step4. get color info
-    ray_dir = pw[:, :3] - camera.cam_center
-    ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
-    color = sh2color(gs['sh'], ray_dir)
+    color = sh2color(gs['sh'], pw, camera.cam_center)
 
     # step5. Blend the 2d Gaussian to image
-    image = blend(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
-
+    image = splat(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
     plt.imshow(image)
     # from PIL import Image
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))

@@ -122,9 +122,9 @@ The partial derivatives of projection function.
 $$
 \diff{u_i}{p_{c,i}} =
 \begin{bmatrix} 
-f_x/z & 0 & -f_x x/z^2 \\\\ 
+f_x/z & 0 & -f_x x/z^2 \\ 
 0 & f_y/z & -f_y y/z^2
-\end{bmatrix}  \\\\
+\end{bmatrix}
 \tag{B.1.2}
 $$
 x, y, z are the elements of $p_c$.
@@ -162,16 +162,16 @@ The matrices $\frac{\partial \sigma}{\partial M}$, $\frac{\partial M}{\partial q
 $$
 \diff{\sigma}{M} = 
 \begin{bmatrix} 
-2m_0 &  &   \\
-m_1 & m_0    \\
-m_2 &  & m_0 \\
- & 2m_1 &  \\
-  & m_2 & m_1 \\
- & & 2m_2
+2M_{r0} &  &   \\
+M_{r1} & M_{r0}    \\
+M_{r2} &  & M_{r0} \\
+ & 2M_{r1} &  \\
+  & M_{r2} & M_{r1} \\
+ & & 2M_{r2}
 \end{bmatrix} 
 $$
 
-Here, $m_0$, $m_1$, and $m_2$ represent the first, second, and third rows of $M$.
+Here, $M_{r0}$, $M_{r1}$, and $M_{r2}$ represent the first, second, and third rows of $M$.
 
 $$
 \diff{M}{q} = 
@@ -217,6 +217,7 @@ $$
 The partial derivatives of 2D covariances with respect to 3D covariances are given by:
 
 $$
+\small
 \diff{\sigma^{\prime}}{\sigma} =
 \begin{bmatrix}
 m_{00}^2 & 2m_{00}m_{01} & 2m_{00}m_{02} & m_{01}^2 & 2m_{01}m_{02} & m_{02}^2 \\
@@ -239,17 +240,20 @@ where:
 $$
 \diff{\sigma^{\prime}}{M} =
 \begin{bmatrix}
-2am_{00} + 2bm_{01} + 2cm_{02} & 2bm_{00} + 2dm_{01} + 2em_{02} & 2cm_{00} + 2em_{01} + 2fm_{02} & 0 & 0 & 0 \\
-am_{10} + bm_{11} + cm_{12} & bm_{10} + dm_{11} + em_{12} & cm_{10} + em_{11} + fm_{12} & am_{00} + bm_{01} + cm_{02} & bm_{00} + dm_{01} + em_{02} & cm_{00} + em_{01} + fm_{02} \\
-0 & 0 & 0 & 2am_{10} + 2bm_{11} + 2cm_{12} & 2bm_{10} + 2dm_{11} + 2em_{12} & 2cm_{10} + 2em_{11} + 2fm_{12}
+2\Sigma_{r0}  M_{r0}^T & 2\Sigma_{r1}  M_{r0}^T & 2\Sigma_{r2}  M_{r0}^T & 0 & 0 & 0 \\
+\Sigma_{r0}  M_{r1}^T & \Sigma_{r1}  M_{r1}^T & \Sigma_{r2}  M_{r1}^T & \Sigma_{r0}  M_{r0}^T & \Sigma_{r1}  M_{r0}^T & \Sigma_{r2}  M_{r0}^T \\
+0 & 0 & 0 & 2\Sigma_{r0}  M_{r2}^T & 2\Sigma_{r1}  M_{r2}^T & 2\Sigma_{r2}  M_{r2}^T
 \end{bmatrix} 
 $$
+
+Here, $M_{ri}$, and $\Sigma_{ri}$  represent the i-th row of $M$ and $\Sigma$.
+
 
 $$
 \diff{M}{p_c} =
 \begin{bmatrix} 
--f_x r_{c0}/x^2 - f_x r_{c2}/z^2 & 0 & 2 f_x r_{c2} x/z^3 \\
-0 & -f_y r_{c2}/z^2 & (-f_y z r_{c1} + 2 f_y r_{c2} y)/z^3 \\
+-f_x R_{c0}/x^2 - f_x R_{c2}/z^2 & 0_{3\times1} & 2 f_x R_{c2} x/z^3 \\
+0_{3\times1} & -f_y R_{c2}/z^2 & (-f_y z R_{c1} + 2 f_y R_{c2} y)/z^3 \\
 \end{bmatrix} 
 $$
 
