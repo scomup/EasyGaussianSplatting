@@ -31,8 +31,11 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
 std::vector<torch::Tensor> project(const torch::Tensor pws,
                                    const torch::Tensor Rcw,
                                    const torch::Tensor tcw,
-                                   float focal_x, float focal_y,
-                                   float center_x, float center_y);
+                                   float focal_x,
+                                   float focal_y,
+                                   float center_x,
+                                   float center_y,
+                                   const bool calc_J);
 
 std::vector<torch::Tensor> backward(
     const int H,

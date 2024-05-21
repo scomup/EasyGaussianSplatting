@@ -91,22 +91,23 @@ if __name__ == "__main__":
     tcw_gpu = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc_gpu = torch.from_numpy(twc).type(torch.float32).to('cuda')
 
-    colors_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(shs_gpu, pws_gpu, twc_gpu, True)
-    print(np.max(np.abs(dcolor_dshs_gpu.cpu().numpy() - dcolor_dshs)))
-    print(np.max(np.abs(dcolor_dpws_gpu.cpu().numpy() - dcolor_dpws)))
-    print("%s test colors_gpu" % check(colors_gpu.cpu().numpy(), colors))
-    print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
-    print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
+    us_gpu, pcs_gpu, du_dpcs_gpu = pg.project(pws_gpu, Rcw_gpu, tcw_gpu, fx, fy, cx, cy, True)
+    print("%s test us_gpu" % check(us_gpu.cpu().numpy(), us))
+    print("%s test pcs_gpu" % check(pcs_gpu.cpu().numpy(), pcs))
+    print("%s test du_dpcs_gpu" % check(du_dpcs_gpu.cpu().numpy(), du_dpcs))
 
     cov3ds_gpu, dcov3d_drots_gpu, dcov3d_dscales_gpu = pg.computeCov3D(rots_gpu, scales_gpu, True)
     print("%s test cov3ds_gpu" % check(cov3ds_gpu.cpu().numpy(), cov3ds))
     print("%s test dcov3d_drots_gpu" % check(dcov3d_drots_gpu.cpu().numpy(), dcov3d_drots))
     print("%s test dcov3d_dscales_gpu" % check(dcov3d_dscales_gpu.cpu().numpy(), dcov3d_dscales))
 
-    pcs_gpu = torch.from_numpy(pcs).type(torch.float32).to('cuda')
     cov2ds_gpu, dcov2d_dcov3ds_gpu, dcov2d_dpcs_gpu = pg.computeCov2D(cov3ds_gpu, pcs_gpu, Rcw_gpu, fx, fy, True)
     print("%s test cov2ds_gpu" % check(cov2ds_gpu.cpu().numpy(), cov2ds))
     print("%s test dcov2d_dcov3ds_gpu" % check(dcov2d_dcov3ds_gpu.cpu().numpy(), dcov2d_dcov3ds))
     print("%s test dcov2d_dpcs_gpu" % check(dcov2d_dpcs_gpu.cpu().numpy(), dcov2d_dpcs))
 
+    colors_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(shs_gpu, pws_gpu, twc_gpu, True)
+    print("%s test colors_gpu" % check(colors_gpu.cpu().numpy(), colors))
+    print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
+    print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
     pass

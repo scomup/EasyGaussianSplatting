@@ -79,8 +79,6 @@ __global__ void inverseCov2DBack(
     dcinv2d_dcov2ds[gs_id * 9 + 6] = -a*c*det_inv2 + det_inv;
     dcinv2d_dcov2ds[gs_id * 9 + 7] = 2*a*b*det_inv2;
     dcinv2d_dcov2ds[gs_id * 9 + 8] = -a*a*det_inv2;
-
-
 }
 
 __global__ void calcDlossDcov2d(

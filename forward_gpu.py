@@ -94,8 +94,8 @@ if __name__ == "__main__":
 
         gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
 
-    # ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
-    # gs = load_ply(ply_fn)
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/test/point_cloud/iteration_30000/point_cloud.ply"
+    gs = load_ply(ply_fn)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    u, pc = pg.project(pw, Rcw, tcw, focal_x, focal_y, center_x, center_y)
+    u, pc = pg.project(pw, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
     depth = pc[:, 2]
 
     # step2. Calcuate the 3d Gaussian.

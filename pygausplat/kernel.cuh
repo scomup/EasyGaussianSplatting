@@ -92,7 +92,8 @@ __global__ void project(
     const float center_x,
     const float center_y,
     float *__restrict__ us,
-    float *__restrict__ pcs);
+    float *__restrict__ pcs,
+    float *__restrict__ du_dpcs = nullptr);
 
 __global__ void sh2Color(
     int32_t gs_num,

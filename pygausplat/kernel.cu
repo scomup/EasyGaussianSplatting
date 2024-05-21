@@ -549,7 +549,8 @@ __global__ void project(
     const float center_x,
     const float center_y,
     float *__restrict__ us,
-    float *__restrict__ pcs)
+    float *__restrict__ pcs,
+    float *__restrict__ du_dpcs)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -558,21 +559,26 @@ __global__ void project(
 
     Matrix<3, 1> pw = {pws[i * 3 + 0], pws[i * 3 + 1], pws[i * 3 + 2]};
 
-    Matrix<3, 1> _tcw = {tcw[0], tcw[1], tcw[2]};
+    Matrix<3, 1> t = {tcw[0], tcw[1], tcw[2]};
 
-    Matrix<3, 3> _Rcw = {
+    Matrix<3, 3> R = {
         Rcw[0], Rcw[1], Rcw[2],
         Rcw[3], Rcw[4], Rcw[5],
         Rcw[6], Rcw[7], Rcw[8]};
 
-    Matrix<3, 1> pc = _Rcw * pw + _tcw;
+    Matrix<3, 1> pc = R * pw + t;
 
     const float x = pc(0);
     const float y = pc(1);
     const float z = pc(2);
+    const float z_inv = 1.f / z;
+    const float z2_inv = z_inv / z;
 
-    const float u0 = x * focal_x / z + center_x;
-    const float u1 = y * focal_y / z + center_y;
+    const float x_focal_x = x * focal_x;
+    const float y_focal_y = y * focal_y;
+
+    const float u0 = x_focal_x * z_inv + center_x;
+    const float u1 = y_focal_y * z_inv + center_y;
 
     // make sure the cov2d is not too small.
     us[i * 2 + 0] = u0;
@@ -580,6 +586,14 @@ __global__ void project(
     pcs[i * 3 + 0] = x;
     pcs[i * 3 + 1] = y;
     pcs[i * 3 + 2] = z;
+
+    if (du_dpcs != nullptr)
+    {
+        du_dpcs[i * 6 + 0] = focal_x * z_inv;
+        du_dpcs[i * 6 + 2] = -x_focal_x * z2_inv;
+        du_dpcs[i * 6 + 4] = focal_y * z_inv;
+        du_dpcs[i * 6 + 5] = -y_focal_y * z2_inv;
+    }
 }
 
 __global__ void sh2Color(

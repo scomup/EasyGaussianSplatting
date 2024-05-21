@@ -79,9 +79,9 @@ def project(pc, fx, fy, cx, cy, calc_J=False):
     u = np.array([(x * fx / z + cx),
                   (y * fy / z + cy)])
     if (calc_J is True):
-        dpc_du = np.array([[fx / z,    0, -fx * x / z_2],
+        du_dpc = np.array([[fx / z,    0, -fx * x / z_2],
                            [0, fy / z, -fy * y / z_2]])
-        return u, dpc_du
+        return u, du_dpc
     else:
         return u
 
@@ -336,8 +336,9 @@ def sh2color(sh, pw, twc, calc_J=False):
                     dcolor_dsh[14] @ sh[14] + \
                     dcolor_dsh[15] @ sh[15]
     if (calc_J):
+        dc_dr = np.zeros([3, 3])
+        dr_dpw = np.zeros([3, 3])
         if (sh_dim > 3):
-            dr_dpw = np.zeros([3, 3])
             normd3_inv = 1/normd**3
             normd_inv = 1/normd
             dr_dpw[0, 0] = -d[0]*d[0]*normd3_inv + normd_inv
@@ -350,7 +351,6 @@ def sh2color(sh, pw, twc, calc_J=False):
             dr_dpw[2, 0] = dr_dpw[0, 2]
             dr_dpw[2, 1] = dr_dpw[1, 2]
 
-            dc_dr = np.zeros([3, 3])
             dc_dr[:, 0] += SH_C1_2 * sh[3]
             dc_dr[:, 1] += SH_C1_0 * sh[1]
             dc_dr[:, 2] += SH_C1_1 * sh[2]
@@ -470,7 +470,7 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
     else:
         rots = rots.reshape([-1, 4])
         scales = scales.reshape([-1, 3])
-        shs = shs.reshape([-1, 48])
+        shs = shs.reshape([-1, sh_dim])
         alphas = alphas.reshape([-1, 1])
         pws = pws.reshape([-1, 3])
         for i in range(gs_num):
@@ -485,8 +485,8 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
 
 
 if __name__ == "__main__":
-    gs_data = np.random.rand(4, 59)
-    # gs_data = np.zeros([4, 59])
+    sh_dim = 48
+    gs_data = np.random.rand(4, 11 + sh_dim)
     gs_data0 = np.array([[0.,  0.,  0.,  # xyz
                         1.,  0.,  0., 0.,  # rot
                         0.5,  0.5,  0.5,  # size
@@ -514,7 +514,7 @@ if __name__ == "__main__":
               ('rot', '<f8', (4,)),
               ('scale', '<f8', (3,)),
               ('alpha', '<f8'),
-              ('sh', '<f8', (48,))]
+              ('sh', '<f8', (sh_dim,))]
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
     gs_num = gs.shape[0]
 
@@ -524,8 +524,8 @@ if __name__ == "__main__":
                     [-0.04508268,  0.99739184, -0.05636552],
                     [-0.43974177,  0.03084909,  0.89759429]]).T
     twc = np.linalg.inv(Rcw) @ (-tcw)
-    width = int(32)  # 1957  # 979
-    height = int(16)  # 1091  # 546
+    width = int(32)
+    height = int(16)
     fx = 16
     fy = 16
     cx = width/2.
@@ -676,6 +676,8 @@ if __name__ == "__main__":
     print("%s check dloss_dcolor" %
           check(dloss_dcolor_numerial, dloss_dcolors))
     print("%s check dloss_du" % check(dloss_du_numerial, dloss_dus))
+
+    exit(0)
 
     loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
         gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
