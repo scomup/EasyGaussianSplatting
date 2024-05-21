@@ -541,7 +541,6 @@ __global__ void sh2Color(
         dc_dshs[3 * sh_dim * i + 0] = SH_C0_0;
         dc_dshs[3 * sh_dim * i + 0 + sh_dim + 1] = SH_C0_0;
         dc_dshs[3 * sh_dim * i + 0 + 2 * sh_dim + 2] = SH_C0_0;
-        // dc_dshs[9 * sh_dim * i + 0] = SH_C0_0;
         if (sh_dim > 3)
         {
             dc_dshs[3 * sh_dim * i + 3 * 1] = dc_dsh1;
@@ -586,29 +585,29 @@ __global__ void sh2Color(
 
                 if (sh_dim > 27)
                 {
-                    dc_dshs[9 * sh_dim * i + 3 * 9] = dc_dsh9;
-                    dc_dshs[9 * sh_dim * i + 3 * 10] = dc_dsh10;
-                    dc_dshs[9 * sh_dim * i + 3 * 11] = dc_dsh11;
-                    dc_dshs[9 * sh_dim * i + 3 * 12] = dc_dsh12;
-                    dc_dshs[9 * sh_dim * i + 3 * 13] = dc_dsh13;
-                    dc_dshs[9 * sh_dim * i + 3 * 14] = dc_dsh14;
-                    dc_dshs[9 * sh_dim * i + 3 * 15] = dc_dsh15;
+                    dc_dshs[3 * sh_dim * i + 3 * 9] = dc_dsh9;
+                    dc_dshs[3 * sh_dim * i + 3 * 10] = dc_dsh10;
+                    dc_dshs[3 * sh_dim * i + 3 * 11] = dc_dsh11;
+                    dc_dshs[3 * sh_dim * i + 3 * 12] = dc_dsh12;
+                    dc_dshs[3 * sh_dim * i + 3 * 13] = dc_dsh13;
+                    dc_dshs[3 * sh_dim * i + 3 * 14] = dc_dsh14;
+                    dc_dshs[3 * sh_dim * i + 3 * 15] = dc_dsh15;
                     
-                    dc_dshs[9 * sh_dim * i + 3 * 9  + sh_dim + 1] = dc_dsh9;
-                    dc_dshs[9 * sh_dim * i + 3 * 10 + sh_dim + 1] = dc_dsh10;
-                    dc_dshs[9 * sh_dim * i + 3 * 11 + sh_dim + 1] = dc_dsh11;
-                    dc_dshs[9 * sh_dim * i + 3 * 12 + sh_dim + 1] = dc_dsh12;
-                    dc_dshs[9 * sh_dim * i + 3 * 13 + sh_dim + 1] = dc_dsh13;
-                    dc_dshs[9 * sh_dim * i + 3 * 14 + sh_dim + 1] = dc_dsh14;
-                    dc_dshs[9 * sh_dim * i + 3 * 15 + sh_dim + 1] = dc_dsh15;
+                    dc_dshs[3 * sh_dim * i + 3 * 9  + sh_dim + 1] = dc_dsh9;
+                    dc_dshs[3 * sh_dim * i + 3 * 10 + sh_dim + 1] = dc_dsh10;
+                    dc_dshs[3 * sh_dim * i + 3 * 11 + sh_dim + 1] = dc_dsh11;
+                    dc_dshs[3 * sh_dim * i + 3 * 12 + sh_dim + 1] = dc_dsh12;
+                    dc_dshs[3 * sh_dim * i + 3 * 13 + sh_dim + 1] = dc_dsh13;
+                    dc_dshs[3 * sh_dim * i + 3 * 14 + sh_dim + 1] = dc_dsh14;
+                    dc_dshs[3 * sh_dim * i + 3 * 15 + sh_dim + 1] = dc_dsh15;
 
-                    dc_dshs[9 * sh_dim * i + 3 * 9  + 2 * sh_dim + 2] = dc_dsh9;
-                    dc_dshs[9 * sh_dim * i + 3 * 10 + 2 * sh_dim + 2] = dc_dsh10;
-                    dc_dshs[9 * sh_dim * i + 3 * 11 + 2 * sh_dim + 2] = dc_dsh11;
-                    dc_dshs[9 * sh_dim * i + 3 * 12 + 2 * sh_dim + 2] = dc_dsh12;
-                    dc_dshs[9 * sh_dim * i + 3 * 13 + 2 * sh_dim + 2] = dc_dsh13;
-                    dc_dshs[9 * sh_dim * i + 3 * 14 + 2 * sh_dim + 2] = dc_dsh14;
-                    dc_dshs[9 * sh_dim * i + 3 * 15 + 2 * sh_dim + 2] = dc_dsh15;
+                    dc_dshs[3 * sh_dim * i + 3 * 9  + 2 * sh_dim + 2] = dc_dsh9;
+                    dc_dshs[3 * sh_dim * i + 3 * 10 + 2 * sh_dim + 2] = dc_dsh10;
+                    dc_dshs[3 * sh_dim * i + 3 * 11 + 2 * sh_dim + 2] = dc_dsh11;
+                    dc_dshs[3 * sh_dim * i + 3 * 12 + 2 * sh_dim + 2] = dc_dsh12;
+                    dc_dshs[3 * sh_dim * i + 3 * 13 + 2 * sh_dim + 2] = dc_dsh13;
+                    dc_dshs[3 * sh_dim * i + 3 * 14 + 2 * sh_dim + 2] = dc_dsh14;
+                    dc_dshs[3 * sh_dim * i + 3 * 15 + 2 * sh_dim + 2] = dc_dsh15;
 
                     dc_dr0 += 6.0 * SH_C3_0 * sh9 * x * y +
                               SH_C3_1 * sh10 * yz -
