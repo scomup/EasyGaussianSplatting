@@ -17,7 +17,9 @@ std::vector<torch::Tensor> forward(
     const torch::Tensor depth,
     const torch::Tensor color);
 
-std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots, const torch::Tensor scales);
+std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
+                                        const torch::Tensor scales,
+                                        const bool calc_J = false);
 
 std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
                                         const torch::Tensor pcs,

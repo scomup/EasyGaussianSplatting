@@ -67,7 +67,9 @@ __global__ void computeCov3D(
     int32_t gs_num,
     const float *__restrict__ rots,
     const float *__restrict__ scales,
-    float *__restrict__ cov3ds);
+    float *__restrict__ cov3ds,
+    float *__restrict__ dcov3d_drots = nullptr,
+    float *__restrict__ dcov3d_dscales = nullptr);
 
 __global__ void computeCov2D(
     int32_t gs_num,
@@ -97,6 +99,5 @@ __global__ void sh2Color(
     const float *__restrict__ twc,
     const int sh_dim,
     float *__restrict__ colors,
-    const bool calc_J = false,
-    float *__restrict__ dc_dshs = nullptr,
-    float *__restrict__ dc_dpws = nullptr);
+    float *__restrict__ dcolor_dshs = nullptr,
+    float *__restrict__ dcolor_dpws = nullptr);

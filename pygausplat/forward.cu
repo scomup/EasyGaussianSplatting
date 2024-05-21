@@ -109,23 +109,41 @@ std::vector<torch::Tensor> forward(
     return {image, contrib, final_tau, patch_range_per_tile, gsid_per_patch_torch};
 }
 
-
-std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots, const torch::Tensor scales)
+std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
+                                        const torch::Tensor scales,
+                                        const bool calc_J)
 {
     auto float_opts = rots.options().dtype(torch::kFloat32);
     auto int_opts = rots.options().dtype(torch::kInt32);
-    int gs_num = rots.sizes()[0]; 
+    int gs_num = rots.sizes()[0];
     torch::Tensor cov3ds = torch::full({gs_num, 6}, 0.0, float_opts);
 
-    computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
-        gs_num,
-        rots.contiguous().data_ptr<float>(),
-        scales.contiguous().data_ptr<float>(),
-        cov3ds.contiguous().data_ptr<float>());
-    cudaDeviceSynchronize();
+    if (calc_J)
+    {
+        torch::Tensor dcov3d_drots = torch::full({gs_num, 6, 4}, 0.0, float_opts);
+        torch::Tensor dcov3d_dscales = torch::full({gs_num, 6, 3}, 0.0, float_opts);
 
-    // the total number of 2d gaussian.
-    return {cov3ds};
+        computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            rots.contiguous().data_ptr<float>(),
+            scales.contiguous().data_ptr<float>(),
+            cov3ds.contiguous().data_ptr<float>(),
+            dcov3d_drots.contiguous().data_ptr<float>(),
+            dcov3d_dscales.contiguous().data_ptr<float>());
+        cudaDeviceSynchronize();
+
+        return {cov3ds, dcov3d_drots, dcov3d_dscales};
+    }
+    else
+    {
+        computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            rots.contiguous().data_ptr<float>(),
+            scales.contiguous().data_ptr<float>(),
+            cov3ds.contiguous().data_ptr<float>());
+        cudaDeviceSynchronize();
+        return {cov3ds};
+    }
 }
 
 std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
@@ -191,8 +209,8 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
 
     if (calc_J)
     {
-        torch::Tensor dc_dshs = torch::full({gs_num, 3, sh_dim}, 0.0, float_opts);
-        torch::Tensor dc_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
+        torch::Tensor dcolor_dshs = torch::full({gs_num, 3, sh_dim}, 0.0, float_opts);
+        torch::Tensor dcolor_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     
         sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
             gs_num,
@@ -201,12 +219,11 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
             twc.contiguous().data_ptr<float>(),
             sh_dim,
             colors.contiguous().data_ptr<float>(),
-            true,
-            dc_dshs.contiguous().data_ptr<float>(),
-            dc_dpws.contiguous().data_ptr<float>());
+            dcolor_dshs.contiguous().data_ptr<float>(),
+            dcolor_dpws.contiguous().data_ptr<float>());
         cudaDeviceSynchronize();
 
-        return {colors, dc_dshs, dc_dpws};
+        return {colors, dcolor_dshs, dcolor_dpws};
     }
     else
     {

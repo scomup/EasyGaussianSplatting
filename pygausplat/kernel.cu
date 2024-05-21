@@ -291,7 +291,9 @@ __global__ void computeCov3D(
     int32_t gs_num,
     const float *__restrict__ rots,
     const float *__restrict__ scales,
-    float *__restrict__ cov3ds)
+    float *__restrict__ cov3ds,
+    float *__restrict__ dcov3d_drots,
+    float *__restrict__ dcov3d_dscales)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -305,14 +307,25 @@ __global__ void computeCov3D(
     float s0 = scales[i * 3 + 0];
     float s1 = scales[i * 3 + 1];
     float s2 = scales[i * 3 + 2];
-    float x2 = x * x;
-    float y2 = y * y;
-    float z2 = z * z;
+    float xx = x * x;
+    float yy = y * y;
+    float zz = z * z;
+    float xy = x * y;
+    float xz = x * z;
+    float yz = y * z;
+    float xw = x * w;
+    float yw = y * w;
+    float zw = z * w;
+
+    Matrix<3, 3> R = {
+        1.f - 2.f * (yy + zz), 2.f * (xy - zw), 2.f * (xz + yw),
+        2.f * (xy + zw), 1.f - 2.f * (xx + zz), 2.f * (yz - xw),
+        2.f * (xz - yw), 2.f * (yz + xw), 1.f - 2.f * (xx + yy)};
 
     Matrix<3, 3> M = {
-        (1.f - 2.f * (y2 + z2)) * s0, (2.f * (x * y - z * w)) * s1, (2.f * (x * z + y * w)) * s2,
-        (2.f * (x * y + z * w)) * s0, (1.f - 2.f * (x2 + z2)) * s1, (2.f * (y * z - x * w)) * s2,
-        (2.f * (x * z - y * w)) * s0, (2.f * (y * z + x * w)) * s1, (1.f - 2.f * (x2 + y2)) * s2};
+        R(0, 0) * s0, R(0, 1) * s1, R(0, 2) * s2,
+        R(1, 0) * s0, R(1, 1) * s1, R(1, 2) * s2,
+        R(2, 0) * s0, R(2, 1) * s1, R(2, 2) * s2};
 
     Matrix<3, 3> Sigma = M * M.transpose();
 
@@ -322,6 +335,79 @@ __global__ void computeCov3D(
     cov3ds[i * 6 + 3] = Sigma(1, 1);
     cov3ds[i * 6 + 4] = Sigma(1, 2);
     cov3ds[i * 6 + 5] = Sigma(2, 2);
+
+    if(dcov3d_drots != nullptr && dcov3d_dscales != nullptr)
+    {
+        Matrix<6, 9> dcov3d_dm = {2 * M(0, 0), 2 * M(0, 1), 2 * M(0, 2), 0, 0, 0, 0, 0, 0,
+                                  M(1, 0), M(1, 1), M(1, 2), M(0, 0), M(0, 1), M(0, 2), 0, 0, 0,
+                                  M(2, 0), M(2, 1), M(2, 2), 0, 0, 0, M(0, 0), M(0, 1), M(0, 2),
+                                  0, 0, 0, 2 * M(1, 0), 2 * M(1, 1), 2 * M(1, 2), 0, 0, 0,
+                                  0, 0, 0, M(2, 0), M(2, 1), M(2, 2), M(1, 0), M(1, 1), M(1, 2),
+                                  0, 0, 0, 0, 0, 0, 2 * M(2, 0), 2 * M(2, 1), 2 * M(2, 2)};
+        Matrix<9, 4> dm_rot = {0, 0, -4 * s0 * y, -4 * s0 * z,
+                               -2 * s1 * z, 2 * s1 * y, 2 * s1 * x, -2 * s1 * w,
+                               2 * s2 * y, 2 * s2 * z, 2 * s2 * w, 2 * s2 * x,
+                               2 * s0 * z, 2 * s0 * y, 2 * s0 * x, 2 * s0 * w,
+                               0, -4 * s1 * x, 0, -4 * s1 * z,
+                               -2 * s2 * x, -2 * s2 * w, 2 * s2 * z, 2 * s2 * y,
+                               -2 * s0 * y, 2 * s0 * z, -2 * s0 * w, 2 * s0 * x,
+                               2 * s1 * x, 2 * s1 * w, 2 * s1 * z, 2 * s1 * y,
+                               0, -4 * s2 * x, -4 * s2 * y, 0};
+        Matrix<9, 3> dm_scale = {R(0, 0), 0, 0,
+                             0, R(0, 1), 0,
+                             0, 0, R(0, 2),
+                             R(1, 0), 0, 0,
+                             0, R(1, 1), 0,
+                             0, 0, R(1, 2),
+                             R(2, 0), 0, 0,
+                             0, R(2, 1), 0,
+                             0, 0, R(2, 2)};
+        Matrix<6, 4> dcov3d_drot =  dcov3d_dm *  dm_rot;
+        Matrix<6, 3> dcov3d_dscale =  dcov3d_dm *  dm_scale;
+        dcov3d_drots[i * 24 + 0] = dcov3d_drot(0, 0);
+        dcov3d_drots[i * 24 + 1] = dcov3d_drot(0, 1);
+        dcov3d_drots[i * 24 + 2] = dcov3d_drot(0, 2);
+        dcov3d_drots[i * 24 + 3] = dcov3d_drot(0, 3);
+        dcov3d_drots[i * 24 + 4] = dcov3d_drot(1, 0);
+        dcov3d_drots[i * 24 + 5] = dcov3d_drot(1, 1);
+        dcov3d_drots[i * 24 + 6] = dcov3d_drot(1, 2);
+        dcov3d_drots[i * 24 + 7] = dcov3d_drot(1, 3);
+        dcov3d_drots[i * 24 + 8] = dcov3d_drot(2, 0);
+        dcov3d_drots[i * 24 + 9] = dcov3d_drot(2, 1);
+        dcov3d_drots[i * 24 + 10] = dcov3d_drot(2, 2);
+        dcov3d_drots[i * 24 + 11] = dcov3d_drot(2, 3);
+        dcov3d_drots[i * 24 + 12] = dcov3d_drot(3, 0);
+        dcov3d_drots[i * 24 + 13] = dcov3d_drot(3, 1);
+        dcov3d_drots[i * 24 + 14] = dcov3d_drot(3, 2);
+        dcov3d_drots[i * 24 + 15] = dcov3d_drot(3, 3);
+        dcov3d_drots[i * 24 + 16] = dcov3d_drot(4, 0);
+        dcov3d_drots[i * 24 + 17] = dcov3d_drot(4, 1);
+        dcov3d_drots[i * 24 + 18] = dcov3d_drot(4, 2);
+        dcov3d_drots[i * 24 + 19] = dcov3d_drot(4, 3);
+        dcov3d_drots[i * 24 + 20] = dcov3d_drot(5, 0);
+        dcov3d_drots[i * 24 + 21] = dcov3d_drot(5, 1);
+        dcov3d_drots[i * 24 + 22] = dcov3d_drot(5, 2);
+        dcov3d_drots[i * 24 + 23] = dcov3d_drot(5, 3);
+
+        dcov3d_dscales[i * 18 + 0] = dcov3d_dscale(0, 0);
+        dcov3d_dscales[i * 18 + 1] = dcov3d_dscale(0, 1);
+        dcov3d_dscales[i * 18 + 2] = dcov3d_dscale(0, 2);
+        dcov3d_dscales[i * 18 + 3] = dcov3d_dscale(1, 0);
+        dcov3d_dscales[i * 18 + 4] = dcov3d_dscale(1, 1);
+        dcov3d_dscales[i * 18 + 5] = dcov3d_dscale(1, 2);
+        dcov3d_dscales[i * 18 + 6] = dcov3d_dscale(2, 0);
+        dcov3d_dscales[i * 18 + 7] = dcov3d_dscale(2, 1);
+        dcov3d_dscales[i * 18 + 8] = dcov3d_dscale(2, 2);
+        dcov3d_dscales[i * 18 + 9] = dcov3d_dscale(3, 0);
+        dcov3d_dscales[i * 18 + 10] = dcov3d_dscale(3, 1);
+        dcov3d_dscales[i * 18 + 11] = dcov3d_dscale(3, 2);
+        dcov3d_dscales[i * 18 + 12] = dcov3d_dscale(4, 0);
+        dcov3d_dscales[i * 18 + 13] = dcov3d_dscale(4, 1);
+        dcov3d_dscales[i * 18 + 14] = dcov3d_dscale(4, 2);
+        dcov3d_dscales[i * 18 + 15] = dcov3d_dscale(5, 0);
+        dcov3d_dscales[i * 18 + 16] = dcov3d_dscale(5, 1);
+        dcov3d_dscales[i * 18 + 17] = dcov3d_dscale(5, 2);
+    }
 }
 
 __global__ void computeCov2D(
@@ -424,9 +510,8 @@ __global__ void sh2Color(
     const float *__restrict__ twc,
     const int sh_dim,
     float *__restrict__ colors,
-    const bool calc_J,
-    float *__restrict__ dc_dshs,
-    float *__restrict__ dc_dpws)
+    float *__restrict__ dcolor_dshs,
+    float *__restrict__ dcolor_dpws)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= gs_num)
@@ -523,7 +608,8 @@ __global__ void sh2Color(
         }
     }
 
-    if (calc_J)
+    // calc the jacobians
+    if (dcolor_dshs != nullptr && dcolor_dpws != nullptr)
     {
         const float normd3_inv = 1.f/(normd*normd*normd);
         const float normd_inv = 1.f/normd;
@@ -538,22 +624,22 @@ __global__ void sh2Color(
         float3 dc_dr1 = {0, 0, 0};
         float3 dc_dr2 = {0, 0, 0};
 
-        dc_dshs[3 * sh_dim * i + 0] = SH_C0_0;
-        dc_dshs[3 * sh_dim * i + 0 + sh_dim + 1] = SH_C0_0;
-        dc_dshs[3 * sh_dim * i + 0 + 2 * sh_dim + 2] = SH_C0_0;
+        dcolor_dshs[3 * sh_dim * i + 0] = SH_C0_0;
+        dcolor_dshs[3 * sh_dim * i + 0 + sh_dim + 1] = SH_C0_0;
+        dcolor_dshs[3 * sh_dim * i + 0 + 2 * sh_dim + 2] = SH_C0_0;
         if (sh_dim > 3)
         {
-            dc_dshs[3 * sh_dim * i + 3 * 1] = dc_dsh1;
-            dc_dshs[3 * sh_dim * i + 3 * 2] = dc_dsh2;
-            dc_dshs[3 * sh_dim * i + 3 * 3] = dc_dsh3;
+            dcolor_dshs[3 * sh_dim * i + 3 * 1] = dc_dsh1;
+            dcolor_dshs[3 * sh_dim * i + 3 * 2] = dc_dsh2;
+            dcolor_dshs[3 * sh_dim * i + 3 * 3] = dc_dsh3;
 
-            dc_dshs[3 * sh_dim * i + 3 * 1 + sh_dim + 1] = dc_dsh1;
-            dc_dshs[3 * sh_dim * i + 3 * 2 + sh_dim + 1] = dc_dsh2;
-            dc_dshs[3 * sh_dim * i + 3 * 3 + sh_dim + 1] = dc_dsh3;
+            dcolor_dshs[3 * sh_dim * i + 3 * 1 + sh_dim + 1] = dc_dsh1;
+            dcolor_dshs[3 * sh_dim * i + 3 * 2 + sh_dim + 1] = dc_dsh2;
+            dcolor_dshs[3 * sh_dim * i + 3 * 3 + sh_dim + 1] = dc_dsh3;
 
-            dc_dshs[3 * sh_dim * i + 3 * 1 + 2 * sh_dim + 2] = dc_dsh1;
-            dc_dshs[3 * sh_dim * i + 3 * 2 + 2 * sh_dim + 2] = dc_dsh2;
-            dc_dshs[3 * sh_dim * i + 3 * 3 + 2 * sh_dim + 2] = dc_dsh3;
+            dcolor_dshs[3 * sh_dim * i + 3 * 1 + 2 * sh_dim + 2] = dc_dsh1;
+            dcolor_dshs[3 * sh_dim * i + 3 * 2 + 2 * sh_dim + 2] = dc_dsh2;
+            dcolor_dshs[3 * sh_dim * i + 3 * 3 + 2 * sh_dim + 2] = dc_dsh3;
 
 
             dc_dr0 += SH_C1_2 * sh3;
@@ -561,23 +647,23 @@ __global__ void sh2Color(
             dc_dr2 += SH_C1_1 * sh2;
             if (sh_dim > 12)
             {
-                dc_dshs[3 * sh_dim * i + 3 * 4] = dc_dsh4;
-                dc_dshs[3 * sh_dim * i + 3 * 5] = dc_dsh5;
-                dc_dshs[3 * sh_dim * i + 3 * 6] = dc_dsh6;
-                dc_dshs[3 * sh_dim * i + 3 * 7] = dc_dsh7;
-                dc_dshs[3 * sh_dim * i + 3 * 8] = dc_dsh8;
+                dcolor_dshs[3 * sh_dim * i + 3 * 4] = dc_dsh4;
+                dcolor_dshs[3 * sh_dim * i + 3 * 5] = dc_dsh5;
+                dcolor_dshs[3 * sh_dim * i + 3 * 6] = dc_dsh6;
+                dcolor_dshs[3 * sh_dim * i + 3 * 7] = dc_dsh7;
+                dcolor_dshs[3 * sh_dim * i + 3 * 8] = dc_dsh8;
 
-                dc_dshs[3 * sh_dim * i + 3 * 4 + sh_dim + 1] = dc_dsh4;
-                dc_dshs[3 * sh_dim * i + 3 * 5 + sh_dim + 1] = dc_dsh5;
-                dc_dshs[3 * sh_dim * i + 3 * 6 + sh_dim + 1] = dc_dsh6;
-                dc_dshs[3 * sh_dim * i + 3 * 7 + sh_dim + 1] = dc_dsh7;
-                dc_dshs[3 * sh_dim * i + 3 * 8 + sh_dim + 1] = dc_dsh8;
+                dcolor_dshs[3 * sh_dim * i + 3 * 4 + sh_dim + 1] = dc_dsh4;
+                dcolor_dshs[3 * sh_dim * i + 3 * 5 + sh_dim + 1] = dc_dsh5;
+                dcolor_dshs[3 * sh_dim * i + 3 * 6 + sh_dim + 1] = dc_dsh6;
+                dcolor_dshs[3 * sh_dim * i + 3 * 7 + sh_dim + 1] = dc_dsh7;
+                dcolor_dshs[3 * sh_dim * i + 3 * 8 + sh_dim + 1] = dc_dsh8;
 
-                dc_dshs[3 * sh_dim * i + 3 * 4 + 2 * sh_dim + 2] = dc_dsh4;
-                dc_dshs[3 * sh_dim * i + 3 * 5 + 2 * sh_dim + 2] = dc_dsh5;
-                dc_dshs[3 * sh_dim * i + 3 * 6 + 2 * sh_dim + 2] = dc_dsh6;
-                dc_dshs[3 * sh_dim * i + 3 * 7 + 2 * sh_dim + 2] = dc_dsh7;
-                dc_dshs[3 * sh_dim * i + 3 * 8 + 2 * sh_dim + 2] = dc_dsh8;
+                dcolor_dshs[3 * sh_dim * i + 3 * 4 + 2 * sh_dim + 2] = dc_dsh4;
+                dcolor_dshs[3 * sh_dim * i + 3 * 5 + 2 * sh_dim + 2] = dc_dsh5;
+                dcolor_dshs[3 * sh_dim * i + 3 * 6 + 2 * sh_dim + 2] = dc_dsh6;
+                dcolor_dshs[3 * sh_dim * i + 3 * 7 + 2 * sh_dim + 2] = dc_dsh7;
+                dcolor_dshs[3 * sh_dim * i + 3 * 8 + 2 * sh_dim + 2] = dc_dsh8;
 
                 dc_dr0 += SH_C2_0 * y * sh4 - SH_C2_2 * 2 * x * sh6 + SH_C2_3 * z * sh7 + SH_C2_4 * 2 * x * sh8;
                 dc_dr1 += SH_C2_0 * x * sh4 + SH_C2_1 * z * sh5 - SH_C2_2 * 2.0 * y * sh6 - SH_C2_4 * 2 * y * sh8;
@@ -585,29 +671,29 @@ __global__ void sh2Color(
 
                 if (sh_dim > 27)
                 {
-                    dc_dshs[3 * sh_dim * i + 3 * 9] = dc_dsh9;
-                    dc_dshs[3 * sh_dim * i + 3 * 10] = dc_dsh10;
-                    dc_dshs[3 * sh_dim * i + 3 * 11] = dc_dsh11;
-                    dc_dshs[3 * sh_dim * i + 3 * 12] = dc_dsh12;
-                    dc_dshs[3 * sh_dim * i + 3 * 13] = dc_dsh13;
-                    dc_dshs[3 * sh_dim * i + 3 * 14] = dc_dsh14;
-                    dc_dshs[3 * sh_dim * i + 3 * 15] = dc_dsh15;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 9] = dc_dsh9;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 10] = dc_dsh10;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 11] = dc_dsh11;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 12] = dc_dsh12;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 13] = dc_dsh13;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 14] = dc_dsh14;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 15] = dc_dsh15;
                     
-                    dc_dshs[3 * sh_dim * i + 3 * 9  + sh_dim + 1] = dc_dsh9;
-                    dc_dshs[3 * sh_dim * i + 3 * 10 + sh_dim + 1] = dc_dsh10;
-                    dc_dshs[3 * sh_dim * i + 3 * 11 + sh_dim + 1] = dc_dsh11;
-                    dc_dshs[3 * sh_dim * i + 3 * 12 + sh_dim + 1] = dc_dsh12;
-                    dc_dshs[3 * sh_dim * i + 3 * 13 + sh_dim + 1] = dc_dsh13;
-                    dc_dshs[3 * sh_dim * i + 3 * 14 + sh_dim + 1] = dc_dsh14;
-                    dc_dshs[3 * sh_dim * i + 3 * 15 + sh_dim + 1] = dc_dsh15;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 9  + sh_dim + 1] = dc_dsh9;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 10 + sh_dim + 1] = dc_dsh10;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 11 + sh_dim + 1] = dc_dsh11;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 12 + sh_dim + 1] = dc_dsh12;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 13 + sh_dim + 1] = dc_dsh13;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 14 + sh_dim + 1] = dc_dsh14;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 15 + sh_dim + 1] = dc_dsh15;
 
-                    dc_dshs[3 * sh_dim * i + 3 * 9  + 2 * sh_dim + 2] = dc_dsh9;
-                    dc_dshs[3 * sh_dim * i + 3 * 10 + 2 * sh_dim + 2] = dc_dsh10;
-                    dc_dshs[3 * sh_dim * i + 3 * 11 + 2 * sh_dim + 2] = dc_dsh11;
-                    dc_dshs[3 * sh_dim * i + 3 * 12 + 2 * sh_dim + 2] = dc_dsh12;
-                    dc_dshs[3 * sh_dim * i + 3 * 13 + 2 * sh_dim + 2] = dc_dsh13;
-                    dc_dshs[3 * sh_dim * i + 3 * 14 + 2 * sh_dim + 2] = dc_dsh14;
-                    dc_dshs[3 * sh_dim * i + 3 * 15 + 2 * sh_dim + 2] = dc_dsh15;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 9  + 2 * sh_dim + 2] = dc_dsh9;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 10 + 2 * sh_dim + 2] = dc_dsh10;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 11 + 2 * sh_dim + 2] = dc_dsh11;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 12 + 2 * sh_dim + 2] = dc_dsh12;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 13 + 2 * sh_dim + 2] = dc_dsh13;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 14 + 2 * sh_dim + 2] = dc_dsh14;
+                    dcolor_dshs[3 * sh_dim * i + 3 * 15 + 2 * sh_dim + 2] = dc_dsh15;
 
                     dc_dr0 += 6.0 * SH_C3_0 * sh9 * x * y +
                               SH_C3_1 * sh10 * yz -
@@ -633,16 +719,16 @@ __global__ void sh2Color(
         Matrix<3, 3> dc_dr = {dc_dr0.x, dc_dr1.x, dc_dr2.x,
                               dc_dr0.y, dc_dr1.y, dc_dr2.y,
                               dc_dr0.z, dc_dr1.z, dc_dr2.z};
-        Matrix<3, 3> dc_dpw = dc_dr * dr_dpw;
-        dc_dpws[9 * i + 0] = dc_dpw(0, 0);
-        dc_dpws[9 * i + 1] = dc_dpw(0, 1);
-        dc_dpws[9 * i + 2] = dc_dpw(0, 2);
-        dc_dpws[9 * i + 3] = dc_dpw(1, 0);
-        dc_dpws[9 * i + 4] = dc_dpw(1, 1);
-        dc_dpws[9 * i + 5] = dc_dpw(1, 2);
-        dc_dpws[9 * i + 6] = dc_dpw(2, 0);
-        dc_dpws[9 * i + 7] = dc_dpw(2, 1);
-        dc_dpws[9 * i + 8] = dc_dpw(2, 2);
+        Matrix<3, 3> dcolor_dpw = dc_dr * dr_dpw;
+        dcolor_dpws[9 * i + 0] = dcolor_dpw(0, 0);
+        dcolor_dpws[9 * i + 1] = dcolor_dpw(0, 1);
+        dcolor_dpws[9 * i + 2] = dcolor_dpw(0, 2);
+        dcolor_dpws[9 * i + 3] = dcolor_dpw(1, 0);
+        dcolor_dpws[9 * i + 4] = dcolor_dpw(1, 1);
+        dcolor_dpws[9 * i + 5] = dcolor_dpw(1, 2);
+        dcolor_dpws[9 * i + 6] = dcolor_dpw(2, 0);
+        dcolor_dpws[9 * i + 7] = dcolor_dpw(2, 1);
+        dcolor_dpws[9 * i + 8] = dcolor_dpw(2, 2);
     }
 //
     //}

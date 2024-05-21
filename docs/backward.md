@@ -122,9 +122,9 @@ The partial derivatives of projection function.
 $$
 \diff{u_i}{p_{c,i}} =
 \begin{bmatrix} 
-f_x/z & 0 & -f_x x/z^2 \\\\ 
+f_x/z & 0 & -f_x x/z^2 \\ 
 0 & f_y/z & -f_y y/z^2
-\end{bmatrix}  \\\\
+\end{bmatrix}
 \tag{B.1.2}
 $$
 x, y, z are the elements of $p_c$.

@@ -10,7 +10,7 @@ def upper_triangular(mat):
     n = 0
     if (s == 2):
         n = 3
-    elif(s == 3):
+    elif (s == 3):
         n = 6
     else:
         raise NotImplementedError("no supported mat")
@@ -27,7 +27,7 @@ def symmetric_matrix(upper):
     n = upper.shape[0]
     if (n == 6):
         s = 3
-    elif(n == 3):
+    elif (n == 3):
         s = 2
     else:
         raise NotImplementedError("no supported mat")
@@ -116,7 +116,8 @@ def calc_m(q, s, calc_J=False):
 def calc_mmt(m, calc_J=False):
     M = m.reshape([3, 3])
     MMT = M @ M.T
-    mmt = np.array([MMT[0, 0], MMT[0, 1], MMT[0, 2], MMT[1, 1], MMT[1, 2], MMT[2, 2]])
+    mmt = np.array([MMT[0, 0], MMT[0, 1], MMT[0, 2],
+                   MMT[1, 1], MMT[1, 2], MMT[2, 2]])
     if (calc_J):
         # a, b, c, d, e, f, g, h, i = m
         # |a b c| |a d g|   |aa+bb+cc  ad+be+cg  ag+bh+ci|
@@ -161,7 +162,8 @@ def compute_cov_2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
 
         dcov2d_dcov3d =\
             np.array([[m00**2, 2*m00*m01, 2*m00*m02, m01**2, 2*m01*m02, m02**2],
-                      [m00*m10, m00*m11 + m01*m10, m00*m12 + m02 * m10, m01*m11, m01*m12 + m02*m11, m02*m12],
+                      [m00*m10, m00*m11 + m01*m10, m00*m12 + m02 *
+                          m10, m01*m11, m01*m12 + m02*m11, m02*m12],
                       [m10**2, 2*m10*m11, 2*m10*m12, m11**2, 2*m11*m12, m12**2]])
 
         dcov2d_dm =\
@@ -271,24 +273,24 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
 
 def sh2color(sh, pw, twc, calc_J=False):
     sh_dim = sh.shape[0]
-    dc_dsh = np.zeros([sh.shape[0]//3, 3, 3])
-    dc_dpw = np.zeros([3, 3])
-    dc_dsh[0] = np.eye(3) * SH_C0_0
+    dcolor_dsh = np.zeros([sh.shape[0]//3, 3, 3])
+    dcolor_dpw = np.zeros([3, 3])
+    dcolor_dsh[0] = np.eye(3) * SH_C0_0
     sh = sh.reshape([-1, 3])
-    color = dc_dsh[0] @ sh[0] + 0.5
+    color = dcolor_dsh[0] @ sh[0] + 0.5
     if (sh_dim > 3):
         d = pw - twc
         normd = np.linalg.norm(d)
         r = d / normd
         x, y, z = r
 
-        dc_dsh[1] = np.eye(3) * SH_C1_0 * y
-        dc_dsh[2] = np.eye(3) * SH_C1_1 * z
-        dc_dsh[3] = np.eye(3) * SH_C1_2 * x
+        dcolor_dsh[1] = np.eye(3) * SH_C1_0 * y
+        dcolor_dsh[2] = np.eye(3) * SH_C1_1 * z
+        dcolor_dsh[3] = np.eye(3) * SH_C1_2 * x
         color = color + \
-            dc_dsh[1] @ sh[1] + \
-            dc_dsh[2] @ sh[2] + \
-            dc_dsh[3] @ sh[3]
+            dcolor_dsh[1] @ sh[1] + \
+            dcolor_dsh[2] @ sh[2] + \
+            dcolor_dsh[3] @ sh[3]
 
         if (sh_dim > 12):
             xx = x * x
@@ -297,36 +299,37 @@ def sh2color(sh, pw, twc, calc_J=False):
             xy = x * y
             yz = y * z
             xz = x * z
-            dc_dsh[4] = np.eye(3) * SH_C2_0 * xy
-            dc_dsh[5] = np.eye(3) * SH_C2_1 * yz
-            dc_dsh[6] = np.eye(3) * SH_C2_2 * (2.0 * zz - xx - yy)
-            dc_dsh[7] = np.eye(3) * SH_C2_3 * xz
-            dc_dsh[8] = np.eye(3) * SH_C2_4 * (xx - yy)
+            dcolor_dsh[4] = np.eye(3) * SH_C2_0 * xy
+            dcolor_dsh[5] = np.eye(3) * SH_C2_1 * yz
+            dcolor_dsh[6] = np.eye(3) * SH_C2_2 * (2.0 * zz - xx - yy)
+            dcolor_dsh[7] = np.eye(3) * SH_C2_3 * xz
+            dcolor_dsh[8] = np.eye(3) * SH_C2_4 * (xx - yy)
 
             color = color + \
-                dc_dsh[4] @ sh[4] + \
-                dc_dsh[5] @ sh[5] + \
-                dc_dsh[6] @ sh[6] + \
-                dc_dsh[7] @ sh[7] + \
-                dc_dsh[8] @ sh[8]
+                dcolor_dsh[4] @ sh[4] + \
+                dcolor_dsh[5] @ sh[5] + \
+                dcolor_dsh[6] @ sh[6] + \
+                dcolor_dsh[7] @ sh[7] + \
+                dcolor_dsh[8] @ sh[8]
 
             if (sh_dim > 27):
-                dc_dsh[9] = np.eye(3) * SH_C3_0 * y * (3.0 * xx - yy)
-                dc_dsh[10] = np.eye(3) * SH_C3_1 * xy * z
-                dc_dsh[11] = np.eye(3) * SH_C3_2 * y * (4.0 * zz - xx - yy)
-                dc_dsh[12] = np.eye(3) * SH_C3_3 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy)
-                dc_dsh[13] = np.eye(3) * SH_C3_4 * x * (4.0 * zz - xx - yy)
-                dc_dsh[14] = np.eye(3) * SH_C3_5 * z * (xx - yy)
-                dc_dsh[15] = np.eye(3) * SH_C3_6 * x * (xx - 3.0 * yy)
+                dcolor_dsh[9] = np.eye(3) * SH_C3_0 * y * (3.0 * xx - yy)
+                dcolor_dsh[10] = np.eye(3) * SH_C3_1 * xy * z
+                dcolor_dsh[11] = np.eye(3) * SH_C3_2 * y * (4.0 * zz - xx - yy)
+                dcolor_dsh[12] = np.eye(3) * SH_C3_3 * \
+                    z * (2.0 * zz - 3.0 * xx - 3.0 * yy)
+                dcolor_dsh[13] = np.eye(3) * SH_C3_4 * x * (4.0 * zz - xx - yy)
+                dcolor_dsh[14] = np.eye(3) * SH_C3_5 * z * (xx - yy)
+                dcolor_dsh[15] = np.eye(3) * SH_C3_6 * x * (xx - 3.0 * yy)
 
                 color = color +  \
-                    dc_dsh[9] @ sh[9] + \
-                    dc_dsh[10] @ sh[10] + \
-                    dc_dsh[11] @ sh[11] + \
-                    dc_dsh[12] @ sh[12] + \
-                    dc_dsh[13] @ sh[13] + \
-                    dc_dsh[14] @ sh[14] + \
-                    dc_dsh[15] @ sh[15]
+                    dcolor_dsh[9] @ sh[9] + \
+                    dcolor_dsh[10] @ sh[10] + \
+                    dcolor_dsh[11] @ sh[11] + \
+                    dcolor_dsh[12] @ sh[12] + \
+                    dcolor_dsh[13] @ sh[13] + \
+                    dcolor_dsh[14] @ sh[14] + \
+                    dcolor_dsh[15] @ sh[15]
     if (calc_J):
         if (sh_dim > 3):
             dr_dpw = np.zeros([3, 3])
@@ -373,7 +376,7 @@ def sh2color(sh, pw, twc, calc_J=False):
                         + SH_C3_3*sh[12]*(-3.0*xx - 3.0*yy + 6.0*zz)\
                         + 8.0*SH_C3_4*sh[13]*xz\
                         + SH_C3_5*sh[14]*(xx - yy)
-        return color, dc_dsh.transpose([2, 0, 1]).reshape(3, sh_dim), dc_dr @ dr_dpw
+        return color, dcolor_dsh.transpose([2, 0, 1]).reshape(3, sh_dim), dc_dr @ dr_dpw
     else:
         return color
 
@@ -545,29 +548,44 @@ if __name__ == "__main__":
         # step1. Transform pw to camera frame,
         # and project it to iamge.
         pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
-        dpc_dpw_numerical = numerical_derivative(transform, [pws[i], Rcw, tcw], 0)
-        print("check dpc%d_dpw%d: " % (i, i), check(dpc_dpw_numerical, dpc_dpws[i]))
+        dpc_dpw_numerical = numerical_derivative(
+            transform, [pws[i], Rcw, tcw], 0)
+        print("check dpc%d_dpw%d: " %
+              (i, i), check(dpc_dpw_numerical, dpc_dpws[i]))
 
         us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
-        du_dpc_numerical = numerical_derivative(project, [pcs[i], fx, fy, cx, cy], 0)
-        print("check du%d_dpc%d: " % (i, i), check(du_dpc_numerical, du_dpcs[i]))
+        du_dpc_numerical = numerical_derivative(
+            project, [pcs[i], fx, fy, cx, cy], 0)
+        print("check du%d_dpc%d: " %
+              (i, i), check(du_dpc_numerical, du_dpcs[i]))
 
         # step2. Calcuate the 3d Gaussian.
-        cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(gs['rot'][i], gs['scale'][i], True)
-        dcov3d_dq_numerical = numerical_derivative(compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 0)
-        dcov3d_ds_numerical = numerical_derivative(compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 1)
-        print("check dcov3d%d_dq%d: " % (i, i), check(dcov3d_dq_numerical, dcov3d_drots[i]))
-        print("check dcov3d%d_ds%d: " % (i, i), check(dcov3d_ds_numerical, dcov3d_dscales[i]))
+        cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
+            gs['rot'][i], gs['scale'][i], True)
+        dcov3d_dq_numerical = numerical_derivative(
+            compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 0)
+        dcov3d_ds_numerical = numerical_derivative(
+            compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 1)
+        print("check dcov3d%d_dq%d: " % (i, i), check(
+            dcov3d_dq_numerical, dcov3d_drots[i]))
+        print("check dcov3d%d_ds%d: " % (i, i), check(
+            dcov3d_ds_numerical, dcov3d_dscales[i]))
 
-        cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(cov3ds[i], pcs[i], Rcw, fx, fy, True)
-        dcov2d_dcov3d_numerical = numerical_derivative(compute_cov_2d, [cov3ds[i], pcs[i], Rcw, fx, fy], 0)
-        dcov2d_dpc_numerical = numerical_derivative(compute_cov_2d, [cov3ds[i], pcs[i], Rcw, fx, fy], 1)
+        cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
+            cov3ds[i], pcs[i], Rcw, fx, fy, True)
+        dcov2d_dcov3d_numerical = numerical_derivative(
+            compute_cov_2d, [cov3ds[i], pcs[i], Rcw, fx, fy], 0)
+        dcov2d_dpc_numerical = numerical_derivative(
+            compute_cov_2d, [cov3ds[i], pcs[i], Rcw, fx, fy], 1)
 
-        print("check dcov2d%d_dcov3d%d: " % (i, i), check(dcov2d_dcov3d_numerical, dcov2d_dcov3ds[i]))
-        print("check dcov2d%d_dpc%d: " % (i, i), check(dcov2d_dpc_numerical, dcov2d_dpcs[i]))
+        print("check dcov2d%d_dcov3d%d: " % (i, i), check(
+            dcov2d_dcov3d_numerical, dcov2d_dcov3ds[i]))
+        print("check dcov2d%d_dpc%d: " % (i, i), check(
+            dcov2d_dpc_numerical, dcov2d_dpcs[i]))
 
         # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-        colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(gs['sh'][i], pws[i], twc, True)
+        colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
+            gs['sh'][i], pws[i], twc, True)
         dcolor_dsh_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], twc], 0)
         dcolor_dpw_numerical = numerical_derivative(
@@ -669,8 +687,13 @@ if __name__ == "__main__":
         backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 3)
     dloss_dpws_numerial = numerical_derivative(
         backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 4)
-    print("check dloss_drots: ", check(dloss_drots_numerial.reshape(-1), dloss_drots.reshape(-1)))
-    print("check dloss_dscales: ", check(dloss_dscales_numerial.reshape(-1), dloss_dscales.reshape(-1)))
-    print("check dloss_dshs: ", check(dloss_dshs_numerial.reshape(-1), dloss_dshs.reshape(-1)))
-    print("check dloss_dalphas: ", check(dloss_dalphas_numerial.reshape(-1), dloss_dalphas.reshape(-1)))
-    print("check dloss_dpws: ", check(dloss_dpws_numerial.reshape(-1), dloss_dpws.reshape(-1)))
+    print("check dloss_drots: ", check(
+        dloss_drots_numerial.reshape(-1), dloss_drots.reshape(-1)))
+    print("check dloss_dscales: ", check(
+        dloss_dscales_numerial.reshape(-1), dloss_dscales.reshape(-1)))
+    print("check dloss_dshs: ", check(
+        dloss_dshs_numerial.reshape(-1), dloss_dshs.reshape(-1)))
+    print("check dloss_dalphas: ", check(
+        dloss_dalphas_numerial.reshape(-1), dloss_dalphas.reshape(-1)))
+    print("check dloss_dpws: ", check(
+        dloss_dpws_numerial.reshape(-1), dloss_dpws.reshape(-1)))

@@ -12,7 +12,7 @@ from backward_cpu import *
 if __name__ == "__main__":
     gs_data = np.random.rand(4, 59)
     gs_data0 = np.array([[0.,  0.,  0.,  # xyz
-                        1.,  0.,  0., 0.,  # rot
+                        0.8537127, 0.4753723, 0.0950745, 0.1901489,  # rot
                         0.5,  0.5,  0.5,  # size
                         1.,
                         1.772484,  -1.772484,  1.772484],
@@ -82,15 +82,20 @@ if __name__ == "__main__":
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
             gs['sh'][i], pws[i], twc, True)
 
-    pw_gpu = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
-    rot_gpu = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
-    scale_gpu = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
-    alpha_gpu = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
-    sh_gpu = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
+    pws_gpu = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
+    rots_gpu = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
+    scales_gpu = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
+    alphas_gpu = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
+    shs_gpu = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
     Rcw_gpu = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
     tcw_gpu = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc_gpu = torch.from_numpy(twc).type(torch.float32).to('cuda')
 
-    color_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(sh_gpu, pw_gpu, twc_gpu, True)
+    color_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(shs_gpu, pws_gpu, twc_gpu, True)
     print(np.max(np.abs(dcolor_dshs_gpu.cpu().numpy() - dcolor_dshs)))
     print(np.max(np.abs(dcolor_dpws_gpu.cpu().numpy() - dcolor_dpws)))
+
+    cov3d_gpu, dcov3d_drots_gpu, dcov3d_dscales_gpu = pg.computeCov3D(rots_gpu, scales_gpu, True)
+    print(np.max(np.abs(dcov3d_drots_gpu.cpu().numpy() - dcov3d_drots)))
+    print(np.max(np.abs(dcov3d_dscales_gpu.cpu().numpy() - dcov3d_dscales)))
+    pass
