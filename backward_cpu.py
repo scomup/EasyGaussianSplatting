@@ -58,7 +58,10 @@ def numerical_derivative(func, param, idx, plus=lambda a, b: a + b, minus=lambda
 
 
 def check(a, b):
-    return np.all(np.abs(a - b) < 0.0001)
+    if (np.all(np.abs(a - b) < 0.0001)):
+        return '\033[32m'+'[OK]'+'\033[0m'
+    else:
+        return '\033[31m'+'[NG]'+'\033[0m'
 
 
 def transform(pw, Rcw, tcw, calc_J=False):
@@ -153,6 +156,8 @@ def compute_cov_2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
     M = J @ Rcw
     Cov2d = M @ Cov3d @ M.T
     cov2d = upper_triangular(Cov2d)
+    cov2d[0] += 0.3
+    cov2d[2] += 0.3
     if (calc_J):
         m00, m01, m02 = M[0]
         m10, m11, m12 = M[1]
@@ -172,9 +177,9 @@ def compute_cov_2d(cov3d, pc, Rcw, fx, fy, calc_J=False):
                           a*m00 + b*m01 + c*m02, b*m00 + d*m01 + e*m02, c*m00 + e*m01 + f*m02],
                       [0, 0, 0, 2*a*m10 + 2*b*m11 + 2*c*m12, 2*b*m10 + 2*d*m11 + 2*e*m12, 2*c*m10 + 2*e*m11 + 2*f*m12]])
         dm_dpc =\
-            np.array([[-fx*r00/x**2 - fx*r20/z**2, 0, 2*fx*r20*x/z**3],
-                      [-fx*r01/x**2 - fx*r21/z**2, 0, 2*fx*r21*x/z**3],
-                      [-fx*r02/x**2 - fx*r22/z**2, 0, 2*fx*r22*x/z**3],
+            np.array([[-fx*r20/z**2, 0, -fx*r00/z**2 + 2*fx*r20*x/z**3],
+                      [-fx*r21/z**2, 0, -fx*r01/z**2 + 2*fx*r21*x/z**3],
+                      [-fx*r22/z**2, 0, -fx*r02/z**2 + 2*fx*r22*x/z**3],
                       [0, -fy*r20/z**2, -fy*r10/z**2 + 2*fy*r20*y/z**3],
                       [0, -fy*r21/z**2, -fy*r11/z**2 + 2*fy*r21*y/z**3],
                       [0, -fy*r22/z**2, -fy*r12/z**2 + 2*fy*r22*y/z**3]])
@@ -550,14 +555,14 @@ if __name__ == "__main__":
         pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
         dpc_dpw_numerical = numerical_derivative(
             transform, [pws[i], Rcw, tcw], 0)
-        print("check dpc%d_dpw%d: " %
-              (i, i), check(dpc_dpw_numerical, dpc_dpws[i]))
+        print("%s check dpc%d_dpw%d" %
+              (check(dpc_dpw_numerical, dpc_dpws[i]), i, i))
 
         us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
         du_dpc_numerical = numerical_derivative(
             project, [pcs[i], fx, fy, cx, cy], 0)
-        print("check du%d_dpc%d: " %
-              (i, i), check(du_dpc_numerical, du_dpcs[i]))
+        print("%s check du%d_dpc%d" %
+              (check(du_dpc_numerical, du_dpcs[i]), i, i))
 
         # step2. Calcuate the 3d Gaussian.
         cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
@@ -566,10 +571,10 @@ if __name__ == "__main__":
             compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 0)
         dcov3d_ds_numerical = numerical_derivative(
             compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 1)
-        print("check dcov3d%d_dq%d: " % (i, i), check(
-            dcov3d_dq_numerical, dcov3d_drots[i]))
-        print("check dcov3d%d_ds%d: " % (i, i), check(
-            dcov3d_ds_numerical, dcov3d_dscales[i]))
+        print("%s check dcov3d%d_dq%d" % (check(
+            dcov3d_dq_numerical, dcov3d_drots[i]), i, i))
+        print("%s check dcov3d%d_ds%d" % (check(
+            dcov3d_ds_numerical, dcov3d_dscales[i]), i, i))
 
         cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
             cov3ds[i], pcs[i], Rcw, fx, fy, True)
@@ -578,10 +583,10 @@ if __name__ == "__main__":
         dcov2d_dpc_numerical = numerical_derivative(
             compute_cov_2d, [cov3ds[i], pcs[i], Rcw, fx, fy], 1)
 
-        print("check dcov2d%d_dcov3d%d: " % (i, i), check(
-            dcov2d_dcov3d_numerical, dcov2d_dcov3ds[i]))
-        print("check dcov2d%d_dpc%d: " % (i, i), check(
-            dcov2d_dpc_numerical, dcov2d_dpcs[i]))
+        print("%s check dcov2d%d_dcov3d%d" % (check(
+            dcov2d_dcov3d_numerical, dcov2d_dcov3ds[i]), i, i), )
+        print("%s check dcov2d%d_dpc%d" % (check(
+            dcov2d_dpc_numerical, dcov2d_dpcs[i]), i, i))
 
         # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
@@ -590,10 +595,10 @@ if __name__ == "__main__":
             sh2color, [gs['sh'][i], pws[i], twc], 0)
         dcolor_dpw_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], twc], 1)
-        print("check dcolor%d_dsh%d: " % (i, i), check(
-            dcolor_dsh_numerical, dcolor_dshs[i]))
-        print("check dcolor%d_dsh%d: " % (i, i), check(
-            dcolor_dpw_numerical, dcolor_dpws[i]))
+        print("%s check dcolor%d_dsh%d" % (check(
+            dcolor_dsh_numerical, dcolor_dshs[i]), i, i))
+        print("%s check dcolor%d_dsh%d" % (check(
+            dcolor_dpw_numerical, dcolor_dpws[i]), i, i))
 
     # ---------------------------------
     idx = np.argsort(pcs[:, 2])
@@ -609,7 +614,7 @@ if __name__ == "__main__":
     cov2d0 = cov2ds[:3]
     cinv2d0, dcov2d_dcinv2d = calc_cinv2d(cov2d0, True)
     dcov2d_dcinv2d_numerial = numerical_derivative(calc_cinv2d, [cov2d0], 0)
-    print("check dcov2d_dcinv2d: ", check(
+    print("%s check dcov2d_dcinv2d" % check(
         dcov2d_dcinv2d_numerial, dcov2d_dcinv2d))
 
     cinv2ds = calc_cinv2d(cov2ds)
@@ -625,11 +630,11 @@ if __name__ == "__main__":
     alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du = calc_alpha_prime(
         alpha0, cinv2d0, u0, x, True)
 
-    print("check dalphaprime_dalpha: ", check(
+    print("%s check dalphaprime_dalpha" % check(
         dalphaprime_dalpha_numerial, dalphaprime_dalpha))
-    print("check dalphaprime_dcinv2d: ", check(
+    print("%s check dalphaprime_dcinv2d" % check(
         dalphaprime_dcinv2d_numerial, dalphaprime_dcinv2d))
-    print("check dalphaprime_du: ", check(
+    print("%s check dalphaprime_du" % check(
         dalphaprime_du_numerial, dalphaprime_du))
 
     gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du, _ = calc_gamma(
@@ -644,14 +649,14 @@ if __name__ == "__main__":
         calc_gamma, [alphas, cov2ds, colors, us, x], 3)
 
     for i in range(gs_num):
-        print("check dgamma_dalpha_%d: " % i, check(
-            dgamma_dalpha_numerial[:, i], dgamma_dalpha[i].reshape(-1)))
-        print("check dgamma_dcov2d_%d: " % i, check(
-            dgamma_dcov2d_numerial[:, 3*i:3*i+3], dgamma_dcov2d[i]))
-        print("check dgamma_dcolor_%d: " % i, check(
-            dgamma_dcolor_numerial[:, 3*i:3*i+3], dgamma_dcolor[i]))
-        print("check dgamma_du_%d: " % i, check(
-            dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]))
+        print("%s check dgamma_dalpha_%d" % (check(
+            dgamma_dalpha_numerial[:, i], dgamma_dalpha[i].reshape(-1)), i))
+        print("%s check dgamma_dcov2d_%d" % (check(
+            dgamma_dcov2d_numerial[:, 3*i:3*i+3], dgamma_dcov2d[i]), i))
+        print("%s check dgamma_dcolor_%d" % (check(
+            dgamma_dcolor_numerial[:, 3*i:3*i+3], dgamma_dcolor[i]), i))
+        print("%s check dgamma_du_%d" % (check(
+            dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]), i))
 
     loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
         alphas, cov2ds, colors, us, image_gt, True)
@@ -664,10 +669,13 @@ if __name__ == "__main__":
     dloss_du_numerial = numerical_derivative(
         calc_loss, [alphas, cov2ds, colors, us, image_gt], 3)
 
-    print("check dloss_dalpha: ", check(dloss_dalpha_numerial, dloss_dalphas))
-    print("check dloss_dcov2d: ", check(dloss_dcov2d_numerial, dloss_dcov2ds))
-    print("check dloss_dcolor: ", check(dloss_dcolor_numerial, dloss_dcolors))
-    print("check dloss_du: ", check(dloss_du_numerial, dloss_dus))
+    print("%s check dloss_dalpha" %
+          check(dloss_dalpha_numerial, dloss_dalphas))
+    print("%s check dloss_dcov2d" %
+          check(dloss_dcov2d_numerial, dloss_dcov2ds))
+    print("%s check dloss_dcolor" %
+          check(dloss_dcolor_numerial, dloss_dcolors))
+    print("%s check dloss_du" % check(dloss_du_numerial, dloss_dus))
 
     loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
         gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
@@ -687,13 +695,13 @@ if __name__ == "__main__":
         backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 3)
     dloss_dpws_numerial = numerical_derivative(
         backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 4)
-    print("check dloss_drots: ", check(
+    print("%s check dloss_drots" % check(
         dloss_drots_numerial.reshape(-1), dloss_drots.reshape(-1)))
-    print("check dloss_dscales: ", check(
+    print("%s check dloss_dscales" % check(
         dloss_dscales_numerial.reshape(-1), dloss_dscales.reshape(-1)))
-    print("check dloss_dshs: ", check(
+    print("%s check dloss_dshs" % check(
         dloss_dshs_numerial.reshape(-1), dloss_dshs.reshape(-1)))
-    print("check dloss_dalphas: ", check(
+    print("%s check dloss_dalphas" % check(
         dloss_dalphas_numerial.reshape(-1), dloss_dalphas.reshape(-1)))
-    print("check dloss_dpws: ", check(
+    print("%s check dloss_dpws" % check(
         dloss_dpws_numerial.reshape(-1), dloss_dpws.reshape(-1)))

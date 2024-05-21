@@ -94,14 +94,19 @@ if __name__ == "__main__":
     colors_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(shs_gpu, pws_gpu, twc_gpu, True)
     print(np.max(np.abs(dcolor_dshs_gpu.cpu().numpy() - dcolor_dshs)))
     print(np.max(np.abs(dcolor_dpws_gpu.cpu().numpy() - dcolor_dpws)))
+    print("%s test colors_gpu" % check(colors_gpu.cpu().numpy(), colors))
+    print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
+    print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
 
     cov3ds_gpu, dcov3d_drots_gpu, dcov3d_dscales_gpu = pg.computeCov3D(rots_gpu, scales_gpu, True)
-    print(np.max(np.abs(dcov3d_drots_gpu.cpu().numpy() - dcov3d_drots)))
-    print(np.max(np.abs(dcov3d_dscales_gpu.cpu().numpy() - dcov3d_dscales)))
+    print("%s test cov3ds_gpu" % check(cov3ds_gpu.cpu().numpy(), cov3ds))
+    print("%s test dcov3d_drots_gpu" % check(dcov3d_drots_gpu.cpu().numpy(), dcov3d_drots))
+    print("%s test dcov3d_dscales_gpu" % check(dcov3d_dscales_gpu.cpu().numpy(), dcov3d_dscales))
 
     pcs_gpu = torch.from_numpy(pcs).type(torch.float32).to('cuda')
-    cov2ds_gpu, dcov2d_dcov3ds_gpu, dcov2d_pcs_gpu = pg.computeCov2D(cov3ds_gpu, pcs_gpu, Rcw_gpu, fx, fy, True)
-    print(np.max(np.abs(dcov2d_dcov3ds_gpu.cpu().numpy() - dcov2d_dcov3ds)))
-    print(np.max(np.abs(dcov2d_pcs_gpu.cpu().numpy() - dcov2d_dpcs)))
+    cov2ds_gpu, dcov2d_dcov3ds_gpu, dcov2d_dpcs_gpu = pg.computeCov2D(cov3ds_gpu, pcs_gpu, Rcw_gpu, fx, fy, True)
+    print("%s test cov2ds_gpu" % check(cov2ds_gpu.cpu().numpy(), cov2ds))
+    print("%s test dcov2d_dcov3ds_gpu" % check(dcov2d_dcov3ds_gpu.cpu().numpy(), dcov2d_dcov3ds))
+    print("%s test dcov2d_dpcs_gpu" % check(dcov2d_dpcs_gpu.cpu().numpy(), dcov2d_dpcs))
 
     pass

@@ -13,7 +13,7 @@ f_x, f_y = symbols("f_x, f_y")
 x, y, z = symbols("x, y, z")
 
 z2 = z*z
-J = Matrix([[f_x/x, 0, -f_x*x/z2],
+J = Matrix([[f_x/z, 0, -f_x*x/z2],
             [0, f_y/z, -f_y*y/z2]])
 
 JR = J*R

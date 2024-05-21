@@ -453,13 +453,6 @@ __global__ void computeCov2D(
         c, e, f};
 
     Matrix<2, 3> M = J * R;
-    if (i == 0)
-    {
-        printf("f %f %f\n", focal_x, focal_y);
-        printf("pc %f %f %f\n", x,y,z);
-        printf("J0 %f %f %f\n", J(0,0),J(0,1),J(0,2));
-        printf("J1 %f %f %f\n", J(1,0),J(1,1),J(1,2));
-    }
 
     Matrix<2, 2> Sigma_prime = M * Sigma * M.transpose();
 
@@ -503,28 +496,18 @@ __global__ void computeCov2D(
                                   2 * a * M(1, 0) + 2 * b * M(1, 1) + 2 * c * M(1, 2),
                                   2 * b * M(1, 0) + 2 * d * M(1, 1) + 2 * e * M(1, 2),
                                   2 * c * M(1, 0) + 2 * e * M(1, 1) + 2 * f * M(1, 2)};
-        const float xx_inv = 1.f / (x * x);
-        const float zz_inv = 1.f / (z * z);
-        const float z3_inv = zz_inv / z;
-        Matrix<6, 3> dm_dpc = {-focal_x * R(0, 0) * xx_inv - focal_x * R(2, 2) * zz_inv,
-                               0,
-                               2 * focal_x * R(2, 2) * x * z3_inv,
-                               -focal_x * R(0, 0) * xx_inv - focal_x * R(2, 2) * zz_inv,
-                               0,
-                               2 * focal_x * R(2, 2) * x * z3_inv,
-                               -focal_x * R(0, 0) * xx_inv - focal_x * R(2, 2) * zz_inv,
-                               0,
-                               2 * focal_x * R(2, 2) * x * z3_inv,
-                               0,
-                               -focal_y * R(2, 2) * zz_inv,
-                               -focal_y * R(1, 1) * zz_inv + 2 * focal_y * R(2, 2) * y * z3_inv,
-                               0,
-                               -focal_y * R(2, 2) * zz_inv,
-                               -focal_y * R(1, 1) * zz_inv + 2 * focal_y * R(2, 2) * y * z3_inv,
-                               0,
-                               -focal_y * R(2, 2) * zz_inv,
-                               -focal_y * R(1, 1) * zz_inv + 2 * focal_y * R(2, 2) * y * z3_inv};
+
+        const float z2_inv = 1.f / (z * z);
+        const float z3_inv = z2_inv / z;
+        Matrix<6, 3> dm_dpc = {-focal_x * R(2, 0) * z2_inv, 0, -focal_x * R(0, 0) * z2_inv + 2 * focal_x * R(2, 0) * x * z3_inv,
+                               -focal_x * R(2, 1) * z2_inv, 0, -focal_x * R(0, 1) * z2_inv + 2 * focal_x * R(2, 1) * x * z3_inv,
+                               -focal_x * R(2, 2) * z2_inv, 0, -focal_x * R(0, 2) * z2_inv + 2 * focal_x * R(2, 2) * x * z3_inv,
+                               0, -focal_y * R(2, 0) * z2_inv, -focal_y * R(1, 0) * z2_inv + 2 * focal_y * R(2, 0) * y * z3_inv,
+                               0, -focal_y * R(2, 1) * z2_inv, -focal_y * R(1, 1) * z2_inv + 2 * focal_y * R(2, 1) * y * z3_inv,
+                               0, -focal_y * R(2, 2) * z2_inv, -focal_y * R(1, 2) * z2_inv + 2 * focal_y * R(2, 2) * y * z3_inv};
+
         Matrix<3, 3> dcov2d_dpc = dcov2d_dm * dm_dpc;
+
         dcov2d_dpcs[i * 9 + 0] = dcov2d_dpc(0, 0);
         dcov2d_dpcs[i * 9 + 1] = dcov2d_dpc(0, 1);
         dcov2d_dpcs[i * 9 + 2] = dcov2d_dpc(0, 2);
