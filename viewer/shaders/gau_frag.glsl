@@ -7,7 +7,7 @@ see https://github.com/limacv/GaussianSplattingViewer/blob/main/shaders/gau_frag
 
 in vec3 color;
 in float alpha;
-in vec3 cov_inv;
+in vec3 cinv2d;
 in vec2 d_pix;  // u - pix
 
 uniform int  render_mod = 1;
@@ -18,7 +18,7 @@ void main()
 {
     if (alpha < 0.001)
         discard;
-    float maha_dist = cov_inv.x * d_pix.x * d_pix.x + cov_inv.z * d_pix.y * d_pix.y + 2 * cov_inv.y * d_pix.x * d_pix.y;
+    float maha_dist = cinv2d.x * d_pix.x * d_pix.x + cinv2d.z * d_pix.y * d_pix.y + 2 * cinv2d.y * d_pix.x * d_pix.y;
     if (maha_dist < 0.f)
         discard;
 

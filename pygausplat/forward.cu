@@ -10,14 +10,15 @@
 
 
 
-std::vector<torch::Tensor> forward(
+std::vector<torch::Tensor> splat(
     const int height,
     const int width,
     const torch::Tensor us,
-    const torch::Tensor cov2d,
+    const torch::Tensor cinv2ds,
     const torch::Tensor alphas,
     const torch::Tensor depths,
-    const torch::Tensor colors)
+    const torch::Tensor colors,
+    const torch::Tensor areas)
 {
     auto float_opts = us.options().dtype(torch::kFloat32);
     auto int_opts = us.options().dtype(torch::kInt32);
@@ -38,22 +39,13 @@ std::vector<torch::Tensor> forward(
     thrust::device_vector<uint4> gs_rects(gs_num);
     thrust::device_vector<uint>  patch_num_per_gs(gs_num);
     thrust::device_vector<uint>  patch_offset_per_gs(gs_num);
-    thrust::device_vector<float>  cinv2d(gs_num * 3);
-    thrust::device_vector<float>  areas(gs_num * 2);
-
-    inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
-        gs_num,
-        cov2d.contiguous().data_ptr<float>(),
-        thrust::raw_pointer_cast(cinv2d.data()),
-        thrust::raw_pointer_cast(areas.data()));
-    cudaDeviceSynchronize();
 
     getRect<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         width,
         height,
         gs_num,
         us.contiguous().data_ptr<float>(),
-        thrust::raw_pointer_cast(areas.data()),
+        areas.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
@@ -95,7 +87,7 @@ std::vector<torch::Tensor> forward(
         patch_range_per_tile.contiguous().data_ptr<int>(),
         thrust::raw_pointer_cast(gs_id_per_patch.data()),
         us.contiguous().data_ptr<float>(),
-        thrust::raw_pointer_cast(cinv2d.data()),
+        cinv2ds.contiguous().data_ptr<float>(),
         alphas.contiguous().data_ptr<float>(),
         colors.contiguous().data_ptr<float>(),
         image.contiguous().data_ptr<float>(),
@@ -287,5 +279,30 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
         cudaDeviceSynchronize();
 
         return {colors};
+    }
+}
+
+std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
+                                        const bool calc_J)
+{
+    auto float_opts = cov2ds.options().dtype(torch::kFloat32);
+    auto int_opts = cov2ds.options().dtype(torch::kInt32);
+    int gs_num = cov2ds.sizes()[0];
+    torch::Tensor cinv2ds = torch::full({gs_num, 3}, 0.0, float_opts);
+    torch::Tensor areas = torch::full({gs_num, 2}, 0.0, float_opts);
+
+    if (calc_J)
+    {
+        return {cinv2ds, areas};
+    }
+    else
+    {
+        inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+            gs_num,
+            cov2ds.contiguous().data_ptr<float>(),
+            cinv2ds.contiguous().data_ptr<float>(),
+            areas.contiguous().data_ptr<float>());
+        cudaDeviceSynchronize();
+        return {cinv2ds, areas};
     }
 }

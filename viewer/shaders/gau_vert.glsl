@@ -28,7 +28,7 @@ uniform vec2 win_size;
 
 out vec3 color;
 out float alpha;
-out vec3 cov_inv;
+out vec3 cinv2d;
 out vec2 d_pix;  // local coordinate in quad, unit in pixel
 
 vec3 get_prep_vec3(int offset)
@@ -68,7 +68,7 @@ void main()
 	//color = computeColor(sh_offset, ray_dir);
 	color = get_prep_vec3(base_prep + OFFSET_PREP_COLOR);
 	alpha = get_prep_vec1(base_prep + OFFSET_PREP_ALPHA);
-	cov_inv = get_prep_vec3(base_prep + OFFSET_PREP_COVINV);
+	cinv2d = get_prep_vec3(base_prep + OFFSET_PREP_COVINV);
     d_pix = vert * area;
 
 }

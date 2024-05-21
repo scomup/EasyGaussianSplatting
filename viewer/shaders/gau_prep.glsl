@@ -225,7 +225,7 @@ void main()
 	}
 
     float det_inv = 1.f / det;
-	vec3 cov_inv = vec3(cov2d.z * det_inv, -cov2d.y * det_inv, cov2d.x * det_inv);
+	vec3 cinv2d = vec3(cov2d.z * det_inv, -cov2d.y * det_inv, cov2d.x * det_inv);
     
 	vec2 area = 3.f * sqrt(vec2(cov2d.x, cov2d.z));  // drawing area, 3 sigma of x and y
     

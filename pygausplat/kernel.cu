@@ -259,8 +259,8 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
 
 __global__ void inverseCov2D(
     int gs_num,
-    const float *__restrict__ cov2d,
-    float *__restrict__ cinv2d,
+    const float *__restrict__ cov2ds,
+    float *__restrict__ cinv2ds,
     float *__restrict__ areas)
 {
     // compute inverse of cov2d
@@ -271,18 +271,18 @@ __global__ void inverseCov2D(
     if (gs_id >= gs_num)
         return;
     // forward.md 5.3
-    const float a = cov2d[gs_id * 3];
-    const float b = cov2d[gs_id * 3 + 1];
-    const float c = cov2d[gs_id * 3 + 2];
+    const float a = cov2ds[gs_id * 3];
+    const float b = cov2ds[gs_id * 3 + 1];
+    const float c = cov2ds[gs_id * 3 + 2];
 
     const float det = a * c - b * b;
     if (det == 0.0f)
         return;
 
     const float det_inv = 1.f / det;
-    cinv2d[gs_id * 3 + 0] = det_inv * c;
-    cinv2d[gs_id * 3 + 1] = -det_inv * b;
-    cinv2d[gs_id * 3 + 2] = det_inv * a;
+    cinv2ds[gs_id * 3 + 0] = det_inv * c;
+    cinv2ds[gs_id * 3 + 1] = -det_inv * b;
+    cinv2ds[gs_id * 3 + 2] = det_inv * a;
     areas[gs_id * 2 + 0] = 3 * sqrt(abs(a));
     areas[gs_id * 2 + 1] = 3 * sqrt(abs(c));
 }

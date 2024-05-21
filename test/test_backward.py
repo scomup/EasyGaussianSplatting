@@ -110,4 +110,4 @@ if __name__ == "__main__":
     print("%s test colors_gpu" % check(colors_gpu.cpu().numpy(), colors))
     print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
     print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
-    pass
+

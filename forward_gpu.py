@@ -5,53 +5,6 @@ import matplotlib.pyplot as plt
 from read_ply import *
 
 
-def sh2color_gpu(sh, pw, twc):
-    pw = torch.from_numpy(pw).type(torch.float32).to('cuda')
-    sh = torch.from_numpy(sh).type(torch.float32).to('cuda')
-    twc = torch.from_numpy(twc).type(torch.float32).to('cuda')
-    color = pg.sh2Color(sh, pw, twc)[0]
-    return color.to('cpu').numpy()
-
-
-def project_gpu(pw, Rcw, tcw, K):
-    pw = torch.from_numpy(pw).type(torch.float32).to('cuda')
-    Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
-    tcw = torch.from_numpy(tcw).type(torch.float32).to('cuda')
-    u, pc = pg.project(pw, Rcw, tcw, K[0, 0], K[1, 1], K[0, 2], K[1, 2])
-    return u.to('cpu').numpy(), pc.to('cpu').numpy()
-
-
-def compute_cov_3d_gpu(scale, rot):
-    scale = torch.from_numpy(scale).type(torch.float32).to('cuda')
-    rot = torch.from_numpy(rot).type(torch.float32).to('cuda')
-    res = pg.computeCov3D(rot, scale)
-    return res[0].to('cpu').numpy()
-
-
-def compute_cov_2d_gpu(pc, K, cov3d, Rcw):
-    pc = torch.from_numpy(pc).type(torch.float32).to('cuda')
-    cov3d = torch.from_numpy(cov3d).type(torch.float32).to('cuda')
-    Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
-    focal_x = K[0, 0]
-    focal_y = K[1, 1]
-    res = pg.computeCov2D(cov3d, pc, Rcw, focal_x, focal_y)
-    return res[0].to('cpu').numpy()
-
-
-def splat_gpu(height, width, u, cov2d, alpha, depth, color):
-    u = torch.from_numpy(u).type(torch.float32).to('cuda')
-    cov2d = torch.from_numpy(cov2d).type(torch.float32).to('cuda')
-    alpha = torch.from_numpy(alpha).type(torch.float32).to('cuda')
-    depth = torch.from_numpy(depth).type(torch.float32).to('cuda')
-    color = torch.from_numpy(color).type(torch.float32).to('cuda')
-    res = pg.forward(height, width, u, cov2d, alpha, depth, color)
-    res_cpu = []
-    for r in res:
-        res_cpu.append(r.to('cpu').numpy())
-    res_cpu[0] = res_cpu[0].transpose(1, 2, 0)
-    return res_cpu
-
-
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -111,31 +64,32 @@ if __name__ == "__main__":
     center_x = width / 2
     center_y = height / 2
 
-    pw = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
-    rot = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
-    scale = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
-    alpha = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
-    sh = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
+    pws = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
+    rots = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
+    scales = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
+    alphas = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
+    shs = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda')
     Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
     tcw = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc = torch.linalg.inv(Rcw)@(-tcw)
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    u, pc = pg.project(pw, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
-    depth = pc[:, 2]
+    us, pcs = pg.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
+    depths = pcs[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
-    cov3d = pg.computeCov3D(rot, scale, False)[0]
+    cov3ds = pg.computeCov3D(rots, scales, False)[0]
 
     # step3. Calcuate the 2d Gaussian.
-    cov2d = pg.computeCov2D(cov3d, pc, Rcw, focal_x, focal_y, False)[0]
+    cov2ds = pg.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, False)[0]
 
     # step4. get color info
-    color = pg.sh2Color(sh, pw, twc, False)[0]
+    colors = pg.sh2Color(shs, pws, twc, False)[0]
 
     # step5. Blend the 2d Gaussian to image
-    image = pg.forward(height, width, u, cov2d, alpha, depth, color)[0]
+    cinv2ds, areas = pg.inverseCov2D(cov2ds, False)
+    image = pg.splat(height, width, us, cinv2ds, alphas, depths, colors, areas)[0]
     image = image.to('cpu').numpy()
 
     plt.imshow(image.transpose([1, 2, 0]))

@@ -16,8 +16,8 @@ class GS2DNet(torch.autograd.Function):
     def forward(ctx, u, cov2d, alpha, color):
         global depth
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            pg.forward(camera.height, camera.width,
-                       u, cov2d, alpha, depth, color)
+            pg.splat(camera.height, camera.width,
+                     u, cov2d, alpha, depth, color)
         ctx.save_for_backward(u, cov2d, alpha, color, contrib,
                               final_tau, patch_offset_per_tile, gs_id_per_patch)
         return image
@@ -125,7 +125,7 @@ if __name__ == "__main__":
         torch.float32).to(device).requires_grad_()
 
     image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-        pg.forward(camera.height, camera.width, u, cov2d, alpha, depth, color)
+        pg.splat(camera.height, camera.width, u, cov2d, alpha, depth, color)
 
     gs2dnet = GS2DNet
 

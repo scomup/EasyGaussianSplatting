@@ -539,6 +539,7 @@ if __name__ == "__main__":
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])
     pcs = np.zeros([gs_num, 3])
+    cinv2ds = np.zeros([gs_num, 3])
     cov3ds = np.zeros([gs_num, 6])
     cov2ds = np.zeros([gs_num, 3])
     dpc_dpws = np.zeros([gs_num, 3, 3])
@@ -549,6 +550,7 @@ if __name__ == "__main__":
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
     dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
     dcolor_dpws = np.zeros([gs_num, 3, 3])
+    dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
         # step1. Transform pw to camera frame,
         # and project it to iamge.
@@ -564,7 +566,7 @@ if __name__ == "__main__":
         print("%s check du%d_dpc%d" %
               (check(du_dpc_numerical, du_dpcs[i]), i, i))
 
-        # step2. Calcuate the 3d Gaussian.
+        # step2. Calcuate the 3d covariance.
         cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
             gs['rot'][i], gs['scale'][i], True)
         dcov3d_dq_numerical = numerical_derivative(
@@ -576,6 +578,7 @@ if __name__ == "__main__":
         print("%s check dcov3d%d_ds%d" % (check(
             dcov3d_ds_numerical, dcov3d_dscales[i]), i, i))
 
+        # step3. Project the 3D Gaussian to 2d image as a 2d covariance.
         cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
             cov3ds[i], pcs[i], Rcw, fx, fy, True)
         dcov2d_dcov3d_numerical = numerical_derivative(
@@ -588,7 +591,7 @@ if __name__ == "__main__":
         print("%s check dcov2d%d_dpc%d" % (check(
             dcov2d_dpc_numerical, dcov2d_dpcs[i]), i, i))
 
-        # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
+        # step4. Compute color.
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
             gs['sh'][i], pws[i], twc, True)
         dcolor_dsh_numerical = numerical_derivative(
@@ -600,6 +603,12 @@ if __name__ == "__main__":
         print("%s check dcolor%d_dsh%d" % (check(
             dcolor_dpw_numerical, dcolor_dpws[i]), i, i))
 
+        # step5.1 Compute inverse covariance.
+        cinv2ds[i], dcinv2d_dcov2ds[i] = calc_cinv2d(cov2ds[i], True)
+        dcinv2d_dcov2d_numerical = numerical_derivative(calc_cinv2d, [cov2ds[i]], 0)
+        print("%s check dcinv2d%d_dcov2d%d" % (check(
+            dcinv2d_dcov2d_numerical, dcinv2d_dcov2ds[i]), i, i))
+
     # ---------------------------------
     idx = np.argsort(pcs[:, 2])
     idxb = np.argsort(idx)
@@ -609,26 +618,16 @@ if __name__ == "__main__":
     us = us[idx].reshape(-1)
     x = np.array([16, 8])
 
-    calc_gamma(alphas, cov2ds, colors, us, np.array([16, 8]))
-
-    cov2d0 = cov2ds[:3]
-    cinv2d0, dcov2d_dcinv2d = calc_cinv2d(cov2d0, True)
-    dcov2d_dcinv2d_numerial = numerical_derivative(calc_cinv2d, [cov2d0], 0)
-    print("%s check dcov2d_dcinv2d" % check(
-        dcov2d_dcinv2d_numerial, dcov2d_dcinv2d))
-
-    cinv2ds = calc_cinv2d(cov2ds)
     alpha0, u0 = alphas[:1], us[:2]
-    calc_alpha_prime(alpha0, cinv2d0, u0, x)
 
     dalphaprime_dalpha_numerial = numerical_derivative(
-        calc_alpha_prime, [alpha0, cinv2d0, u0, x], 0)
+        calc_alpha_prime, [alpha0, cinv2ds[0], u0, x], 0)
     dalphaprime_dcinv2d_numerial = numerical_derivative(
-        calc_alpha_prime, [alpha0, cinv2d0, u0, x], 1)
+        calc_alpha_prime, [alpha0, cinv2ds[0], u0, x], 1)
     dalphaprime_du_numerial = numerical_derivative(
-        calc_alpha_prime, [alpha0, cinv2d0, u0, x], 2)
+        calc_alpha_prime, [alpha0, cinv2ds[0], u0, x], 2)
     alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du = calc_alpha_prime(
-        alpha0, cinv2d0, u0, x, True)
+        alpha0, cinv2ds[0], u0, x, True)
 
     print("%s check dalphaprime_dalpha" % check(
         dalphaprime_dalpha_numerial, dalphaprime_dalpha))
