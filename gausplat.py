@@ -192,7 +192,7 @@ def inverse_cov2d(cov2d):
     return cinv2d, areas
 
 
-def splat(height, width, us, cinv2d, alpha, depth, color, areas):
+def splat(height, width, us, cinv2d, alpha, depth, color, areas, im=None):
     image = np.zeros([height, width, 3])
     image_T = np.ones([height, width])
 
@@ -205,11 +205,11 @@ def splat(height, width, us, cinv2d, alpha, depth, color, areas):
     win_size = np.array([width, height])
 
     for j, i in enumerate(sort_idx):
-        if (j % 100000 == 0):
+        if (j % 10000 == 0):
             print("processing... %3.f%%" % (j / float(us.shape[0]) * 100.))
-            # from matplotlib import pyplot as plt
-            # plt.imshow(image)
-            # plt.savefig('foo%d.png' % j)
+            if (im is not None):
+                im.set_data(image)
+                plt.pause(0.1)
 
         if (depth[i] < 0.2 or depth[i] > 100):
             continue

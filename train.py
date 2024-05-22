@@ -11,9 +11,10 @@ from pytorch_ssim import gau_loss
 class GSNet(torch.autograd.Function):
     @staticmethod
     def forward(ctx, rots, scales, shs, alphas, pws):
-        
         global Rcw, tcw, twc, focal_x, focal_y, center_x, center_y, height, width
-
+    
+        # step1. Transform pw to camera frame,
+        # and project it to iamge.        
         us, pcs, du_dpcs = pg.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, True)
         depths = pcs[:, 2]
 
@@ -43,7 +44,7 @@ class GSNet(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dloss_dgammas):
-        global Rcw, tcw, height, width
+        global Rcw, height, width
         contrib, final_tau,\
             patch_offset_per_tile, gs_id_per_patch,\
             cinv2ds, dcinv2d_dcov2ds,\
@@ -70,9 +71,6 @@ class GSNet(torch.autograd.Function):
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws    
         return dloss_drots.squeeze(), dloss_dscales.squeeze(),\
             dloss_dshs.squeeze(), dloss_dalphas.squeeze(), dloss_dpws.squeeze()
-
-
-device = 'cuda'
 
 
 if __name__ == "__main__":
@@ -133,7 +131,7 @@ if __name__ == "__main__":
 
     gsnet = GSNet
 
-    image_gt = torchvision.io.read_image("imgs/test.png").to(device)
+    image_gt = torchvision.io.read_image("imgs/test.png").to('cuda')
     image_gt = torchvision.transforms.functional.resize(
         image_gt, [height, width]) / 255.
 

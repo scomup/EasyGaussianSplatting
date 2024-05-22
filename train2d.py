@@ -146,6 +146,5 @@ if __name__ == "__main__":
             print("step:%d loss:%f" % (i, loss.item()))
             im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
             im.set_data(im_cpu)
-            fig.canvas.flush_events()
             plt.pause(0.1)
     plt.show()
