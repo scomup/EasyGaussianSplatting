@@ -31,7 +31,7 @@ pip3 install pygausplat/.
 
 ## Forward process (render image)
 
-Given camera information, render 3D Gaussian data onto the 2D image using Python.
+Given camera information, render 3D Gaussian data onto the 2D image.
 
 CPU version.
 ```bash

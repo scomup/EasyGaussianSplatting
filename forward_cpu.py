@@ -66,7 +66,7 @@ if __name__ == "__main__":
     # and project it to iamge.
     us, pcs = project(pws, camera.Rcw, camera.tcw, camera.K)
 
-    depths = pc[:, 2]
+    depths = pcs[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
     cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     colors = sh2color(gs['sh'], pws, camera.cam_center)
 
     # step5. Blend the 2d Gaussian to image
-    cinv2ds, areas = inverse_cov2d(cov2d)
+    cinv2ds, areas = inverse_cov2d(cov2ds)
 
     image = splat(camera.height, camera.width, us, cinv2ds, gs['alpha'], depths, colors, areas)
     plt.imshow(image)
