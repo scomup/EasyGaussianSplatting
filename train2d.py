@@ -104,8 +104,8 @@ if __name__ == "__main__":
 
     width = int(979)
     height = int(546)
-    focal_x = 1163.2547280302354/2.
-    focal_y = 1156.280404988286/2.
+    focal_x = 581.6273640151177
+    focal_y = 578.140202494143
 
     K = np.array([[focal_x, 0, width/2.],
                   [0, focal_y, height/2.],
@@ -129,7 +129,6 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(
         image_gt, [height, width]) / 255.
 
-    criterion = nn.MSELoss()
     optimizer = optim.Adam([us, cinv2ds, alphas, colors], lr=0.005, eps=1e-15)
 
     fig, ax = plt.subplots()

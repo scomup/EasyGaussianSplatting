@@ -147,11 +147,6 @@ if __name__ == "__main__":
     dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
     dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
 
-    dloss_dcinv2ds_gpu = dloss_dcinv2ds_gpu.reshape([gs_num, 1, 3])
-    dloss_dalphas_gpu = dloss_dalphas_gpu.reshape([gs_num, 1, 1])
-    dloss_dcolors_gpu = dloss_dcolors_gpu.reshape([gs_num, 1, 3])
-    dloss_dus_gpu = dloss_dus_gpu.reshape([gs_num, 1, 2])
-
     print("%s test dloss_dus_gpu" % check(dloss_dus_gpu.cpu().numpy(), dloss_dus))
     print("%s test dloss_dcinv2ds_gpu" % check(dloss_dcinv2ds_gpu.cpu().numpy(), dloss_dcinv2ds))
     print("%s test dloss_dalphas_gpu" % check(dloss_dalphas_gpu.cpu().numpy(), dloss_dalphas))
