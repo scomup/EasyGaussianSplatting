@@ -54,17 +54,24 @@ if __name__ == "__main__":
 
     focal_x = 581.6273640151177
     focal_y = 578.140202494143
-    K = np.array([[focal_x, 0, width / 2],
-                  [0, focal_y, height / 2],
+    center_x = width / 2
+    center_y = height / 2
+
+    twc = np.linalg.inv(Rcw) @ (-tcw)
+
+    K = np.array([[focal_x, 0, center_x],
+                  [0, focal_y, center_y],
                   [0, 0, 1.]])
 
-    camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
+    fig, ax = plt.subplots()
+    array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
+    im = ax.imshow(array)
 
     pws = gs['pos']
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = project(pws, camera.Rcw, camera.tcw, camera.K)
+    us, pcs = project(pws, Rcw, tcw, K)
 
     depths = pcs[:, 2]
 
@@ -72,19 +79,21 @@ if __name__ == "__main__":
     cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2ds = compute_cov_2d(pcs, camera.K, cov3ds, camera.Rcw)
+    cov2ds = compute_cov_2d(pcs, K, cov3ds, Rcw)
 
     # step4. get color info
-    colors = sh2color(gs['sh'], pws, camera.cam_center)
+    colors = sh2color(gs['sh'], pws, twc)
 
     # step5. Blend the 2d Gaussian to image
     cinv2ds, areas = inverse_cov2d(cov2ds)
 
-    image = splat(camera.height, camera.width, us, cinv2ds, gs['alpha'], depths, colors, areas)
-    plt.imshow(image)
+    splat(height, width, us, cinv2ds, gs['alpha'], 
+          depths, colors, areas, im)
+    
     # from PIL import Image
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
     # print(pil_img.mode)
     # pil_img.save('test.png')
 
     plt.show()
+

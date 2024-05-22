@@ -13,46 +13,46 @@ from pytorch_ssim import gau_loss
 
 class GS2DNet(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, u, cov2d, alpha, color):
-        global depth
+    def forward(ctx, us, cinv2ds, alphas, colors):
+        global depths, areas
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
             pg.splat(camera.height, camera.width,
-                     u, cov2d, alpha, depth, color)
-        ctx.save_for_backward(u, cov2d, alpha, color, contrib,
+                     us, cinv2ds, alphas, depths, colors, areas)
+        ctx.save_for_backward(us, cinv2ds, alphas, colors, contrib,
                               final_tau, patch_offset_per_tile, gs_id_per_patch)
         return image
 
     @staticmethod
     def backward(ctx, dloss_dgammas):
-        global depth
-        u, cov2d, alpha, color, contrib, \
+        global depths
+        us, cinv2ds, alphas, colors, contrib, \
             final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
-        dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
-            pg.backward(camera.height, camera.width, u, cov2d, alpha,
-                        depth, color, contrib, final_tau,
+        dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
+            pg.splatB(camera.height, camera.width, us, cinv2ds, alphas,
+                        depths, colors, contrib, final_tau,
                         patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-        return dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors
+        return dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors
 
 
 def create_guassian2d_data(camera, gs):
-    pw = gs['pos']
+    pws = gs['pos']
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    u, pc = project(pw, camera.Rcw, camera.tcw, camera.K)
+    us, pcs = project(pws, camera.Rcw, camera.tcw, camera.K)
 
-    depth = pc[:, 2]
+    depths = pcs[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
-    cov3d = compute_cov_3d(gs['scale'], gs['rot'])
+    cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, K, cov3d, camera.Rcw)
+    cov2ds = compute_cov_2d(pcs, K, cov3ds, camera.Rcw)
+
+    cinv2ds, areas = inverse_cov2d(cov2ds)
 
     # step4. get color info
-    ray_dir = pw[:, :3] - camera.cam_center
-    ray_dir /= np.linalg.norm(ray_dir, axis=1)[:, np.newaxis]
-    color = sh2color(gs['sh'], ray_dir)
-    return u, cov2d, gs['alpha'], color, depth
+    colors = sh2color(gs['sh'], pws, twc=camera.cam_center)
+    return us, cinv2ds, gs['alpha'], colors, depths, areas
 
 
 device = 'cuda'
@@ -88,7 +88,7 @@ if __name__ == "__main__":
               ('sh', '<f4', (3,))]
 
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
-    ply_fn = "/home/liu/workspace/gaussian-splatting/output/aecdf69f-c/point_cloud/iteration_10/point_cloud.ply"
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/train2d/point_cloud/iteration_10/point_cloud.ply"
     gs = load_ply(ply_fn)
 
     # Camera info
@@ -104,8 +104,8 @@ if __name__ == "__main__":
 
     width = int(979)
     height = int(546)
-    focal_x = 1163.2547280302354/2.
-    focal_y = 1156.280404988286/2.
+    focal_x = 581.6273640151177
+    focal_y = 578.140202494143
 
     K = np.array([[focal_x, 0, width/2.],
                   [0, focal_y, height/2.],
@@ -113,19 +113,15 @@ if __name__ == "__main__":
 
     camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
 
-    u, cov2d, alpha, color, depth = create_guassian2d_data(camera, gs)
-    u = torch.from_numpy(u).type(torch.float32).to(device).requires_grad_()
-    cov2d = torch.from_numpy(cov2d).type(
-        torch.float32).to(device).requires_grad_()
-    alpha = torch.from_numpy(alpha).type(
-        torch.float32).to(device).requires_grad_()
-    depth = torch.from_numpy(depth).type(
-        torch.float32).to(device).requires_grad_()
-    color = torch.from_numpy(color).type(
-        torch.float32).to(device).requires_grad_()
-
+    us, cinv2ds, alphas, colors, depths, areas = create_guassian2d_data(camera, gs)
+    us = torch.from_numpy(us).type(torch.float32).to(device).requires_grad_()
+    cinv2ds = torch.from_numpy(cinv2ds).type(torch.float32).to(device).requires_grad_()
+    alphas = torch.from_numpy(alphas).type(torch.float32).to(device).requires_grad_()
+    depths = torch.from_numpy(depths).type(torch.float32).to(device)
+    colors = torch.from_numpy(colors).type(torch.float32).to(device).requires_grad_()
+    areas = torch.from_numpy(areas).type(torch.float32).to(device)
     image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-        pg.splat(camera.height, camera.width, u, cov2d, alpha, depth, color)
+        pg.splat(camera.height, camera.width, us, cinv2ds, alphas, depths, colors, areas)
 
     gs2dnet = GS2DNet
 
@@ -133,27 +129,22 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(
         image_gt, [height, width]) / 255.
 
-    criterion = nn.MSELoss()
-    optimizer = optim.Adam([u, cov2d, alpha, color], lr=0.001, eps=1e-15)
-    # image = gs2dnet.apply(u, cov2d, alpha, color)
-    # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
-    # plt.show()
+    optimizer = optim.Adam([us, cinv2ds, alphas, colors], lr=0.005, eps=1e-15)
+
     fig, ax = plt.subplots()
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    for i in range(1000):
-        image = gs2dnet.apply(u, cov2d, alpha, color)
+    for i in range(100):
+        image = gs2dnet.apply(us, cinv2ds, alphas, colors)
         loss = gau_loss(image, image_gt)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
-        if (i % 10 == 0):
+        if (i % 1 == 0):
             print("step:%d loss:%f" % (i, loss.item()))
-            # plt.imshow(image.to('cpu').detach().permute(1, 2, 0).numpy())
             im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
             im.set_data(im_cpu)
-            fig.canvas.flush_events()
             plt.pause(0.1)
     plt.show()

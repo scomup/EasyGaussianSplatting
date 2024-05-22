@@ -123,10 +123,10 @@ std::vector<torch::Tensor> splatB(
     auto float_opts = us.options().dtype(torch::kFloat32);
     auto int_opts = us.options().dtype(torch::kInt32);
     torch::Tensor image = torch::full({3, height, width}, 0.0, float_opts);
-    torch::Tensor dloss_dalphas = torch::full({gs_num}, 0, float_opts);
-    torch::Tensor dloss_dcolors = torch::full({gs_num, 3}, 0, float_opts);
-    torch::Tensor dloss_dcinv2ds = torch::full({gs_num, 3}, 0, float_opts);
-    torch::Tensor dloss_dus = torch::full({gs_num, 2}, 0, float_opts);
+    torch::Tensor dloss_dalphas = torch::full({gs_num, 1, 1}, 0, float_opts);
+    torch::Tensor dloss_dcolors = torch::full({gs_num, 1, 3}, 0, float_opts);
+    torch::Tensor dloss_dcinv2ds = torch::full({gs_num, 1, 3}, 0, float_opts);
+    torch::Tensor dloss_dus = torch::full({gs_num, 1, 2}, 0, float_opts);
 
     drawB<<<grid, block>>>(
         width,
