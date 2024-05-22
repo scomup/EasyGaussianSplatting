@@ -73,7 +73,7 @@ if __name__ == "__main__":
     dcov3d_dscales = np.zeros([gs_num, 6, 3])
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-    dcolor_dshs = np.zeros([gs_num, 3, sh_dim])
+    dcolor_dshs = np.zeros([gs_num, 1, sh_dim//3])
     dcolor_dpws = np.zeros([gs_num, 3, 3])
     dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
@@ -142,11 +142,27 @@ if __name__ == "__main__":
         pg.splatB(height, width, us_gpu, cinv2ds_gpu, alphas_gpu, depths_gpu, colors_gpu,
                   contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu, dloss_dgammas_gpu)
 
-    dloss_dalphas = dloss_dalphas.reshape([gs_num])
-    dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num, 3])
-    dloss_dcolors = dloss_dcolors.reshape([gs_num, 3])
-    dloss_dus = dloss_dus.reshape([gs_num, 2])
+    dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
+    dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num,1, 3])
+    dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
+    dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
+
+    dloss_dcinv2ds_gpu = dloss_dcinv2ds_gpu.reshape([gs_num, 1, 3])
+    dloss_dalphas_gpu = dloss_dalphas_gpu.reshape([gs_num, 1, 1])
+    dloss_dcolors_gpu = dloss_dcolors_gpu.reshape([gs_num, 1, 3])
+    dloss_dus_gpu = dloss_dus_gpu.reshape([gs_num, 1, 2])
+
     print("%s test dloss_dus_gpu" % check(dloss_dus_gpu.cpu().numpy(), dloss_dus))
     print("%s test dloss_dcinv2ds_gpu" % check(dloss_dcinv2ds_gpu.cpu().numpy(), dloss_dcinv2ds))
     print("%s test dloss_dalphas_gpu" % check(dloss_dalphas_gpu.cpu().numpy(), dloss_dalphas))
     print("%s test dloss_dcolors_gpu" % check(dloss_dcolors_gpu.cpu().numpy(), dloss_dcolors))
+    dpc_dpws_gpu = Rcw_gpu
+
+    dloss_drots_gpu = dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dcov3ds_gpu @ dcov3d_drots_gpu
+    dloss_dscales_gpu = dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dcov3ds_gpu @ dcov3d_dscales_gpu
+    dloss_dshs_gpu = (dloss_dcolors_gpu.permute(0, 2, 1) @ dcolor_dshs_gpu).permute(0, 2, 1).reshape(gs_num, 1, -1)
+    dloss_dalphas_gpu = dloss_dalphas_gpu
+    dloss_dpws_gpu = dloss_dus_gpu @ du_dpcs_gpu @ dpc_dpws_gpu + \
+        dloss_dcolors_gpu @ dcolor_dpws_gpu + \
+        dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dpcs_gpu @ dpc_dpws_gpu    
+    pass

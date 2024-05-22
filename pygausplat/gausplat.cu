@@ -300,7 +300,7 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
 
     if (calc_J)
     {
-        torch::Tensor dcolor_dshs = torch::full({gs_num, 3, sh_dim}, 0.0, float_opts);
+        torch::Tensor dcolor_dshs = torch::full({gs_num, 1, sh_dim/3}, 0.0, float_opts);
         torch::Tensor dcolor_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     
         sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(

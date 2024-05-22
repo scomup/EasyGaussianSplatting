@@ -276,24 +276,24 @@ def calc_gamma(alphas, cinv2ds, colors, us, x, calc_J=False):
 
 def sh2color(sh, pw, twc, calc_J=False):
     sh_dim = sh.shape[0]
-    dcolor_dsh = np.zeros([sh.shape[0]//3, 3, 3])
+    dcolor_dsh = np.zeros([sh_dim//3])
     dcolor_dpw = np.zeros([3, 3])
-    dcolor_dsh[0] = np.eye(3) * SH_C0_0
+    dcolor_dsh[0] = SH_C0_0
     sh = sh.reshape([-1, 3])
-    color = dcolor_dsh[0] @ sh[0] + 0.5
+    color = dcolor_dsh[0] * sh[0] + 0.5
     if (sh_dim > 3):
         d = pw - twc
         normd = np.linalg.norm(d)
         r = d / normd
         x, y, z = r
 
-        dcolor_dsh[1] = np.eye(3) * SH_C1_0 * y
-        dcolor_dsh[2] = np.eye(3) * SH_C1_1 * z
-        dcolor_dsh[3] = np.eye(3) * SH_C1_2 * x
+        dcolor_dsh[1] = SH_C1_0 * y
+        dcolor_dsh[2] = SH_C1_1 * z
+        dcolor_dsh[3] = SH_C1_2 * x
         color = color + \
-            dcolor_dsh[1] @ sh[1] + \
-            dcolor_dsh[2] @ sh[2] + \
-            dcolor_dsh[3] @ sh[3]
+            dcolor_dsh[1] * sh[1] + \
+            dcolor_dsh[2] * sh[2] + \
+            dcolor_dsh[3] * sh[3]
 
         if (sh_dim > 12):
             xx = x * x
@@ -302,37 +302,37 @@ def sh2color(sh, pw, twc, calc_J=False):
             xy = x * y
             yz = y * z
             xz = x * z
-            dcolor_dsh[4] = np.eye(3) * SH_C2_0 * xy
-            dcolor_dsh[5] = np.eye(3) * SH_C2_1 * yz
-            dcolor_dsh[6] = np.eye(3) * SH_C2_2 * (2.0 * zz - xx - yy)
-            dcolor_dsh[7] = np.eye(3) * SH_C2_3 * xz
-            dcolor_dsh[8] = np.eye(3) * SH_C2_4 * (xx - yy)
+            dcolor_dsh[4] = SH_C2_0 * xy
+            dcolor_dsh[5] = SH_C2_1 * yz
+            dcolor_dsh[6] = SH_C2_2 * (2.0 * zz - xx - yy)
+            dcolor_dsh[7] = SH_C2_3 * xz
+            dcolor_dsh[8] = SH_C2_4 * (xx - yy)
 
             color = color + \
-                dcolor_dsh[4] @ sh[4] + \
-                dcolor_dsh[5] @ sh[5] + \
-                dcolor_dsh[6] @ sh[6] + \
-                dcolor_dsh[7] @ sh[7] + \
-                dcolor_dsh[8] @ sh[8]
+                dcolor_dsh[4] * sh[4] + \
+                dcolor_dsh[5] * sh[5] + \
+                dcolor_dsh[6] * sh[6] + \
+                dcolor_dsh[7] * sh[7] + \
+                dcolor_dsh[8] * sh[8]
 
             if (sh_dim > 27):
-                dcolor_dsh[9] = np.eye(3) * SH_C3_0 * y * (3.0 * xx - yy)
-                dcolor_dsh[10] = np.eye(3) * SH_C3_1 * xy * z
-                dcolor_dsh[11] = np.eye(3) * SH_C3_2 * y * (4.0 * zz - xx - yy)
-                dcolor_dsh[12] = np.eye(3) * SH_C3_3 * \
+                dcolor_dsh[9] = SH_C3_0 * y * (3.0 * xx - yy)
+                dcolor_dsh[10] = SH_C3_1 * xy * z
+                dcolor_dsh[11] = SH_C3_2 * y * (4.0 * zz - xx - yy)
+                dcolor_dsh[12] = SH_C3_3 * \
                     z * (2.0 * zz - 3.0 * xx - 3.0 * yy)
-                dcolor_dsh[13] = np.eye(3) * SH_C3_4 * x * (4.0 * zz - xx - yy)
-                dcolor_dsh[14] = np.eye(3) * SH_C3_5 * z * (xx - yy)
-                dcolor_dsh[15] = np.eye(3) * SH_C3_6 * x * (xx - 3.0 * yy)
+                dcolor_dsh[13] = SH_C3_4 * x * (4.0 * zz - xx - yy)
+                dcolor_dsh[14] = SH_C3_5 * z * (xx - yy)
+                dcolor_dsh[15] = SH_C3_6 * x * (xx - 3.0 * yy)
 
                 color = color +  \
-                    dcolor_dsh[9] @ sh[9] + \
-                    dcolor_dsh[10] @ sh[10] + \
-                    dcolor_dsh[11] @ sh[11] + \
-                    dcolor_dsh[12] @ sh[12] + \
-                    dcolor_dsh[13] @ sh[13] + \
-                    dcolor_dsh[14] @ sh[14] + \
-                    dcolor_dsh[15] @ sh[15]
+                    dcolor_dsh[9] * sh[9] + \
+                    dcolor_dsh[10] * sh[10] + \
+                    dcolor_dsh[11] * sh[11] + \
+                    dcolor_dsh[12] * sh[12] + \
+                    dcolor_dsh[13] * sh[13] + \
+                    dcolor_dsh[14] * sh[14] + \
+                    dcolor_dsh[15] * sh[15]
     if (calc_J):
         dc_dr = np.zeros([3, 3])
         dr_dpw = np.zeros([3, 3])
@@ -379,7 +379,7 @@ def sh2color(sh, pw, twc, calc_J=False):
                         + SH_C3_3*sh[12]*(-3.0*xx - 3.0*yy + 6.0*zz)\
                         + 8.0*SH_C3_4*sh[13]*xz\
                         + SH_C3_5*sh[14]*(xx - yy)
-        return color, dcolor_dsh.transpose([2, 0, 1]).reshape(3, sh_dim), dc_dr @ dr_dpw
+        return color, dcolor_dsh[np.newaxis, :], dc_dr @ dr_dpw
     else:
         return color
 
@@ -452,7 +452,7 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
         dcov3d_dscales = np.zeros([gs_num, 6, 3])
         dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
         dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-        dcolor_dshs = np.zeros([gs_num, 3, shs.shape[1]])
+        dcolor_dshs = np.zeros([gs_num, 1, sh_dim//3])
         dcolor_dpws = np.zeros([gs_num, 3, 3])
         dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
         for i in range(gs_num):
@@ -474,7 +474,7 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
         dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
         dloss_drots = dloss_dcinv2ds @ dcinv2d_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
         dloss_dscales = dloss_dcinv2ds @ dcinv2d_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
-        dloss_dshs = dloss_dcolors @ dcolor_dshs
+        dloss_dshs = (dloss_dcolors.transpose(0, 2, 1) @ dcolor_dshs).transpose(0, 2, 1).reshape(gs_num, 1, -1)
         dloss_dalphas = dloss_dalphas
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
@@ -562,7 +562,7 @@ if __name__ == "__main__":
     dcov3d_dscales = np.zeros([gs_num, 6, 3])
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-    dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
+    dcolor_dshs = np.zeros([gs_num, 1, sh_dim//3])
     dcolor_dpws = np.zeros([gs_num, 3, 3])
     dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
@@ -613,7 +613,7 @@ if __name__ == "__main__":
         dcolor_dpw_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], twc], 1)
         print("%s check dcolor%d_dsh%d" % (check(
-            dcolor_dsh_numerical, dcolor_dshs[i]), i, i))
+            dcolor_dsh_numerical[0, range(0, sh_dim, 3)], dcolor_dshs[i]), i, i))
         print("%s check dcolor%d_dsh%d" % (check(
             dcolor_dpw_numerical, dcolor_dpws[i]), i, i))
 
