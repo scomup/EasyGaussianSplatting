@@ -20,6 +20,20 @@ inline __device__ void fetch2shared(
     float *shared_alpha,
     float3 *shared_color);
 
+inline __device__ void fetch2sharedB(
+    int32_t n,
+    const int2 range,
+    const int *__restrict__ gs_id_per_patch,
+    const float *__restrict__ us,
+    const float *__restrict__ cinv2d,
+    const float *__restrict__ alphas,
+    const float *__restrict__ colors,
+    float2 *shared_pos2d,
+    float3 *shared_cinv2d,
+    float *shared_alpha,
+    float3 *shared_color,
+    int *shared_gsid);
+
 __global__ void createKey(const int gs_num,
                           const dim3 grid,
                           const uint4 *__restrict__ rects,
@@ -61,7 +75,8 @@ __global__ void inverseCov2D(
     int gs_num,
     const float *__restrict__ cov2d,
     float *__restrict__ cinv2d,
-    float *__restrict__ areas);
+    float *__restrict__ areas,
+    float *__restrict__ dcinv2d_dcov2ds = nullptr);
 
 __global__ void computeCov3D(
     int32_t gs_num,
@@ -104,3 +119,20 @@ __global__ void sh2Color(
     float *__restrict__ colors,
     float *__restrict__ dcolor_dshs = nullptr,
     float *__restrict__ dcolor_dpws = nullptr);
+
+__global__ void  drawB __launch_bounds__(BLOCK * BLOCK)(
+    const int width,
+    const int height,
+    const int *__restrict__ patch_range_per_tile,
+    const int *__restrict__ gs_id_per_patch,
+    const float *__restrict__ us,
+    const float *__restrict__ cinv2d,
+    const float *__restrict__ alphas,
+    const float *__restrict__ colors,
+    const int *__restrict__ contrib,
+    const float *__restrict__ final_tau,
+    const float *__restrict__ dloss_dgammas,
+    float *__restrict__ dloss_dus,
+    float *__restrict__ dloss_dcinv2ds,
+    float *__restrict__ dloss_dalphas,
+    float *__restrict__ dloss_dcolors);

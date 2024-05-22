@@ -7,8 +7,7 @@ setup(
         CUDAExtension('pygausplat', [
             'ext.cpp',
             'kernel.cu',
-            'forward.cu',
-            'backward.cu',
+            'gausplat.cu',
         ])
     ],
     cmdclass={

@@ -60,25 +60,27 @@ if __name__ == "__main__":
 
     camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
 
-    pw = gs['pos']
+    pws = gs['pos']
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    u, pc = project(pw, camera.Rcw, camera.tcw, camera.K)
+    us, pcs = project(pws, camera.Rcw, camera.tcw, camera.K)
 
-    depth = pc[:, 2]
+    depths = pcs[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
-    cov3d = compute_cov_3d(gs['scale'], gs['rot'])
+    cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2d = compute_cov_2d(pc, camera.K, cov3d, camera.Rcw)
+    cov2ds = compute_cov_2d(pcs, camera.K, cov3ds, camera.Rcw)
 
     # step4. get color info
-    color = sh2color(gs['sh'], pw, camera.cam_center)
+    colors = sh2color(gs['sh'], pws, camera.cam_center)
 
     # step5. Blend the 2d Gaussian to image
-    image = splat(camera.height, camera.width, u, cov2d, gs['alpha'], depth, color)
+    cinv2ds, areas = inverse_cov2d(cov2ds)
+
+    image = splat(camera.height, camera.width, us, cinv2ds, gs['alpha'], depths, colors, areas)
     plt.imshow(image)
     # from PIL import Image
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))

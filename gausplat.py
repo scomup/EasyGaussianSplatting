@@ -183,17 +183,18 @@ def project(pw, Rcw, tcw, K):
     return u, pc
 
 
-def splat(height, width, us, cov2d, alpha, depth, color):
-    image = np.zeros([height, width, 3])
-    image_T = np.ones([height, width])
-
+def inverse_cov2d(cov2d):
     # forward.md 5.3
     # compute inverse of cov2d
     det_inv = 1. / (cov2d[:, 0] * cov2d[:, 2] - cov2d[:, 1] * cov2d[:, 1] + 0.000001)
-    cov2d_inv = np.array([cov2d[:, 2] * det_inv, -cov2d[:, 1] * det_inv, cov2d[:, 0] * det_inv]).T
-
-    # Determine the drawing area of 2d Gaussian.
+    cinv2d = np.array([cov2d[:, 2] * det_inv, -cov2d[:, 1] * det_inv, cov2d[:, 0] * det_inv]).T
     areas = 3 * np.sqrt(np.vstack([cov2d[:, 0], cov2d[:, 2]])).T
+    return cinv2d, areas
+
+
+def splat(height, width, us, cinv2d, alpha, depth, color, areas):
+    image = np.zeros([height, width, 3])
+    image_T = np.ones([height, width])
 
     start = time.time()
 
@@ -226,7 +227,7 @@ def splat(height, width, us, cov2d, alpha, depth, color):
         if ((x1 - x0) * (y1 - y0) == 0):
             continue
 
-        cinv = cov2d_inv[i]
+        cinv = cinv2d[i]
         opa = alpha[i]
         patch_color = color[i]
 

@@ -201,10 +201,10 @@ def calc_cinv2d(cov2d, calc_J=False):
     cinv2d = np.array([cov2d[2], -cov2d[1], cov2d[0]]) * det_inv
     if (calc_J):
         a, b, c = cov2d
-        det_inv2 = det_inv * det_inv
-        J = np.array([[-c*c*det_inv2, 2*b*c*det_inv2, -a*c*det_inv2 + det_inv],
-                      [b*c*det_inv2, -2*b*b*det_inv2 - det_inv, a*b*det_inv2],
-                      [-a*c*det_inv2 + det_inv, 2*a*b*det_inv2, -a*a*det_inv2]])
+        det2_inv = det_inv * det_inv
+        J = np.array([[-c*c*det2_inv, 2*b*c*det2_inv, -a*c*det2_inv + det_inv],
+                      [b*c*det2_inv, -2*b*b*det2_inv - det_inv, a*b*det2_inv],
+                      [-a*c*det2_inv + det_inv, 2*a*b*det2_inv, -a*a*det2_inv]])
         return cinv2d, J
 
     else:
@@ -229,17 +229,16 @@ def calc_alpha_prime(alpha, cinv2d, u, x, calc_J=False):
         return alphaprime
 
 
-def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
+def calc_gamma(alphas, cinv2ds, colors, us, x, calc_J=False):
     cont_tmp = 0
     cont = 0
-    cov2ds = cov2ds.reshape([-1, 3])
+    cinv2ds = cinv2ds.reshape([-1, 3])
     colors = colors.reshape([-1, 3])
     us = us.reshape([-1, 2])
     tau = 1.
     gamma = np.zeros(3)
-    for alpha, cov2d, color, u in zip(alphas, cov2ds, colors, us):
+    for alpha, cinv2d, color, u in zip(alphas, cinv2ds, colors, us):
         cont_tmp = cont_tmp + 1
-        cinv2d = calc_cinv2d(cov2d)
         alpha_prime = calc_alpha_prime(alpha, cinv2d, u, x)
         if (alpha_prime < 0.002):
             continue
@@ -251,13 +250,12 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
     if (calc_J):
         gs_num = alphas.shape[0]
         gamma_cur2last = np.zeros(3)
-        dgamma_dalpha = np.zeros([gs_num, 3, 1])
-        dgamma_dcov2d = np.zeros([gs_num, 3, 3])
-        dgamma_dcolor = np.zeros([gs_num, 3, 3])
-        dgamma_du = np.zeros([gs_num, 3, 2])
+        dgamma_dalphas = np.zeros([gs_num, 3, 1])
+        dgamma_dcinv2ds = np.zeros([gs_num, 3, 3])
+        dgamma_dcolors = np.zeros([gs_num, 3, 3])
+        dgamma_dus = np.zeros([gs_num, 3, 2])
         for i in reversed(range(cont)):
-            alpha, cov2d, color, u = alphas[i], cov2ds[i], colors[i], us[i]
-            cinv2d, dcinv2d_dcov2d = calc_cinv2d(cov2d, True)
+            alpha, cinv2d, color, u = alphas[i], cinv2ds[i], colors[i], us[i]
             alpha_prime, dalphaprime_dalpha, dalphaprime_dcinv2d, dalphaprime_du =\
                 calc_alpha_prime(alpha, cinv2d, u, x, True)
             if (alpha_prime < 0.002):
@@ -265,37 +263,37 @@ def calc_gamma(alphas, cov2ds, colors, us, x, calc_J=False):
             tau = tau / (1 - alpha_prime)
             dgamma_dalphaprime = (
                 tau * (color - gamma_cur2last)).reshape([3, 1])
-            dgamma_dalpha[i] = dgamma_dalphaprime @ dalphaprime_dalpha
-            dgamma_dcov2d[i] = dgamma_dalphaprime @ dalphaprime_dcinv2d @ dcinv2d_dcov2d
-            dgamma_dcolor[i] = tau * alpha_prime * np.eye(3)
-            dgamma_du[i] = dgamma_dalphaprime @ dalphaprime_du
+            dgamma_dalphas[i] = dgamma_dalphaprime @ dalphaprime_dalpha
+            dgamma_dcinv2ds[i] = dgamma_dalphaprime @ dalphaprime_dcinv2d
+            dgamma_dcolors[i] = tau * alpha_prime * np.eye(3)
+            dgamma_dus[i] = dgamma_dalphaprime @ dalphaprime_du
             gamma_cur2last = alpha_prime * color + \
                 (1 - alpha_prime) * gamma_cur2last
-        return gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du, cont
+        return gamma, dgamma_dalphas, dgamma_dcinv2ds, dgamma_dcolors, dgamma_dus, cont
     else:
         return gamma
 
 
 def sh2color(sh, pw, twc, calc_J=False):
     sh_dim = sh.shape[0]
-    dcolor_dsh = np.zeros([sh.shape[0]//3, 3, 3])
+    dcolor_dsh = np.zeros([sh_dim//3])
     dcolor_dpw = np.zeros([3, 3])
-    dcolor_dsh[0] = np.eye(3) * SH_C0_0
+    dcolor_dsh[0] = SH_C0_0
     sh = sh.reshape([-1, 3])
-    color = dcolor_dsh[0] @ sh[0] + 0.5
+    color = dcolor_dsh[0] * sh[0] + 0.5
     if (sh_dim > 3):
         d = pw - twc
         normd = np.linalg.norm(d)
         r = d / normd
         x, y, z = r
 
-        dcolor_dsh[1] = np.eye(3) * SH_C1_0 * y
-        dcolor_dsh[2] = np.eye(3) * SH_C1_1 * z
-        dcolor_dsh[3] = np.eye(3) * SH_C1_2 * x
+        dcolor_dsh[1] = SH_C1_0 * y
+        dcolor_dsh[2] = SH_C1_1 * z
+        dcolor_dsh[3] = SH_C1_2 * x
         color = color + \
-            dcolor_dsh[1] @ sh[1] + \
-            dcolor_dsh[2] @ sh[2] + \
-            dcolor_dsh[3] @ sh[3]
+            dcolor_dsh[1] * sh[1] + \
+            dcolor_dsh[2] * sh[2] + \
+            dcolor_dsh[3] * sh[3]
 
         if (sh_dim > 12):
             xx = x * x
@@ -304,37 +302,37 @@ def sh2color(sh, pw, twc, calc_J=False):
             xy = x * y
             yz = y * z
             xz = x * z
-            dcolor_dsh[4] = np.eye(3) * SH_C2_0 * xy
-            dcolor_dsh[5] = np.eye(3) * SH_C2_1 * yz
-            dcolor_dsh[6] = np.eye(3) * SH_C2_2 * (2.0 * zz - xx - yy)
-            dcolor_dsh[7] = np.eye(3) * SH_C2_3 * xz
-            dcolor_dsh[8] = np.eye(3) * SH_C2_4 * (xx - yy)
+            dcolor_dsh[4] = SH_C2_0 * xy
+            dcolor_dsh[5] = SH_C2_1 * yz
+            dcolor_dsh[6] = SH_C2_2 * (2.0 * zz - xx - yy)
+            dcolor_dsh[7] = SH_C2_3 * xz
+            dcolor_dsh[8] = SH_C2_4 * (xx - yy)
 
             color = color + \
-                dcolor_dsh[4] @ sh[4] + \
-                dcolor_dsh[5] @ sh[5] + \
-                dcolor_dsh[6] @ sh[6] + \
-                dcolor_dsh[7] @ sh[7] + \
-                dcolor_dsh[8] @ sh[8]
+                dcolor_dsh[4] * sh[4] + \
+                dcolor_dsh[5] * sh[5] + \
+                dcolor_dsh[6] * sh[6] + \
+                dcolor_dsh[7] * sh[7] + \
+                dcolor_dsh[8] * sh[8]
 
             if (sh_dim > 27):
-                dcolor_dsh[9] = np.eye(3) * SH_C3_0 * y * (3.0 * xx - yy)
-                dcolor_dsh[10] = np.eye(3) * SH_C3_1 * xy * z
-                dcolor_dsh[11] = np.eye(3) * SH_C3_2 * y * (4.0 * zz - xx - yy)
-                dcolor_dsh[12] = np.eye(3) * SH_C3_3 * \
+                dcolor_dsh[9] = SH_C3_0 * y * (3.0 * xx - yy)
+                dcolor_dsh[10] = SH_C3_1 * xy * z
+                dcolor_dsh[11] = SH_C3_2 * y * (4.0 * zz - xx - yy)
+                dcolor_dsh[12] = SH_C3_3 * \
                     z * (2.0 * zz - 3.0 * xx - 3.0 * yy)
-                dcolor_dsh[13] = np.eye(3) * SH_C3_4 * x * (4.0 * zz - xx - yy)
-                dcolor_dsh[14] = np.eye(3) * SH_C3_5 * z * (xx - yy)
-                dcolor_dsh[15] = np.eye(3) * SH_C3_6 * x * (xx - 3.0 * yy)
+                dcolor_dsh[13] = SH_C3_4 * x * (4.0 * zz - xx - yy)
+                dcolor_dsh[14] = SH_C3_5 * z * (xx - yy)
+                dcolor_dsh[15] = SH_C3_6 * x * (xx - 3.0 * yy)
 
                 color = color +  \
-                    dcolor_dsh[9] @ sh[9] + \
-                    dcolor_dsh[10] @ sh[10] + \
-                    dcolor_dsh[11] @ sh[11] + \
-                    dcolor_dsh[12] @ sh[12] + \
-                    dcolor_dsh[13] @ sh[13] + \
-                    dcolor_dsh[14] @ sh[14] + \
-                    dcolor_dsh[15] @ sh[15]
+                    dcolor_dsh[9] * sh[9] + \
+                    dcolor_dsh[10] * sh[10] + \
+                    dcolor_dsh[11] * sh[11] + \
+                    dcolor_dsh[12] * sh[12] + \
+                    dcolor_dsh[13] * sh[13] + \
+                    dcolor_dsh[14] * sh[14] + \
+                    dcolor_dsh[15] * sh[15]
     if (calc_J):
         dc_dr = np.zeros([3, 3])
         dr_dpw = np.zeros([3, 3])
@@ -381,50 +379,61 @@ def sh2color(sh, pw, twc, calc_J=False):
                         + SH_C3_3*sh[12]*(-3.0*xx - 3.0*yy + 6.0*zz)\
                         + 8.0*SH_C3_4*sh[13]*xz\
                         + SH_C3_5*sh[14]*(xx - yy)
-        return color, dcolor_dsh.transpose([2, 0, 1]).reshape(3, sh_dim), dc_dr @ dr_dpw
+        return color, dcolor_dsh[np.newaxis, :], dc_dr @ dr_dpw
     else:
         return color
 
 
-def calc_loss(alphas, cov2ds, colors, us, image_gt, calc_J=False):
-    height, width, _ = image_gt.shape
-    image = np.zeros([height, width, 3])
-    xs = np.indices([width, height]).reshape(2, -1).T
-    for x in xs:
-        gamma = calc_gamma(alphas, cov2ds, colors, us, x)
-        image[x[1], x[0]] = gamma
-    criterion = nn.L1Loss()
+def get_loss(image, image_gt):
     image_gt = torch.tensor(image_gt.transpose([2, 0, 1]))
     image = torch.tensor(image.transpose([2, 0, 1]))
     image = image.requires_grad_()
+    criterion = nn.L1Loss()
     loss = criterion(image, image_gt)
     loss_val = loss.detach().numpy().reshape(1)
+    loss.backward()
+    dloss_dgammas = image.grad.detach().numpy()
+    return loss_val, dloss_dgammas
+
+
+def get_image(alphas, cinv2ds, colors, us, height, width):
+    image = np.zeros([height, width, 3])
+    xs = np.indices([width, height]).reshape(2, -1).T
+    for x in xs:
+        gamma = calc_gamma(alphas, cinv2ds, colors, us, x)
+        image[x[1], x[0]] = gamma
+    return image
+
+
+def calc_loss(alphas, cinv2ds, colors, us, image_gt, calc_J=False):
+    height, width, _ = image_gt.shape
+    image = get_image(alphas, cinv2ds, colors, us, height, width)
+    loss, dloss_dgammas = get_loss(image, image_gt)
     if (calc_J):
         contrib = np.ones([height, width])
-        loss.backward()
-        dloss_dgammas = image.grad.detach().numpy()
         gs_num = alphas.shape[0]
         dloss_dalphas = np.zeros([gs_num, 1])
-        dloss_dcov2ds = np.zeros([gs_num, 3])
+        dloss_dcinv2ds = np.zeros([gs_num, 3])
         dloss_dcolors = np.zeros([gs_num, 3])
         dloss_dus = np.zeros([gs_num, 2])
+        xs = np.indices([width, height]).reshape(2, -1).T
         for x in xs:
-            gamma, dgamma_dalphas, dgamma_dcov2ds, dgamma_dcolors, dgamma_dus, cont =\
-                calc_gamma(alphas, cov2ds, colors, us, x, True)
+            gamma, dgamma_dalphas, dgamma_dcinv2ds, dgamma_dcolors, dgamma_dus, cont =\
+                calc_gamma(alphas, cinv2ds, colors, us, x, True)
             dloss_dgamma = dloss_dgammas[:, x[1], x[0]]
             contrib[x[1], x[0]] = cont
             for i in range(cont):
                 dloss_dalphas[i] += dloss_dgamma @ dgamma_dalphas[i]
-                dloss_dcov2ds[i] += dloss_dgamma @ dgamma_dcov2ds[i]
+                dloss_dcinv2ds[i] += dloss_dgamma @ dgamma_dcinv2ds[i]
                 dloss_dcolors[i] += dloss_dgamma @ dgamma_dcolors[i]
                 dloss_dus[i] += dloss_dgamma @ dgamma_dus[i]
-        return loss_val, \
+        return loss, \
             dloss_dalphas.reshape(1, -1), \
-            dloss_dcov2ds.reshape(1, -1), \
+            dloss_dcinv2ds.reshape(1, -1), \
             dloss_dcolors.reshape(1, -1), \
             dloss_dus.reshape(1, -1)
     else:
-        return loss_val
+        return loss
 
 
 def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt, calc_J=False):
@@ -434,6 +443,7 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
     pcs = np.zeros([gs_num, 3])
     cov3ds = np.zeros([gs_num, 6])
     cov2ds = np.zeros([gs_num, 3])
+    cinv2ds = np.zeros([gs_num, 3])
     twc = np.linalg.inv(Rcw) @ (-tcw)
     if (calc_J is True):
         dpc_dpws = np.zeros([gs_num, 3, 3])
@@ -442,8 +452,9 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
         dcov3d_dscales = np.zeros([gs_num, 6, 3])
         dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
         dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-        dcolor_dshs = np.zeros([gs_num, 3, shs.shape[1]])
+        dcolor_dshs = np.zeros([gs_num, 1, sh_dim//3])
         dcolor_dpws = np.zeros([gs_num, 3, 3])
+        dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
         for i in range(gs_num):
             pcs[i], dpc_dpws[i] = transform(pws[i], Rcw, tcw, True)
             us[i], du_dpcs[i] = project(pcs[i], fx, fy, cx, cy, True)
@@ -453,19 +464,21 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
                 cov3ds[i], pcs[i], Rcw, fx, fy, True)
             colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
                 shs[i], pws[i], twc, True)
-        loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
-            alphas, cov2ds, colors, us, image_gt, True)
-        dloss_dcov2ds = dloss_dcov2ds.reshape([gs_num, 1, 3])
+            cinv2ds[i], dcinv2d_dcov2ds[i] = calc_cinv2d(cov2ds[i], True)
+
+        loss, dloss_dalphas, dloss_dcinv2ds, dloss_dcolors, dloss_dus = calc_loss(
+            alphas, cinv2ds, colors, us, image_gt, True)
+        dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num, 1, 3])
         dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
         dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
         dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
-        dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
-        dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
-        dloss_dshs = dloss_dcolors @ dcolor_dshs
+        dloss_drots = dloss_dcinv2ds @ dcinv2d_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
+        dloss_dscales = dloss_dcinv2ds @ dcinv2d_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
+        dloss_dshs = (dloss_dcolors.transpose(0, 2, 1) @ dcolor_dshs).transpose(0, 2, 1).reshape(gs_num, 1, -1)
         dloss_dalphas = dloss_dalphas
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
-            dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
+            dloss_dcinv2ds @ dcinv2d_dcov2ds @ dcov2d_dpcs @ dpc_dpws
         return loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws
     else:
         rots = rots.reshape([-1, 4])
@@ -474,13 +487,14 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
         alphas = alphas.reshape([-1, 1])
         pws = pws.reshape([-1, 3])
         for i in range(gs_num):
-            pcs[i] = transform(pws[i], Rcw, tcw, False)
-            us[i] = project(pcs[i], fx, fy, cx, cy, False)
+            pcs[i] = transform(pws[i], Rcw, tcw)
+            us[i] = project(pcs[i], fx, fy, cx, cy)
             cov3ds[i] = compute_cov_3d(
-                rots[i], scales[i], False)
-            cov2ds[i] = compute_cov_2d(cov3ds[i], pcs[i], Rcw, fx, fy, False)
-            colors[i] = sh2color(shs[i], pws[i], twc, False)
-        loss = calc_loss(alphas, cov2ds, colors, us, image_gt, False)
+                rots[i], scales[i])
+            cov2ds[i] = compute_cov_2d(cov3ds[i], pcs[i], Rcw, fx, fy)
+            colors[i] = sh2color(shs[i], pws[i], twc)
+            cinv2ds[i] = calc_cinv2d(cov2ds[i])
+        loss = calc_loss(alphas, cinv2ds, colors, us, image_gt)
         return loss
 
 
@@ -539,6 +553,7 @@ if __name__ == "__main__":
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])
     pcs = np.zeros([gs_num, 3])
+    cinv2ds = np.zeros([gs_num, 3])
     cov3ds = np.zeros([gs_num, 6])
     cov2ds = np.zeros([gs_num, 3])
     dpc_dpws = np.zeros([gs_num, 3, 3])
@@ -547,8 +562,9 @@ if __name__ == "__main__":
     dcov3d_dscales = np.zeros([gs_num, 6, 3])
     dcov2d_dcov3ds = np.zeros([gs_num, 3, 6])
     dcov2d_dpcs = np.zeros([gs_num, 3, 3])
-    dcolor_dshs = np.zeros([gs_num, 3, gs['sh'].shape[1]])
+    dcolor_dshs = np.zeros([gs_num, 1, sh_dim//3])
     dcolor_dpws = np.zeros([gs_num, 3, 3])
+    dcinv2d_dcov2ds = np.zeros([gs_num, 3, 3])
     for i in range(gs_num):
         # step1. Transform pw to camera frame,
         # and project it to iamge.
@@ -564,7 +580,7 @@ if __name__ == "__main__":
         print("%s check du%d_dpc%d" %
               (check(du_dpc_numerical, du_dpcs[i]), i, i))
 
-        # step2. Calcuate the 3d Gaussian.
+        # step2. Calcuate the 3d covariance.
         cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
             gs['rot'][i], gs['scale'][i], True)
         dcov3d_dq_numerical = numerical_derivative(
@@ -576,6 +592,7 @@ if __name__ == "__main__":
         print("%s check dcov3d%d_ds%d" % (check(
             dcov3d_ds_numerical, dcov3d_dscales[i]), i, i))
 
+        # step3. Project the 3D Gaussian to 2d image as a 2d covariance.
         cov2ds[i], dcov2d_dcov3ds[i], dcov2d_dpcs[i] = compute_cov_2d(
             cov3ds[i], pcs[i], Rcw, fx, fy, True)
         dcov2d_dcov3d_numerical = numerical_derivative(
@@ -588,7 +605,7 @@ if __name__ == "__main__":
         print("%s check dcov2d%d_dpc%d" % (check(
             dcov2d_dpc_numerical, dcov2d_dpcs[i]), i, i))
 
-        # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
+        # step4. Compute color.
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
             gs['sh'][i], pws[i], twc, True)
         dcolor_dsh_numerical = numerical_derivative(
@@ -596,30 +613,27 @@ if __name__ == "__main__":
         dcolor_dpw_numerical = numerical_derivative(
             sh2color, [gs['sh'][i], pws[i], twc], 1)
         print("%s check dcolor%d_dsh%d" % (check(
-            dcolor_dsh_numerical, dcolor_dshs[i]), i, i))
+            dcolor_dsh_numerical[0, range(0, sh_dim, 3)], dcolor_dshs[i]), i, i))
         print("%s check dcolor%d_dsh%d" % (check(
             dcolor_dpw_numerical, dcolor_dpws[i]), i, i))
+
+        # step5.1 Compute inverse covariance.
+        cinv2ds[i], dcinv2d_dcov2ds[i] = calc_cinv2d(cov2ds[i], True)
+        dcinv2d_dcov2d_numerical = numerical_derivative(calc_cinv2d, [cov2ds[i]], 0)
+        print("%s check dcinv2d%d_dcov2d%d" % (check(
+            dcinv2d_dcov2d_numerical, dcinv2d_dcov2ds[i]), i, i))
 
     # ---------------------------------
     idx = np.argsort(pcs[:, 2])
     idxb = np.argsort(idx)
     colors = colors[idx].reshape(-1)
     cov2ds = cov2ds[idx].reshape(-1)
+    cinv2ds = cinv2ds[idx].reshape(-1)
     alphas = gs['alpha'][idx]
     us = us[idx].reshape(-1)
     x = np.array([16, 8])
 
-    calc_gamma(alphas, cov2ds, colors, us, np.array([16, 8]))
-
-    cov2d0 = cov2ds[:3]
-    cinv2d0, dcov2d_dcinv2d = calc_cinv2d(cov2d0, True)
-    dcov2d_dcinv2d_numerial = numerical_derivative(calc_cinv2d, [cov2d0], 0)
-    print("%s check dcov2d_dcinv2d" % check(
-        dcov2d_dcinv2d_numerial, dcov2d_dcinv2d))
-
-    cinv2ds = calc_cinv2d(cov2ds)
-    alpha0, u0 = alphas[:1], us[:2]
-    calc_alpha_prime(alpha0, cinv2d0, u0, x)
+    alpha0, u0, cinv2d0 = alphas[:1], us[:2], cinv2ds[:3]
 
     dalphaprime_dalpha_numerial = numerical_derivative(
         calc_alpha_prime, [alpha0, cinv2d0, u0, x], 0)
@@ -637,47 +651,45 @@ if __name__ == "__main__":
     print("%s check dalphaprime_du" % check(
         dalphaprime_du_numerial, dalphaprime_du))
 
-    gamma, dgamma_dalpha, dgamma_dcov2d, dgamma_dcolor, dgamma_du, _ = calc_gamma(
-        alphas, cov2ds, colors, us, x, True)
+    gamma, dgamma_dalpha, dgamma_dcinv2d, dgamma_dcolor, dgamma_du, _ = calc_gamma(
+        alphas, cinv2ds, colors, us, x, True)
     dgamma_dalpha_numerial = numerical_derivative(
-        calc_gamma, [alphas, cov2ds, colors, us, x], 0)
-    dgamma_dcov2d_numerial = numerical_derivative(
-        calc_gamma, [alphas, cov2ds, colors, us, x], 1)
+        calc_gamma, [alphas, cinv2ds, colors, us, x], 0)
+    dgamma_dcinv2d_numerial = numerical_derivative(
+        calc_gamma, [alphas, cinv2ds, colors, us, x], 1)
     dgamma_dcolor_numerial = numerical_derivative(
-        calc_gamma, [alphas, cov2ds, colors, us, x], 2)
+        calc_gamma, [alphas, cinv2ds, colors, us, x], 2)
     dgamma_du_numerial = numerical_derivative(
-        calc_gamma, [alphas, cov2ds, colors, us, x], 3)
+        calc_gamma, [alphas, cinv2ds, colors, us, x], 3)
 
     for i in range(gs_num):
         print("%s check dgamma_dalpha_%d" % (check(
             dgamma_dalpha_numerial[:, i], dgamma_dalpha[i].reshape(-1)), i))
-        print("%s check dgamma_dcov2d_%d" % (check(
-            dgamma_dcov2d_numerial[:, 3*i:3*i+3], dgamma_dcov2d[i]), i))
+        print("%s check dgamma_dcinv2d_%d" % (check(
+            dgamma_dcinv2d_numerial[:, 3*i:3*i+3], dgamma_dcinv2d[i]), i))
         print("%s check dgamma_dcolor_%d" % (check(
             dgamma_dcolor_numerial[:, 3*i:3*i+3], dgamma_dcolor[i]), i))
         print("%s check dgamma_du_%d" % (check(
             dgamma_du_numerial[:, 2*i:2*i+2], dgamma_du[i]), i))
 
-    loss, dloss_dalphas, dloss_dcov2ds, dloss_dcolors, dloss_dus = calc_loss(
-        alphas, cov2ds, colors, us, image_gt, True)
-    dloss_dalpha_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, image_gt], 0)
-    dloss_dcov2d_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, image_gt], 1)
-    dloss_dcolor_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, image_gt], 2)
-    dloss_du_numerial = numerical_derivative(
-        calc_loss, [alphas, cov2ds, colors, us, image_gt], 3)
+    loss, dloss_dalphas, dloss_dcinv2ds, dloss_dcolors, dloss_dus = calc_loss(
+        alphas, cinv2ds, colors, us, image_gt, True)
+    dloss_dalphas_numerial = numerical_derivative(
+        calc_loss, [alphas, cinv2ds, colors, us, image_gt], 0)
+    dloss_dcinv2ds_numerial = numerical_derivative(
+        calc_loss, [alphas, cinv2ds, colors, us, image_gt], 1)
+    dloss_dcolors_numerial = numerical_derivative(
+        calc_loss, [alphas, cinv2ds, colors, us, image_gt], 2)
+    dloss_dus_numerial = numerical_derivative(
+        calc_loss, [alphas, cinv2ds, colors, us, image_gt], 3)
 
     print("%s check dloss_dalpha" %
-          check(dloss_dalpha_numerial, dloss_dalphas))
-    print("%s check dloss_dcov2d" %
-          check(dloss_dcov2d_numerial, dloss_dcov2ds))
+          check(dloss_dalphas_numerial, dloss_dalphas))
+    print("%s check dloss_dcinv2ds" %
+          check(dloss_dcinv2ds_numerial, dloss_dcinv2ds))
     print("%s check dloss_dcolor" %
-          check(dloss_dcolor_numerial, dloss_dcolors))
-    print("%s check dloss_du" % check(dloss_du_numerial, dloss_dus))
-
-    exit(0)
+          check(dloss_dcolors_numerial, dloss_dcolors))
+    print("%s check dloss_du" % check(dloss_dus_numerial, dloss_dus))
 
     loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
         gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
