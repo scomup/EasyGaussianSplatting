@@ -1,5 +1,5 @@
 from pyqtgraph.Qt import QtCore
-import pyqtgraph as pg
+import pyqtgraph as gsc
 import pyqtgraph.opengl as gl
 from OpenGL.GL import *
 from PyQt5.QtGui import QKeyEvent, QIntValidator, QDoubleValidator

@@ -1,12 +1,12 @@
-from gausplat import *
 import torch
 import numpy as np
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import pygausplat as pg
+import gsplatcu as gsc
 import torchvision
-from pytorch_ssim import gau_loss
-
+from gsplat.pytorch_ssim import gau_loss
+from gsplat.read_ply import *
+from gausplat import *
 
 class GSNet(torch.autograd.Function):
     @staticmethod
@@ -15,22 +15,22 @@ class GSNet(torch.autograd.Function):
     
         # step1. Transform pw to camera frame,
         # and project it to iamge.        
-        us, pcs, du_dpcs = pg.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, True)
+        us, pcs, du_dpcs = gsc.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, True)
         depths = pcs[:, 2]
 
         # step2. Calcuate the 3d Gaussian.
-        cov3ds, dcov3d_drots, dcov3d_dscales = pg.computeCov3D(rots, scales, True)
+        cov3ds, dcov3d_drots, dcov3d_dscales = gsc.computeCov3D(rots, scales, True)
 
         # step3. Calcuate the 2d Gaussian.
-        cov2ds, dcov2d_dcov3ds, dcov2d_dpcs = pg.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, True)
+        cov2ds, dcov2d_dcov3ds, dcov2d_dpcs = gsc.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, True)
 
         # step4. get color info
-        colors, dcolor_dshs, dcolor_dpws = pg.sh2Color(shs, pws, twc, True)
+        colors, dcolor_dshs, dcolor_dpws = gsc.sh2Color(shs, pws, twc, True)
 
         # step5. Blend the 2d Gaussian to image
-        cinv2ds, areas, dcinv2d_dcov2ds = pg.inverseCov2D(cov2ds, True)
+        cinv2ds, areas, dcinv2d_dcov2ds = gsc.inverseCov2D(cov2ds, True)
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            pg.splat(height, width,
+            gsc.splat(height, width,
                      us, cinv2ds, alphas, depths, colors, areas)
     
         ctx.save_for_backward(contrib, final_tau, 
@@ -54,7 +54,7 @@ class GSNet(torch.autograd.Function):
             depths, us, du_dpcs, alphas = ctx.saved_tensors
     
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
-        pg.splatB(height, width, us, cinv2ds, alphas,\
+        gsc.splatB(height, width, us, cinv2ds, alphas,\
             depths, colors, contrib, final_tau,\
             patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
         

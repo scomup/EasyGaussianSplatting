@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import numpy as np
-from sh_coef import *
+from gsplat.sh_coef import *
 
 
 def upper_triangular(mat):

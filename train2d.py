@@ -1,4 +1,3 @@
-from gausplat import *
 import torch
 import numpy as np
 from torch.autograd import Variable
@@ -6,9 +5,11 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import pygausplat as pg
+import gsplatcu as gsc
 import torchvision
-from pytorch_ssim import gau_loss
+from gsplat.pytorch_ssim import gau_loss
+from gsplat.read_ply import *
+from gsplat.gausplat import *
 
 
 class GS2DNet(torch.autograd.Function):
@@ -16,7 +17,7 @@ class GS2DNet(torch.autograd.Function):
     def forward(ctx, us, cinv2ds, alphas, colors):
         global depths, areas
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            pg.splat(camera.height, camera.width,
+            gsc.splat(camera.height, camera.width,
                      us, cinv2ds, alphas, depths, colors, areas)
         ctx.save_for_backward(us, cinv2ds, alphas, colors, contrib,
                               final_tau, patch_offset_per_tile, gs_id_per_patch)
@@ -28,10 +29,10 @@ class GS2DNet(torch.autograd.Function):
         us, cinv2ds, alphas, colors, contrib, \
             final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
-            pg.splatB(camera.height, camera.width, us, cinv2ds, alphas,
+            gsc.splatB(camera.height, camera.width, us, cinv2ds, alphas,
                         depths, colors, contrib, final_tau,
                         patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-        return dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors
+        return dloss_dus.squeeze(), dloss_dcinv2ds.squeeze(), dloss_dalphas.squeeze(), dloss_dcolors.squeeze()
 
 
 def create_guassian2d_data(camera, gs):
@@ -121,7 +122,7 @@ if __name__ == "__main__":
     colors = torch.from_numpy(colors).type(torch.float32).to(device).requires_grad_()
     areas = torch.from_numpy(areas).type(torch.float32).to(device)
     image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-        pg.splat(camera.height, camera.width, us, cinv2ds, alphas, depths, colors, areas)
+        gsc.splat(camera.height, camera.width, us, cinv2ds, alphas, depths, colors, areas)
 
     gs2dnet = GS2DNet
 

@@ -1,5 +1,5 @@
 from pyqtgraph.Qt import QtCore
-import pyqtgraph as pg
+import pyqtgraph as gsc
 import pyqtgraph.opengl as gl
 from PyQt5.QtWidgets import QMainWindow, QVBoxLayout, QHBoxLayout, QWidget, QSlider, QLabel, QRadioButton, QApplication
 from OpenGL.GL import *

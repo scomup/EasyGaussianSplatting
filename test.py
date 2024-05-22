@@ -6,7 +6,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import pygausplat as pg
+import gsplatcu as gsc
 import torchvision
 
 u, cov2d, alpha, \
@@ -15,7 +15,7 @@ u, cov2d, alpha, \
     torch.load("temp.torch")
 
 dloss_dus, dloss_dcov2ds, dloss_dalphas, dloss_dcolors =\
-    pg.backward(546, 979, u, cov2d, alpha,
+    gsc.backward(546, 979, u, cov2d, alpha,
                 depth, color, contrib, final_tau,
                 patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
 print("u:\n", torch.max(u))

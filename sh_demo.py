@@ -1,13 +1,9 @@
 import torch
 import torchvision
 import numpy as np
-from math import exp
-from torch.autograd import Variable
-import torch.nn.functional as F
-import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.optim as optim
-from sh_coef import *
+from gsplat.sh_coef import *
 
 import sys
 import os

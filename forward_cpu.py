@@ -1,4 +1,5 @@
-from gausplat import *
+from gsplat.gausplat import *
+from gsplat.read_ply import *
 
 
 if __name__ == "__main__":
