@@ -459,7 +459,7 @@ def read_points3D_binary2(path_to_model_file):
         rots = np.zeros([num_points, 4])
         rots[:, 0] = 1
         alphas = np.ones([num_points]) * 0.5
-        scales = np.ones([num_points, 3]) * 0.01
+        scales = np.ones([num_points, 3]) * 0.1  # init scale
         pws = pws.astype(np.float32)
         rots = rots.astype(np.float32)
         scales = scales.astype(np.float32)

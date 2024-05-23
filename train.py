@@ -2,156 +2,40 @@ import torch
 import numpy as np
 import torch.optim as optim
 import matplotlib.pyplot as plt
-import gsplatcu as gsc
 import torchvision
 from gsplat.pytorch_ssim import gau_loss
 from gsplat.read_ply import *
-
-
-class GSNet(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, rots, scales, shs, alphas, pws):
-        global Rcw, tcw, twc, focal_x, focal_y, center_x, center_y, height, width
-
-        # step1. Transform pw to camera frame,
-        # and project it to iamge.
-        us, pcs, du_dpcs = gsc.project(
-            pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, True)
-        depths = pcs[:, 2]
-
-        # step2. Calcuate the 3d Gaussian.
-        cov3ds, dcov3d_drots, dcov3d_dscales = gsc.computeCov3D(
-            rots, scales, True)
-
-        # step3. Calcuate the 2d Gaussian.
-        cov2ds, dcov2d_dcov3ds, dcov2d_dpcs = gsc.computeCov2D(
-            cov3ds, pcs, Rcw, focal_x, focal_y, True)
-
-        # step4. get color info
-        colors, dcolor_dshs, dcolor_dpws = gsc.sh2Color(shs, pws, twc, True)
-
-        # step5. Blend the 2d Gaussian to image
-        cinv2ds, areas, dcinv2d_dcov2ds = gsc.inverseCov2D(cov2ds, True)
-        image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            gsc.splat(height, width,
-                      us, cinv2ds, alphas, depths, colors, areas)
-
-        ctx.save_for_backward(contrib, final_tau,
-                              patch_offset_per_tile, gs_id_per_patch,
-                              cinv2ds, dcinv2d_dcov2ds,
-                              colors, dcolor_dshs, dcolor_dpws,
-                              dcov2d_dcov3ds, dcov2d_dpcs,
-                              dcov3d_drots, dcov3d_dscales,
-                              depths, us, du_dpcs, alphas)
-        return image
-
-    @staticmethod
-    def backward(ctx, dloss_dgammas):
-        global Rcw, height, width
-        contrib, final_tau, \
-            patch_offset_per_tile, gs_id_per_patch, \
-            cinv2ds, dcinv2d_dcov2ds, \
-            colors, dcolor_dshs, dcolor_dpws, \
-            dcov2d_dcov3ds, dcov2d_dpcs, \
-            dcov3d_drots, dcov3d_dscales, \
-            depths, us, du_dpcs, alphas = ctx.saved_tensors
-
-        dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
-            gsc.splatB(height, width, us, cinv2ds, alphas,
-                       depths, colors, contrib, final_tau,
-                       patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-
-        dpc_dpws = Rcw
-        dloss_dcov2ds = dloss_dcinv2ds @ dcinv2d_dcov2ds
-
-        dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
-        dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
-        dloss_dshs = (dloss_dcolors.permute(0, 2, 1) @ dcolor_dshs)\
-            .permute(0, 2, 1).reshape(dloss_dcolors.shape[0], 1, -1)
-        dloss_dalphas = dloss_dalphas
-        dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
-            dloss_dcolors @ dcolor_dpws + \
-            dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
-        return dloss_drots.squeeze(), dloss_dscales.squeeze(), \
-            dloss_dshs.squeeze(), dloss_dalphas.squeeze(), dloss_dpws.squeeze()
+from gsplat.gausplat_dataset import *
+from gsnet import GSNet
 
 
 if __name__ == "__main__":
-    gs_data = np.array([[0.,  0.,  0.,  # xyz
-                        1.,  0.,  0., 0.,  # rot
-                        0.5,  0.5,  0.5,  # size
-                        1.,
-                        1.772484,  -1.772484,  1.772484],
-                        [1.,  0.,  0.,
-                        1.,  0.,  0., 0.,
-                        2,  0.5,  0.5,
-                        1.,
-                        1.772484,  -1.772484, -1.772484],
-                        [0.,  1.,  0.,
-                        1.,  0.,  0., 0.,
-                        0.5,  2,  0.5,
-                        1.,
-                        -1.772484, 1.772484, -1.772484],
-                        [0.,  0.,  1.,
-                        1.,  0.,  0., 0.,
-                        0.5,  0.5,  2,
-                        1.,
-                        -1.772484, -1.772484,  1.772484]
-                        ], dtype=np.float32)
+    path = '/home/liu/bag/gaussian-splatting/tandt/train'
+    gs_dataset = GSplatDataset(path, device='cuda')
+    cam0 = gs_dataset[0]
+    gsnet = GSNet
+    gs = gs_dataset.gs
 
-    dtypes = [('pw', '<f4', (3,)),
-              ('rot', '<f4', (4,)),
-              ('scale', '<f4', (3,)),
-              ('alpha', '<f4'),
-              ('sh', '<f4', (3,))]
+    image_gt = cam0.image.requires_grad_()
 
-    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
     ply_fn = "/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply"
     gs = load_ply(ply_fn)
 
-    # Camera info
-    tcw = np.array([1.03796196, 0.42017467, 4.67804612])
-    Rcw = np.array([[0.89699204,  0.06525223,  0.43720409],
-                    [-0.04508268,  0.99739184, -0.05636552],
-                    [-0.43974177,  0.03084909,  0.89759429]]).T
-
-    width = int(979)
-    height = int(546)
-    focal_x = 581.6273640151177
-    focal_y = 578.140202494143
-    center_x = width/2.
-    center_y = height/2.
-
-    twc = np.linalg.inv(Rcw) @ (-tcw)
-    pws = torch.from_numpy(gs['pw']).type(
-        torch.float32).to('cuda').requires_grad_()
-    rots = torch.from_numpy(gs['rot']).type(
-        torch.float32).to('cuda').requires_grad_()
-    scales = torch.from_numpy(gs['scale']).type(
-        torch.float32).to('cuda').requires_grad_()
-    alphas = torch.from_numpy(gs['alpha']).type(
-        torch.float32).to('cuda').requires_grad_()
-    shs = torch.from_numpy(gs['sh']).type(
-        torch.float32).to('cuda').requires_grad_()
-    Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
-    tcw = torch.from_numpy(tcw).type(torch.float32).to('cuda')
-    twc = torch.from_numpy(twc).type(torch.float32).to('cuda')
-
-    gsnet = GSNet
-
-    image_gt = torchvision.io.read_image("imgs/test.png").to('cuda')
-    image_gt = torchvision.transforms.functional.resize(
-        image_gt, [height, width]) / 255.
+    pws = torch.from_numpy(gs['pw']).type(torch.float32).to('cuda').requires_grad_()
+    rots = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda').requires_grad_()
+    scales = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda').requires_grad_()
+    alphas = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda').requires_grad_()
+    shs = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda').requires_grad_()
 
     optimizer = optim.Adam(
         [rots, scales, shs, alphas, pws], lr=0.001, eps=1e-15)
 
     fig, ax = plt.subplots()
-    array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
+    array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
     for i in range(100):
-        image = gsnet.apply(rots, scales, shs, alphas, pws)
+        image = gsnet.apply(rots, scales, shs, alphas, pws, cam0)
         loss = gau_loss(image, image_gt)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
@@ -162,5 +46,5 @@ if __name__ == "__main__":
             im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
             im.set_data(im_cpu)
             fig.canvas.flush_events()
-            plt.pause(0.1)
+            plt.pause(1)
     plt.show()
