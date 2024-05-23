@@ -36,7 +36,7 @@ if __name__ == "__main__":
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
 
-        dtypes = [('pos', '<f4', (3,)),
+        dtypes = [('pw', '<f4', (3,)),
                   ('rot', '<f4', (4,)),
                   ('scale', '<f4', (3,)),
                   ('alpha', '<f4'),
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    pws = gs['pos']
+    pws = gs['pw']
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.

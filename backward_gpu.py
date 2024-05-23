@@ -32,7 +32,7 @@ if __name__ == "__main__":
                          ], dtype=np.float64)
 
     gs_data[:, :14] = gs_data0
-    dtypes = [('pos', '<f8', (3,)),
+    dtypes = [('pw', '<f8', (3,)),
               ('rot', '<f8', (4,)),
               ('scale', '<f8', (3,)),
               ('alpha', '<f8'),
@@ -54,12 +54,12 @@ if __name__ == "__main__":
     cy = height/2.
     image_gt = np.zeros([height, width, 3])
 
-    pws = gs['pos']
+    pws = gs['pw']
     alphas = gs['alpha']
     rots = gs['rot']
     scales = gs['scale']
     shs = gs['sh']
-    gs_num = gs['pos'].shape[0]
+    gs_num = gs['pw'].shape[0]
 
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])

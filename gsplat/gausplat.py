@@ -4,19 +4,6 @@ import time
 from gsplat.sh_coef import *
 
 
-class Camera:
-    def __init__(self, id, width, height, K, Rcw, tcw):
-        self.id = id
-        self.width = width
-        self.height = height
-        self.K = K
-        self.Rcw = Rcw
-        self.tcw = tcw
-        self.cam_center = -np.linalg.inv(Rcw) @ tcw
-        self.focal_x = K[0, 0]
-        self.focal_y = K[1, 1]
-
-
 def projection_matrix(focal_x, focal_y, width, height, z_near=0.1, z_far=100):
     P = np.zeros([4, 4])
     P[0, 0] = 2 * focal_x / width

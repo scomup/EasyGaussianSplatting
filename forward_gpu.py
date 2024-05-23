@@ -39,7 +39,7 @@ if __name__ == "__main__":
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
 
-        dtypes = [('pos', '<f4', (3,)),
+        dtypes = [('pw', '<f4', (3,)),
                   ('rot', '<f4', (4,)),
                   ('scale', '<f4', (3,)),
                   ('alpha', '<f4'),
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     center_x = width / 2
     center_y = height / 2
 
-    pws = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
+    pws = torch.from_numpy(gs['pw']).type(torch.float32).to('cuda')
     rots = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
     scales = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
     alphas = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')

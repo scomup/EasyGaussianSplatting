@@ -6,7 +6,6 @@ import gsplatcu as gsc
 import torchvision
 from gsplat.pytorch_ssim import gau_loss
 from gsplat.read_ply import *
-from gausplat import *
 
 
 class GSNet(torch.autograd.Function):
@@ -100,14 +99,14 @@ if __name__ == "__main__":
                         -1.772484, -1.772484,  1.772484]
                         ], dtype=np.float32)
 
-    dtypes = [('pos', '<f4', (3,)),
+    dtypes = [('pw', '<f4', (3,)),
               ('rot', '<f4', (4,)),
               ('scale', '<f4', (3,)),
               ('alpha', '<f4'),
               ('sh', '<f4', (3,))]
 
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
-    ply_fn = "/home/liu/workspace/gaussian-splatting/output/train2d/point_cloud/iteration_10/point_cloud.ply"
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply"
     gs = load_ply(ply_fn)
 
     # Camera info
@@ -124,7 +123,7 @@ if __name__ == "__main__":
     center_y = height/2.
 
     twc = np.linalg.inv(Rcw) @ (-tcw)
-    pws = torch.from_numpy(gs['pos']).type(
+    pws = torch.from_numpy(gs['pw']).type(
         torch.float32).to('cuda').requires_grad_()
     rots = torch.from_numpy(gs['rot']).type(
         torch.float32).to('cuda').requires_grad_()

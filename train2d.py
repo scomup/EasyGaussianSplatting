@@ -14,10 +14,13 @@ from gsplat.gausplat import *
 
 class GS2DNet(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, us, cinv2ds, alphas, colors):
-        global depths, areas
+    def forward(ctx, us, cinv2ds, alphas, colors, depths, areas, height, width):
+        # Store the static parameters in the context
+        ctx.depths = depths
+        ctx.height = height
+        ctx.width = width
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-            gsc.splat(camera.height, camera.width,
+            gsc.splat(height, width,
                       us, cinv2ds, alphas, depths, colors, areas)
         ctx.save_for_backward(us, cinv2ds, alphas, colors, contrib,
                               final_tau, patch_offset_per_tile, gs_id_per_patch)
@@ -25,21 +28,25 @@ class GS2DNet(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, dloss_dgammas):
-        global depths
         us, cinv2ds, alphas, colors, contrib, \
             final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
+        # Retrieve the saved tensors and static parameters
+        depths = ctx.depths
+        height = ctx.height
+        width = ctx.width
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
-            gsc.splatB(camera.height, camera.width, us, cinv2ds, alphas,
+            gsc.splatB(height, width, us, cinv2ds, alphas,
                        depths, colors, contrib, final_tau,
                        patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-        return dloss_dus.squeeze(), dloss_dcinv2ds.squeeze(), dloss_dalphas.squeeze(), dloss_dcolors.squeeze()
+        return dloss_dus.squeeze(), dloss_dcinv2ds.squeeze(), dloss_dalphas.squeeze(),\
+            dloss_dcolors.squeeze(), None, None, None, None
 
 
-def create_guassian2d_data(camera, gs):
-    pws = gs['pos']
+def create_guassian2d_data(gs, Rcw, tcw, K):
+    pws = gs['pw']
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = project(pws, camera.Rcw, camera.tcw, camera.K)
+    us, pcs = project(pws, Rcw, tcw, K)
 
     depths = pcs[:, 2]
 
@@ -47,12 +54,12 @@ def create_guassian2d_data(camera, gs):
     cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2ds = compute_cov_2d(pcs, K, cov3ds, camera.Rcw)
+    cov2ds = compute_cov_2d(pcs, K, cov3ds, Rcw)
 
     cinv2ds, areas = inverse_cov2d(cov2ds)
 
     # step4. get color info
-    colors = sh2color(gs['sh'], pws, twc=camera.cam_center)
+    colors = sh2color(gs['sh'], pws, twc=np.linalg.inv(Rcw) @ (-tcw))
     return us, cinv2ds, gs['alpha'], colors, depths, areas
 
 
@@ -82,14 +89,14 @@ if __name__ == "__main__":
                         -1.772484, -1.772484,  1.772484]
                         ], dtype=np.float32)
 
-    dtypes = [('pos', '<f4', (3,)),
+    dtypes = [('pw', '<f4', (3,)),
               ('rot', '<f4', (4,)),
               ('scale', '<f4', (3,)),
               ('alpha', '<f4'),
               ('sh', '<f4', (3,))]
 
     gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
-    ply_fn = "/home/liu/workspace/gaussian-splatting/output/train2d/point_cloud/iteration_10/point_cloud.ply"
+    ply_fn = "/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply"
     gs = load_ply(ply_fn)
 
     # Camera info
@@ -112,10 +119,8 @@ if __name__ == "__main__":
                   [0, focal_y, height/2.],
                   [0, 0, 1.]])
 
-    camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
-
     us, cinv2ds, alphas, colors, depths, areas = create_guassian2d_data(
-        camera, gs)
+        gs, Rcw, tcw, K)
     us = torch.from_numpy(us).type(torch.float32).to(device).requires_grad_()
     cinv2ds = torch.from_numpy(cinv2ds).type(
         torch.float32).to(device).requires_grad_()
@@ -126,7 +131,7 @@ if __name__ == "__main__":
         torch.float32).to(device).requires_grad_()
     areas = torch.from_numpy(areas).type(torch.float32).to(device)
     image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-        gsc.splat(camera.height, camera.width, us,
+        gsc.splat(height, width, us,
                   cinv2ds, alphas, depths, colors, areas)
 
     gs2dnet = GS2DNet
@@ -142,7 +147,8 @@ if __name__ == "__main__":
     im = ax.imshow(array)
 
     for i in range(100):
-        image = gs2dnet.apply(us, cinv2ds, alphas, colors)
+        image = gs2dnet.apply(us, cinv2ds, alphas, colors,
+                              depths, areas, height, width)
         loss = gau_loss(image, image_gt)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
