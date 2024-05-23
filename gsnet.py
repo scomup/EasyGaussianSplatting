@@ -54,6 +54,7 @@ class GSNet(torch.autograd.Function):
             dcov3d_drots, dcov3d_dscales, \
             depths, us, du_dpcs, alphas = ctx.saved_tensors
 
+        # backward process of splat
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
             gsc.splatB(camera.height, camera.width, us, cinv2ds, alphas,
                        depths, colors, contrib, final_tau,
@@ -62,6 +63,7 @@ class GSNet(torch.autograd.Function):
         dpc_dpws = camera.Rcw
         dloss_dcov2ds = dloss_dcinv2ds @ dcinv2d_dcov2ds
 
+        # calcuate all jacobians
         dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
         dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
         dloss_dshs = (dloss_dcolors.permute(0, 2, 1) @ dcolor_dshs)\

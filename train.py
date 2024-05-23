@@ -8,15 +8,16 @@ from gsplat.read_ply import *
 from gsplat.gausplat_dataset import *
 from gsnet import GSNet
 
+import time
+
 
 if __name__ == "__main__":
     path = '/home/liu/bag/gaussian-splatting/tandt/train'
     gs_dataset = GSplatDataset(path, device='cuda')
-    cam0 = gs_dataset[0]
+
+    cam0, image0_gt = gs_dataset[0]
     gsnet = GSNet
     gs = gs_dataset.gs
-
-    image_gt = cam0.image.requires_grad_()
 
     ply_fn = "/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply"
     gs = load_ply(ply_fn)
@@ -35,10 +36,15 @@ if __name__ == "__main__":
     im = ax.imshow(array)
 
     for i in range(100):
+        # start = time.time()
         image = gsnet.apply(rots, scales, shs, alphas, pws, cam0)
-        loss = gau_loss(image, image_gt)
-        optimizer.zero_grad(set_to_none=True)
+        # image = image.requires_grad_()
+        loss = gau_loss(image, image0_gt)
+        # optimizer.zero_grad(set_to_none=True)
         loss.backward()
+        # end = time.time()
+        # time_diff = end - start
+        # print("runing %f\n" % time_diff)
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)
         if (i % 1 == 0):
@@ -46,5 +52,5 @@ if __name__ == "__main__":
             im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
             im.set_data(im_cpu)
             fig.canvas.flush_events()
-            plt.pause(1)
+            plt.pause(0.1)
     plt.show()
