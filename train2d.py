@@ -18,7 +18,7 @@ class GS2DNet(torch.autograd.Function):
         global depths, areas
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
             gsc.splat(camera.height, camera.width,
-                     us, cinv2ds, alphas, depths, colors, areas)
+                      us, cinv2ds, alphas, depths, colors, areas)
         ctx.save_for_backward(us, cinv2ds, alphas, colors, contrib,
                               final_tau, patch_offset_per_tile, gs_id_per_patch)
         return image
@@ -30,8 +30,8 @@ class GS2DNet(torch.autograd.Function):
             final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
             gsc.splatB(camera.height, camera.width, us, cinv2ds, alphas,
-                        depths, colors, contrib, final_tau,
-                        patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+                       depths, colors, contrib, final_tau,
+                       patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
         return dloss_dus.squeeze(), dloss_dcinv2ds.squeeze(), dloss_dalphas.squeeze(), dloss_dcolors.squeeze()
 
 
@@ -114,15 +114,20 @@ if __name__ == "__main__":
 
     camera = Camera(id=0, width=width, height=height, K=K, Rcw=Rcw, tcw=tcw)
 
-    us, cinv2ds, alphas, colors, depths, areas = create_guassian2d_data(camera, gs)
+    us, cinv2ds, alphas, colors, depths, areas = create_guassian2d_data(
+        camera, gs)
     us = torch.from_numpy(us).type(torch.float32).to(device).requires_grad_()
-    cinv2ds = torch.from_numpy(cinv2ds).type(torch.float32).to(device).requires_grad_()
-    alphas = torch.from_numpy(alphas).type(torch.float32).to(device).requires_grad_()
+    cinv2ds = torch.from_numpy(cinv2ds).type(
+        torch.float32).to(device).requires_grad_()
+    alphas = torch.from_numpy(alphas).type(
+        torch.float32).to(device).requires_grad_()
     depths = torch.from_numpy(depths).type(torch.float32).to(device)
-    colors = torch.from_numpy(colors).type(torch.float32).to(device).requires_grad_()
+    colors = torch.from_numpy(colors).type(
+        torch.float32).to(device).requires_grad_()
     areas = torch.from_numpy(areas).type(torch.float32).to(device)
     image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
-        gsc.splat(camera.height, camera.width, us, cinv2ds, alphas, depths, colors, areas)
+        gsc.splat(camera.height, camera.width, us,
+                  cinv2ds, alphas, depths, colors, areas)
 
     gs2dnet = GS2DNet
 

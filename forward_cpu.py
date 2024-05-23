@@ -88,13 +88,12 @@ if __name__ == "__main__":
     # step5. Blend the 2d Gaussian to image
     cinv2ds, areas = inverse_cov2d(cov2ds)
 
-    splat(height, width, us, cinv2ds, gs['alpha'], 
+    splat(height, width, us, cinv2ds, gs['alpha'],
           depths, colors, areas, im)
-    
+
     # from PIL import Image
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
     # print(pil_img.mode)
     # pil_img.save('test.png')
 
     plt.show()
-

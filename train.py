@@ -8,21 +8,25 @@ from gsplat.pytorch_ssim import gau_loss
 from gsplat.read_ply import *
 from gausplat import *
 
+
 class GSNet(torch.autograd.Function):
     @staticmethod
     def forward(ctx, rots, scales, shs, alphas, pws):
         global Rcw, tcw, twc, focal_x, focal_y, center_x, center_y, height, width
-    
+
         # step1. Transform pw to camera frame,
-        # and project it to iamge.        
-        us, pcs, du_dpcs = gsc.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, True)
+        # and project it to iamge.
+        us, pcs, du_dpcs = gsc.project(
+            pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, True)
         depths = pcs[:, 2]
 
         # step2. Calcuate the 3d Gaussian.
-        cov3ds, dcov3d_drots, dcov3d_dscales = gsc.computeCov3D(rots, scales, True)
+        cov3ds, dcov3d_drots, dcov3d_dscales = gsc.computeCov3D(
+            rots, scales, True)
 
         # step3. Calcuate the 2d Gaussian.
-        cov2ds, dcov2d_dcov3ds, dcov2d_dpcs = gsc.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, True)
+        cov2ds, dcov2d_dcov3ds, dcov2d_dpcs = gsc.computeCov2D(
+            cov3ds, pcs, Rcw, focal_x, focal_y, True)
 
         # step4. get color info
         colors, dcolor_dshs, dcolor_dpws = gsc.sh2Color(shs, pws, twc, True)
@@ -31,9 +35,9 @@ class GSNet(torch.autograd.Function):
         cinv2ds, areas, dcinv2d_dcov2ds = gsc.inverseCov2D(cov2ds, True)
         image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
             gsc.splat(height, width,
-                     us, cinv2ds, alphas, depths, colors, areas)
-    
-        ctx.save_for_backward(contrib, final_tau, 
+                      us, cinv2ds, alphas, depths, colors, areas)
+
+        ctx.save_for_backward(contrib, final_tau,
                               patch_offset_per_tile, gs_id_per_patch,
                               cinv2ds, dcinv2d_dcov2ds,
                               colors, dcolor_dshs, dcolor_dpws,
@@ -45,22 +49,22 @@ class GSNet(torch.autograd.Function):
     @staticmethod
     def backward(ctx, dloss_dgammas):
         global Rcw, height, width
-        contrib, final_tau,\
-            patch_offset_per_tile, gs_id_per_patch,\
-            cinv2ds, dcinv2d_dcov2ds,\
-            colors, dcolor_dshs, dcolor_dpws,\
-            dcov2d_dcov3ds, dcov2d_dpcs,\
-            dcov3d_drots, dcov3d_dscales,\
+        contrib, final_tau, \
+            patch_offset_per_tile, gs_id_per_patch, \
+            cinv2ds, dcinv2d_dcov2ds, \
+            colors, dcolor_dshs, dcolor_dpws, \
+            dcov2d_dcov3ds, dcov2d_dpcs, \
+            dcov3d_drots, dcov3d_dscales, \
             depths, us, du_dpcs, alphas = ctx.saved_tensors
-    
+
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
-        gsc.splatB(height, width, us, cinv2ds, alphas,\
-            depths, colors, contrib, final_tau,\
-            patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
-        
+            gsc.splatB(height, width, us, cinv2ds, alphas,
+                       depths, colors, contrib, final_tau,
+                       patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+
         dpc_dpws = Rcw
         dloss_dcov2ds = dloss_dcinv2ds @ dcinv2d_dcov2ds
-    
+
         dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
         dloss_dscales = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_dscales
         dloss_dshs = (dloss_dcolors.permute(0, 2, 1) @ dcolor_dshs)\
@@ -68,8 +72,8 @@ class GSNet(torch.autograd.Function):
         dloss_dalphas = dloss_dalphas
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
-            dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws    
-        return dloss_drots.squeeze(), dloss_dscales.squeeze(),\
+            dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
+        return dloss_drots.squeeze(), dloss_dscales.squeeze(), \
             dloss_dshs.squeeze(), dloss_dalphas.squeeze(), dloss_dpws.squeeze()
 
 
@@ -120,11 +124,16 @@ if __name__ == "__main__":
     center_y = height/2.
 
     twc = np.linalg.inv(Rcw) @ (-tcw)
-    pws = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda').requires_grad_()
-    rots = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda').requires_grad_()
-    scales = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda').requires_grad_()
-    alphas = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda').requires_grad_()
-    shs = torch.from_numpy(gs['sh']).type(torch.float32).to('cuda').requires_grad_()
+    pws = torch.from_numpy(gs['pos']).type(
+        torch.float32).to('cuda').requires_grad_()
+    rots = torch.from_numpy(gs['rot']).type(
+        torch.float32).to('cuda').requires_grad_()
+    scales = torch.from_numpy(gs['scale']).type(
+        torch.float32).to('cuda').requires_grad_()
+    alphas = torch.from_numpy(gs['alpha']).type(
+        torch.float32).to('cuda').requires_grad_()
+    shs = torch.from_numpy(gs['sh']).type(
+        torch.float32).to('cuda').requires_grad_()
     Rcw = torch.from_numpy(Rcw).type(torch.float32).to('cuda')
     tcw = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc = torch.from_numpy(twc).type(torch.float32).to('cuda')
@@ -135,7 +144,8 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(
         image_gt, [height, width]) / 255.
 
-    optimizer = optim.Adam([rots, scales, shs, alphas, pws], lr=0.001, eps=1e-15)
+    optimizer = optim.Adam(
+        [rots, scales, shs, alphas, pws], lr=0.001, eps=1e-15)
 
     fig, ax = plt.subplots()
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
