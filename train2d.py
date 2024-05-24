@@ -39,8 +39,9 @@ if __name__ == "__main__":
     path = '/home/liu/bag/gaussian-splatting/tandt/train'
     gs_set = GSplatDataset(path, device='cuda')
 
-    ply_fn = "/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply"
-    gs = load_ply(ply_fn)
+    # ply_fn = "/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply"
+    # gs = load_ply(ply_fn)
+    gs = gs_set.gs
 
     cam0, image0_gt = gs_set[0]
 

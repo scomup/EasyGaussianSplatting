@@ -68,18 +68,18 @@ def load_ply(path, T=None):
 
     rots /= np.linalg.norm(rots, axis=1)[:, np.newaxis]
 
-    shs = np.zeros([pws.shape[0], 48])
+    sh_dim = len(plydata.elements[0][0])-14
+    shs = np.zeros([pws.shape[0], sh_dim])
     shs[:, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
     shs[:, 1] = np.asarray(plydata.elements[0]["f_dc_1"])
     shs[:, 2] = np.asarray(plydata.elements[0]["f_dc_2"])
 
-    sh_rest_dim = len(plydata.elements[0][0])-17
-
+    sh_rest_dim = sh_dim - 3
     for i in range(sh_rest_dim):
         name = "f_rest_%d" % i
         shs[:, 3 + i] = np.asarray(plydata.elements[0][name])
 
-    shs[:, 3:] = shs[:, 3:].reshape(-1, 3, 15).transpose([0, 2, 1]).reshape(-1, 45)
+    shs[:, 3:] = shs[:, 3:].reshape(-1, 3, sh_rest_dim//3).transpose([0, 2, 1]).reshape(-1, sh_rest_dim)
 
     pws = pws.astype(np.float32)
     rots = rots.astype(np.float32)
@@ -92,7 +92,7 @@ def load_ply(path, T=None):
               ('rot', '<f4', (4,)),
               ('scale', '<f4', (3,)),
               ('alpha', '<f4'),
-              ('sh', '<f4', (48,))]
+              ('sh', '<f4', (sh_dim,))]
 
     if (T is not None):
         # Transform to world
@@ -116,5 +116,5 @@ def load_ply(path, T=None):
 
 
 if __name__ == "__main__":
-    gs = load_ply("/home/liu/workspace/gaussian-splatting/output/fb15ba66-e/point_cloud/iteration_7000/point_cloud.ply")
+    gs = load_ply("/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply")
     print(gs.shape)

@@ -15,13 +15,14 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--ply", help="the ply path")
+    parser.add_argument("--npy", help="the npy path")
     args = parser.parse_args()
     cam_2_world = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
     if args.ply:
-        ply_fn = args.ply
-        print("Try to load %s ..." % ply_fn)
-        gs = load_ply(ply_fn, cam_2_world)
-        gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
+        print("Try to load %s ..." % args.ply)
+        gs = load_ply(args.ply, cam_2_world)
+    elif args.npy:
+        gs = np.load(args.npy)
     else:
         gs_data = np.array([[0.,  0.,  0.,  # xyz
                             1.,  0.,  0., 0.,  # rot
@@ -46,7 +47,8 @@ if __name__ == '__main__':
                             ], dtype=np.float32)
     # ply_fn = "/home/liu/workspace/gaussian-splatting/output/a531e75d-7/point_cloud/iteration_30000/point_cloud.ply"
     # gs = load_ply(ply_fn, cam_2_world)
-    # gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
+
+    gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
 
     app = QApplication([])
     gs_item = GaussianItem()
