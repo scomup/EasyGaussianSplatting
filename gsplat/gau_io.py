@@ -1,6 +1,6 @@
 import numpy as np
 from plyfile import PlyData
-
+import torch
 
 def matrix_to_quaternion(matrices):
     m00, m01, m02 = matrices[:, 0, 0], matrices[:, 0, 1], matrices[:, 0, 2]
@@ -129,12 +129,16 @@ def load_gs(fn):
 def save_gs(fn, gs):
     np.save(fn, gs)
 
-def save_torch_params(fn, rots, scales, shs, alphas, pws):
-    rots.detach().cpu().numpy()
-    scales.detach().cpu().numpy()
-    shs.detach().cpu().numpy()
-    alphas.detach().cpu().numpy()
-    pws.detach().cpu().numpy()
+def save_torch_params(fn, _rots, _scales, shs, _alphas, pws):
+    scales = torch.exp(_scales)  # > 0
+    alphas = torch.sigmoid(_alphas)  # 0 ~ 1
+    rots = torch.nn.functional.normalize(_rots)  # the a norm is 1,
+
+    rots = rots.detach().cpu().numpy()
+    scales = scales.detach().cpu().numpy()
+    shs = shs.detach().cpu().numpy()
+    alphas = alphas.detach().cpu().numpy()
+    pws = pws.detach().cpu().numpy()
     dtypes = [('pw', '<f4', (3,)),
           ('rot', '<f4', (4,)),
           ('scale', '<f4', (3,)),
