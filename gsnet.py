@@ -75,3 +75,37 @@ class GSNet(torch.autograd.Function):
         return dloss_drots.squeeze(), dloss_dscales.squeeze(), \
             dloss_dshs.squeeze(), dloss_dalphas.squeeze(), \
             dloss_dpws.squeeze(), None
+
+
+class GS2DNet(torch.autograd.Function):
+    """
+    For test purposes: Only training the 2D Gaussians,
+    which are the projection of 3D Gaussians onto the 2D image.
+    """
+    @staticmethod
+    def forward(ctx, us, cinv2ds, alphas, colors, depths, areas, height, width):
+        # Store the static parameters in the context
+        ctx.depths = depths
+        ctx.height = height
+        ctx.width = width
+        image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
+            gsc.splat(height, width,
+                      us, cinv2ds, alphas, depths, colors, areas)
+        ctx.save_for_backward(us, cinv2ds, alphas, colors, contrib,
+                              final_tau, patch_offset_per_tile, gs_id_per_patch)
+        return image
+
+    @staticmethod
+    def backward(ctx, dloss_dgammas):
+        us, cinv2ds, alphas, colors, contrib, \
+            final_tau, patch_offset_per_tile, gs_id_per_patch = ctx.saved_tensors
+        # Retrieve the saved tensors and static parameters
+        depths = ctx.depths
+        height = ctx.height
+        width = ctx.width
+        dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
+            gsc.splatB(height, width, us, cinv2ds, alphas,
+                       depths, colors, contrib, final_tau,
+                       patch_offset_per_tile, gs_id_per_patch, dloss_dgammas)
+        return dloss_dus.squeeze(), dloss_dcinv2ds.squeeze(), dloss_dalphas.squeeze(),\
+            dloss_dcolors.squeeze(), None, None, None, None

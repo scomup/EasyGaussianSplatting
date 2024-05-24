@@ -26,7 +26,7 @@ class GSplatDataset(Dataset):
     def __init__(self, path, device='cpu') -> None:
         super().__init__()
         self.device = device
-        camera_params, image_params, points = read_model(Path(path, "sparse/0"), ext='.bin')
+        camera_params, image_params = read_model(Path(path, "sparse/0"), ext='.bin')
         self.cameras = []
         self.images = []
         for image_param in image_params.values():
@@ -46,7 +46,6 @@ class GSplatDataset(Dataset):
             camera = Camera(image_param.id, width, height, fx, fy, cx, cy, Rcw, tcw)
             self.cameras.append(camera)
             self.images.append(image)
-        self.gs = points
 
     def __getitem__(self, index: int):
         return self.cameras[index], self.images[index]

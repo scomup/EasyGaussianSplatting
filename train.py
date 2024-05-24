@@ -33,19 +33,23 @@ if __name__ == "__main__":
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    for iteration in range(0, 10000):
-        i = randint(0, len(gs_set) - 1)
-        cam, image_gt = gs_set[i]
-        image = gsnet.apply(rots, scales, shs, alphas, pws, cam)
-        loss = gau_loss(image, image_gt)
-        loss.backward()
-        optimizer.step()
-        optimizer.zero_grad(set_to_none=True)
-        print("step:%d image: %d loss:%f" % (iteration, i, loss.item()))
-        if (i == 0):
-            print("step:%d loss:%f" % (iteration, loss.item()))
-            im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
-            im.set_data(im_cpu)
-            fig.canvas.flush_events()
-            plt.pause(0.1)
-        
+    n_epochs = 5
+    for epoch in range(n_epochs):
+        idxs = np.arange(len(gs_set))
+        np.random.shuffle(idxs)
+        avg_loss = 0
+        for i in idxs:
+            cam, image_gt = gs_set[i]
+            image = gsnet.apply(rots, scales, shs, alphas, pws, cam)
+            loss = gau_loss(image, image_gt)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            avg_loss += loss.item()
+            if (i == 0):
+                im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
+                im.set_data(im_cpu)
+                fig.canvas.flush_events()
+                plt.pause(0.1)
+        avg_loss = avg_loss / len(gs_set)
+        print("epoch:%d avg_loss:%f" % (epoch, avg_loss))

@@ -447,7 +447,8 @@ def read_points3D_binary2(path_to_model_file):
             )
             point3D_id = binary_point_line_properties[0]
             pws[i] = np.array(binary_point_line_properties[1:4])
-            shs[i] = (np.array(binary_point_line_properties[4:7])/255 - 0.5) / SH_C0_0
+            shs[i] = (np.array(binary_point_line_properties[4:7]) /
+                      255 - 0.5) / SH_C0_0
             track_length = read_next_bytes(
                 fid, num_bytes=8, format_char_sequence="Q"
             )[0]
@@ -554,12 +555,12 @@ def read_model(path, ext=""):
     if ext == ".txt":
         cameras = read_cameras_text(os.path.join(path, "cameras" + ext))
         images = read_images_text(os.path.join(path, "images" + ext))
-        points3D = read_points3D_text(os.path.join(path, "points3D") + ext)
+        # points3D = read_points3D_text(os.path.join(path, "points3D") + ext)
     else:
         cameras = read_cameras_binary(os.path.join(path, "cameras" + ext))
         images = read_images_binary(os.path.join(path, "images" + ext))
-        points3D = read_points3D_binary2(os.path.join(path, "points3D") + ext)
-    return cameras, images, points3D
+        # points3D = read_points3D_binary2(os.path.join(path, "points3D") + ext)
+    return cameras, images
 
 
 def write_model(cameras, images, points3D, path, ext=".bin"):

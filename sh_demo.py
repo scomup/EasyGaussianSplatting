@@ -12,7 +12,6 @@ from viewer import *
 from custom_items import *
 
 
-
 def rotation_matrix_from_axis_angle(axis, angle):
         c = np.cos(angle)
         s = np.sin(angle)
@@ -54,7 +53,7 @@ def rotate(sphere, angle_increment=0.01):
 device = 'cuda'
 
 
-def sh2color(sh, ray_dir, dim=36):
+def sh2color(sh, ray_dir, dim=108):
     # lib = np if mode == 'torch' else torch
     dCdSH = None
     if isinstance(sh, np.ndarray):
@@ -64,11 +63,11 @@ def sh2color(sh, ray_dir, dim=36):
     else:
         raise TypeError("unspport type.")
 
-    sh_dim = np.min([sh.shape[0], dim])
+    sh_dim = np.min([sh.shape[0] * sh.shape[1], dim])
     dCdSH[0] = SH_C0_0
     color = (dCdSH[0] * sh[0][:, np.newaxis]) + 0.5
 
-    if (sh_dim <= 1):
+    if (sh_dim <= 3):
         return color, dCdSH.T
 
     x = ray_dir[:, 0]
@@ -82,7 +81,7 @@ def sh2color(sh, ray_dir, dim=36):
         dCdSH[2] * sh[2][:, np.newaxis] + \
         dCdSH[3] * sh[3][:, np.newaxis]
 
-    if (sh_dim <= 4):
+    if (sh_dim <= 12):
         return color, dCdSH.T
     x2 = x * x
     y2 = y * y
@@ -102,7 +101,7 @@ def sh2color(sh, ray_dir, dim=36):
         dCdSH[7] * sh[7][:, np.newaxis] + \
         dCdSH[8] * sh[8][:, np.newaxis]
 
-    if (sh_dim <= 9):
+    if (sh_dim <= 27):
         return color, dCdSH.T
     dCdSH[9] = SH_C3_0 * y * (3.0 * x2 - y2)
     dCdSH[10] = SH_C3_1 * xy * z
@@ -121,7 +120,7 @@ def sh2color(sh, ray_dir, dim=36):
         dCdSH[14] * sh[14][:, np.newaxis] + \
         dCdSH[15] * sh[15][:, np.newaxis]
 
-    if (sh_dim <= 16):
+    if (sh_dim <= 48):
         return color, dCdSH.T
 
     x4 = x2 * x2
@@ -148,7 +147,7 @@ def sh2color(sh, ray_dir, dim=36):
         dCdSH[23] * sh[23][:, np.newaxis] + \
         dCdSH[24] * sh[24][:, np.newaxis]
 
-    if (sh_dim <= 25):
+    if (sh_dim <= 75):
         return color, dCdSH.T
     dCdSH[25] = SH_C5_0*y*(-10.0*x2*y2 + 5.0*x4 + y4)  #
     dCdSH[26] = SH_C5_1*xy*z*(x2 - y2)
@@ -194,7 +193,8 @@ class SHNet(torch.autograd.Function):
 
 
 if __name__ == "__main__":
-    sh = np.zeros([36, 3], dtype=np.float32)  # 1. 4, 9, 16, 25, 36
+    # level0: 3. level1: 12, level2: 27, level3: 48, level4: 75, level5: 108
+    sh = np.zeros([108 // 3, 3], dtype=np.float32)
     sh = torch.from_numpy(sh).to(device).requires_grad_()
 
     width = int(979)  # 1957  # 979
@@ -232,13 +232,13 @@ if __name__ == "__main__":
     app = QApplication([])
     gt = SphereItem()
     sh1 = SphereItem()
-    c1, _ = sh2color(sh, sh1.vertices, dim=1)  # level1
+    c1, _ = sh2color(sh, sh1.vertices, dim=3)  # level1
     sh2 = SphereItem()
-    c2, _ = sh2color(sh, sh2.vertices, dim=9)  # level3
+    c2, _ = sh2color(sh, sh2.vertices, dim=48)  # level3
     sh3 = SphereItem()
-    c3, _ = sh2color(sh, sh3.vertices, dim=16)  # level4
+    c3, _ = sh2color(sh, sh3.vertices, dim=75)  # level4
     sh4 = SphereItem()
-    c4, _ = sh2color(sh, sh4.vertices, dim=36)  # level5
+    c4, _ = sh2color(sh, sh4.vertices, dim=108)  # level5
 
     gt.set_colors_from_image(image_gt)
     sh1.set_colors(c1.T)
