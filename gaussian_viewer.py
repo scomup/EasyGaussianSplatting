@@ -14,15 +14,13 @@ from custom_items import *
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ply", help="the ply path")
-    parser.add_argument("--npy", help="the npy path")
+    parser.add_argument("--gs", help="the input gs path")
     args = parser.parse_args()
     cam_2_world = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
-    if args.ply:
-        print("Try to load %s ..." % args.ply)
-        gs = load_ply(args.ply, cam_2_world)
-    elif args.npy:
-        gs = np.load(args.npy)
+    if args.gs:
+        print("Try to load %s ..." % args.gs)
+        gs = load_gs(args.gs)
+        rotate_gaussian(cam_2_world, gs)
     else:
         gs_data = np.array([[0.,  0.,  0.,  # xyz
                             1.,  0.,  0., 0.,  # rot

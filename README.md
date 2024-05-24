@@ -35,12 +35,12 @@ Given camera information, render 3D Gaussian data onto the 2D image.
 
 CPU version.
 ```bash
-python3 forword_cpu.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
+python3 forword_cpu.py --gs='THE_PATH_OF_YOUR_TRAINED_PLY_OR_NPY_FILE'
 ```
 
 GPU version.
 ```bash
-python3 forword_gpu.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
+python3 forword_gpu.py --gs='THE_PATH_OF_YOUR_TRAINED_PLY_OR_NPY_FILE'
 ```
 ![forword demo](imgs/forword.png)
 
@@ -49,7 +49,7 @@ python3 forword_gpu.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
 A efficient 3D Gaussian splatting viewer for showing 3D Gaussian data. 
 
 ```bash
-python3 gaussian_viewer.py --ply='THE_PATH_OF_YOUR_TRAINED_PLY_FILE'
+python3 gaussian_viewer.py --gs='THE_PATH_OF_YOUR_TRAINED_PLY_OR_NPY_FILE'
 ```
 
 <img src="imgs/viewer.gif" width="640px">
@@ -65,4 +65,4 @@ python3 sh_demo.py
 ```
 
 ![sh demo](imgs/sh_demo.gif)
-<span style="font-size: 80%; color: Gray;">"The ground truth Earth image is modified from [URL](https://commons.wikimedia.org/wiki/File:Solarsystemscope_texture_8k_earth_daymap.jpg). By Solar System Scope. Licensed under CC-BY-4.0"</span>
+<sup><sub>"The ground truth Earth image is modified from [URL](https://commons.wikimedia.org/wiki/File:Solarsystemscope_texture_8k_earth_daymap.jpg). By Solar System Scope. Licensed under CC-BY-4.0"</sub></sup>

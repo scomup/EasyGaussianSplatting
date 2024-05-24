@@ -47,7 +47,7 @@ if __name__ == "__main__":
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    n_epochs = 100
+    n_epochs = 1
     for epoch in range(n_epochs):
         idxs = np.arange(len(gs_set))
         np.random.shuffle(idxs)
@@ -65,6 +65,6 @@ if __name__ == "__main__":
                 im.set_data(im_cpu)
                 fig.canvas.flush_events()
                 plt.pause(0.1)
-                # plt.show()
         avg_loss = avg_loss / len(gs_set)
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
+        save_torch_params("epoch_%04d.npy"%epoch, rots, scales, shs, alphas, pws, cam)

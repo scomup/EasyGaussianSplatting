@@ -48,7 +48,6 @@ def matrix_to_quaternion(matrices):
 
 
 def load_ply(path, T=None):
-    max_sh_degree = 3
     plydata = PlyData.read(path)
     pws = np.stack((np.asarray(plydata.elements[0]["x"]),
                     np.asarray(plydata.elements[0]["y"]),
@@ -101,25 +100,50 @@ def load_ply(path, T=None):
 
 
 def rotate_gaussian(T, gs):
-        # Transform to world
-        pws = (T @ gs['pw'].T).T
-        w = gs['rot'][:, 0]
-        x = gs['rot'][:, 1]
-        y = gs['rot'][:, 2]
-        z = gs['rot'][:, 3]
-        R = np.array([
-            [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
-            [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
-            [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
-        ]).transpose(2, 0, 1)
-        R_new = T @ R
-        rots = matrix_to_quaternion(R_new)
-        gs['pw'] = 
-    gs = np.rec.fromarrays(
-        [pws, rots, scales, alphas, shs], dtype=dtypes)
-
+    # Transform to world
+    pws = (T @ gs['pw'].T).T
+    w = gs['rot'][:, 0]
+    x = gs['rot'][:, 1]
+    y = gs['rot'][:, 2]
+    z = gs['rot'][:, 3]
+    R = np.array([
+        [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
+        [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
+        [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
+    ]).transpose(2, 0, 1)
+    R_new = T @ R
+    rots = matrix_to_quaternion(R_new)
+    gs['pw'] = pws
+    gs['rot'] = rots
     return gs
 
+def load_gs(fn):
+    if fn.endswith('.ply'):
+        return load_ply(fn)
+    elif fn.endswith('.npy'):
+        return np.load(fn)
+    else:
+        print("%s is not a supported file." % fn)
+        exit(0)
+
+def save_gs(fn, gs):
+    np.save(fn, gs)
+
+def save_torch_params(fn, rots, scales, shs, alphas, pws):
+    rots.detach().cpu().numpy()
+    scales.detach().cpu().numpy()
+    shs.detach().cpu().numpy()
+    alphas.detach().cpu().numpy()
+    pws.detach().cpu().numpy()
+    dtypes = [('pw', '<f4', (3,)),
+          ('rot', '<f4', (4,)),
+          ('scale', '<f4', (3,)),
+          ('alpha', '<f4'),
+          ('sh', '<f4', (shs.shape[1],))]
+    gs = np.rec.fromarrays(
+        [pws, rots, scales, alphas, shs], dtype=dtypes)
+    np.save(fn, gs)
+
 if __name__ == "__main__":
-    gs = load_ply("/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply")
+    gs = load_gs("/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply")
     print(gs.shape)

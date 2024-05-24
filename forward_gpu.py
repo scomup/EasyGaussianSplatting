@@ -8,15 +8,14 @@ from gsplat.gau_io import *
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ply", help="the ply path")
+    parser.add_argument("--gs", help="the gs path")
     args = parser.parse_args()
 
-    if args.ply:
-        ply_fn = args.ply
-        print("Try to load %s ..." % ply_fn)
-        gs = load_ply(ply_fn)
+    if args.gs:
+        print("Try to load %s ..." % args.gs)
+        gs = load_gs(args.gs)
     else:
-        print("not fly file.")
+        print("not gs file.")
         gs_data = np.array([[0.,  0.,  0.,  # xyz
                             1.,  0.,  0., 0.,  # rot
                             0.05,  0.05,  0.05,  # size
