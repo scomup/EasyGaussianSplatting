@@ -118,7 +118,6 @@ class CloudItem(gl.GLGraphicsItem.GLGraphicsItem):
         weights.append(box2)
         return weights
 
-
     def setAlpha(self, alpha):
         self.alpha = alpha
         glUseProgram(self.program)
@@ -129,8 +128,8 @@ class CloudItem(gl.GLGraphicsItem.GLGraphicsItem):
         self.size = size
 
     def setData(self, **kwds):
-        if 'pos' in kwds:
-            pos = kwds.pop('pos')
+        if 'pw' in kwds:
+            pos = kwds.pop('pw')
             self.pos = np.ascontiguousarray(pos, dtype=np.float32)
             self.valid_point_num = pos.shape[0]
         self.need_init_buffer = True

@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
 import numpy as np
-from sh_coef import *
+from gsplat.sh_coef import *
 
 
 def upper_triangular(mat):
@@ -524,7 +524,7 @@ if __name__ == "__main__":
                          ], dtype=np.float64)
 
     gs_data[:, :14] = gs_data0
-    dtypes = [('pos', '<f8', (3,)),
+    dtypes = [('pw', '<f8', (3,)),
               ('rot', '<f8', (4,)),
               ('scale', '<f8', (3,)),
               ('alpha', '<f8'),
@@ -547,8 +547,8 @@ if __name__ == "__main__":
 
     image_gt = np.zeros([height, width, 3])
 
-    pws = gs['pos']
-    gs_num = gs['pos'].shape[0]
+    pws = gs['pw']
+    gs_num = gs['pw'].shape[0]
 
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])
@@ -692,12 +692,12 @@ if __name__ == "__main__":
     print("%s check dloss_du" % check(dloss_dus_numerial, dloss_dus))
 
     loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
-        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pos'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
+        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pw'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
     rots = gs['rot'].reshape(-1)
     scales = gs['scale'].reshape(-1)
     shs = gs['sh'].reshape(-1)
     alphas = gs['alpha'].reshape(-1)
-    pws = gs['pos'].reshape(-1)
+    pws = gs['pw'].reshape(-1)
 
     dloss_drots_numerial = numerical_derivative(
         backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 0)

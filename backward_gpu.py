@@ -1,8 +1,8 @@
 import matplotlib.pyplot as plt
 import torch
-import pygausplat as pg
+import gsplatcu as gsc
 import numpy as np
-from sh_coef import *
+from gsplat.sh_coef import *
 from backward_cpu import *
 
 
@@ -32,7 +32,7 @@ if __name__ == "__main__":
                          ], dtype=np.float64)
 
     gs_data[:, :14] = gs_data0
-    dtypes = [('pos', '<f8', (3,)),
+    dtypes = [('pw', '<f8', (3,)),
               ('rot', '<f8', (4,)),
               ('scale', '<f8', (3,)),
               ('alpha', '<f8'),
@@ -54,12 +54,12 @@ if __name__ == "__main__":
     cy = height/2.
     image_gt = np.zeros([height, width, 3])
 
-    pws = gs['pos']
+    pws = gs['pw']
     alphas = gs['alpha']
     rots = gs['rot']
     scales = gs['scale']
     shs = gs['sh']
-    gs_num = gs['pos'].shape[0]
+    gs_num = gs['pw'].shape[0]
 
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])
@@ -105,59 +105,79 @@ if __name__ == "__main__":
     tcw_gpu = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc_gpu = torch.from_numpy(twc).type(torch.float32).to('cuda')
 
-    us_gpu, pcs_gpu, du_dpcs_gpu = pg.project(pws_gpu, Rcw_gpu, tcw_gpu, fx, fy, cx, cy, True)
+    us_gpu, pcs_gpu, du_dpcs_gpu = gsc.project(
+        pws_gpu, Rcw_gpu, tcw_gpu, fx, fy, cx, cy, True)
     print("%s test us_gpu" % check(us_gpu.cpu().numpy(), us))
     print("%s test pcs_gpu" % check(pcs_gpu.cpu().numpy(), pcs))
     print("%s test du_dpcs_gpu" % check(du_dpcs_gpu.cpu().numpy(), du_dpcs))
 
-    cov3ds_gpu, dcov3d_drots_gpu, dcov3d_dscales_gpu = pg.computeCov3D(rots_gpu, scales_gpu, True)
+    cov3ds_gpu, dcov3d_drots_gpu, dcov3d_dscales_gpu = gsc.computeCov3D(
+        rots_gpu, scales_gpu, True)
     print("%s test cov3ds_gpu" % check(cov3ds_gpu.cpu().numpy(), cov3ds))
-    print("%s test dcov3d_drots_gpu" % check(dcov3d_drots_gpu.cpu().numpy(), dcov3d_drots))
-    print("%s test dcov3d_dscales_gpu" % check(dcov3d_dscales_gpu.cpu().numpy(), dcov3d_dscales))
+    print("%s test dcov3d_drots_gpu" %
+          check(dcov3d_drots_gpu.cpu().numpy(), dcov3d_drots))
+    print("%s test dcov3d_dscales_gpu" %
+          check(dcov3d_dscales_gpu.cpu().numpy(), dcov3d_dscales))
 
-    cov2ds_gpu, dcov2d_dcov3ds_gpu, dcov2d_dpcs_gpu = pg.computeCov2D(cov3ds_gpu, pcs_gpu, Rcw_gpu, fx, fy, True)
+    cov2ds_gpu, dcov2d_dcov3ds_gpu, dcov2d_dpcs_gpu = gsc.computeCov2D(
+        cov3ds_gpu, pcs_gpu, Rcw_gpu, fx, fy, True)
     print("%s test cov2ds_gpu" % check(cov2ds_gpu.cpu().numpy(), cov2ds))
-    print("%s test dcov2d_dcov3ds_gpu" % check(dcov2d_dcov3ds_gpu.cpu().numpy(), dcov2d_dcov3ds))
-    print("%s test dcov2d_dpcs_gpu" % check(dcov2d_dpcs_gpu.cpu().numpy(), dcov2d_dpcs))
+    print("%s test dcov2d_dcov3ds_gpu" %
+          check(dcov2d_dcov3ds_gpu.cpu().numpy(), dcov2d_dcov3ds))
+    print("%s test dcov2d_dpcs_gpu" %
+          check(dcov2d_dpcs_gpu.cpu().numpy(), dcov2d_dpcs))
 
-    colors_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = pg.sh2Color(shs_gpu, pws_gpu, twc_gpu, True)
+    colors_gpu, dcolor_dshs_gpu, dcolor_dpws_gpu = gsc.sh2Color(
+        shs_gpu, pws_gpu, twc_gpu, True)
     print("%s test colors_gpu" % check(colors_gpu.cpu().numpy(), colors))
-    print("%s test dcolor_dshs_gpu" % check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
-    print("%s test dcolor_dshs_gpu" % check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
+    print("%s test dcolor_dshs_gpu" %
+          check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
+    print("%s test dcolor_dshs_gpu" %
+          check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
 
-    cinv2ds_gpu, areas_gpu, dcinv2d_dcov2ds_gpu = pg.inverseCov2D(cov2ds_gpu, True)
+    cinv2ds_gpu, areas_gpu, dcinv2d_dcov2ds_gpu = gsc.inverseCov2D(
+        cov2ds_gpu, True)
     print("%s test cinv2d_gpu" % check(cinv2ds_gpu.cpu().numpy(), cinv2ds))
-    print("%s test dcinv2d_dcov2ds_gpu" % check(dcinv2d_dcov2ds_gpu.cpu().numpy(), dcinv2d_dcov2ds))
+    print("%s test dcinv2d_dcov2ds_gpu" %
+          check(dcinv2d_dcov2ds_gpu.cpu().numpy(), dcinv2d_dcov2ds))
 
-    depths_gpu = torch.from_numpy(np.array([1, 2, 3, 4])).type(torch.float32).to('cuda')
+    depths_gpu = torch.from_numpy(
+        np.array([1, 2, 3, 4])).type(torch.float32).to('cuda')
     image_gpu, contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu =\
-        pg.splat(height, width, us_gpu, cinv2ds_gpu, alphas_gpu, depths_gpu, colors_gpu, areas_gpu)
+        gsc.splat(height, width, us_gpu, cinv2ds_gpu,
+                  alphas_gpu, depths_gpu, colors_gpu, areas_gpu)
     print("%s test image_gpu" %
           check(image_gpu.cpu().numpy(), image.transpose([2, 0, 1])))
 
     _, dloss_dgammas = get_loss(image, image_gt)
-    dloss_dgammas_gpu = torch.from_numpy(dloss_dgammas).type(torch.float32).to('cuda')
+    dloss_dgammas_gpu = torch.from_numpy(
+        dloss_dgammas).type(torch.float32).to('cuda')
 
     dloss_dus_gpu, dloss_dcinv2ds_gpu, dloss_dalphas_gpu, dloss_dcolors_gpu =\
-        pg.splatB(height, width, us_gpu, cinv2ds_gpu, alphas_gpu, depths_gpu, colors_gpu,
-                  contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu, dloss_dgammas_gpu)
+        gsc.splatB(height, width, us_gpu, cinv2ds_gpu, alphas_gpu, depths_gpu, colors_gpu,
+                   contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu, dloss_dgammas_gpu)
 
     dloss_dalphas = dloss_dalphas.reshape([gs_num, 1, 1])
-    dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num,1, 3])
+    dloss_dcinv2ds = dloss_dcinv2ds.reshape([gs_num, 1, 3])
     dloss_dcolors = dloss_dcolors.reshape([gs_num, 1, 3])
     dloss_dus = dloss_dus.reshape([gs_num, 1, 2])
 
-    print("%s test dloss_dus_gpu" % check(dloss_dus_gpu.cpu().numpy(), dloss_dus))
-    print("%s test dloss_dcinv2ds_gpu" % check(dloss_dcinv2ds_gpu.cpu().numpy(), dloss_dcinv2ds))
-    print("%s test dloss_dalphas_gpu" % check(dloss_dalphas_gpu.cpu().numpy(), dloss_dalphas))
-    print("%s test dloss_dcolors_gpu" % check(dloss_dcolors_gpu.cpu().numpy(), dloss_dcolors))
+    print("%s test dloss_dus_gpu" %
+          check(dloss_dus_gpu.cpu().numpy(), dloss_dus))
+    print("%s test dloss_dcinv2ds_gpu" %
+          check(dloss_dcinv2ds_gpu.cpu().numpy(), dloss_dcinv2ds))
+    print("%s test dloss_dalphas_gpu" %
+          check(dloss_dalphas_gpu.cpu().numpy(), dloss_dalphas))
+    print("%s test dloss_dcolors_gpu" %
+          check(dloss_dcolors_gpu.cpu().numpy(), dloss_dcolors))
     dpc_dpws_gpu = Rcw_gpu
 
     dloss_drots_gpu = dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dcov3ds_gpu @ dcov3d_drots_gpu
     dloss_dscales_gpu = dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dcov3ds_gpu @ dcov3d_dscales_gpu
-    dloss_dshs_gpu = (dloss_dcolors_gpu.permute(0, 2, 1) @ dcolor_dshs_gpu).permute(0, 2, 1).reshape(gs_num, 1, -1)
+    dloss_dshs_gpu = (dloss_dcolors_gpu.permute(0, 2, 1) @
+                      dcolor_dshs_gpu).permute(0, 2, 1).reshape(gs_num, 1, -1)
     dloss_dalphas_gpu = dloss_dalphas_gpu
     dloss_dpws_gpu = dloss_dus_gpu @ du_dpcs_gpu @ dpc_dpws_gpu + \
         dloss_dcolors_gpu @ dcolor_dpws_gpu + \
-        dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dpcs_gpu @ dpc_dpws_gpu    
+        dloss_dcinv2ds_gpu @ dcinv2d_dcov2ds_gpu @ dcov2d_dpcs_gpu @ dpc_dpws_gpu
     pass

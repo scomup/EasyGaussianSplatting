@@ -1,8 +1,8 @@
 import torch
-import pygausplat as pg
+import gsplatcu as gsc
 import numpy as np
 import matplotlib.pyplot as plt
-from read_ply import *
+from gsplat.read_ply import *
 
 
 if __name__ == "__main__":
@@ -39,7 +39,7 @@ if __name__ == "__main__":
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
 
-        dtypes = [('pos', '<f4', (3,)),
+        dtypes = [('pw', '<f4', (3,)),
                   ('rot', '<f4', (4,)),
                   ('scale', '<f4', (3,)),
                   ('alpha', '<f4'),
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     center_x = width / 2
     center_y = height / 2
 
-    pws = torch.from_numpy(gs['pos']).type(torch.float32).to('cuda')
+    pws = torch.from_numpy(gs['pw']).type(torch.float32).to('cuda')
     rots = torch.from_numpy(gs['rot']).type(torch.float32).to('cuda')
     scales = torch.from_numpy(gs['scale']).type(torch.float32).to('cuda')
     alphas = torch.from_numpy(gs['alpha']).type(torch.float32).to('cuda')
@@ -75,21 +75,21 @@ if __name__ == "__main__":
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = pg.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
+    us, pcs = gsc.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
     depths = pcs[:, 2]
 
     # step2. Calcuate the 3d Gaussian.
-    cov3ds = pg.computeCov3D(rots, scales, False)[0]
+    cov3ds = gsc.computeCov3D(rots, scales, False)[0]
 
     # step3. Calcuate the 2d Gaussian.
-    cov2ds = pg.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, False)[0]
+    cov2ds = gsc.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, False)[0]
 
     # step4. get color info
-    colors = pg.sh2Color(shs, pws, twc, False)[0]
+    colors = gsc.sh2Color(shs, pws, twc, False)[0]
 
     # step5. Blend the 2d Gaussian to image
-    cinv2ds, areas = pg.inverseCov2D(cov2ds, False)
-    image = pg.splat(height, width, us, cinv2ds, alphas, depths, colors, areas)[0]
+    cinv2ds, areas = gsc.inverseCov2D(cov2ds, False)
+    image = gsc.splat(height, width, us, cinv2ds, alphas, depths, colors, areas)[0]
     image = image.to('cpu').numpy()
 
     plt.imshow(image.transpose([1, 2, 0]))

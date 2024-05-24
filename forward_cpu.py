@@ -1,4 +1,5 @@
-from gausplat import *
+from gsplat.gausplat import *
+from gsplat.read_ply import *
 
 
 if __name__ == "__main__":
@@ -35,7 +36,7 @@ if __name__ == "__main__":
                             -1.772484, -1.772484,  1.772484]
                             ], dtype=np.float32)
 
-        dtypes = [('pos', '<f4', (3,)),
+        dtypes = [('pw', '<f4', (3,)),
                   ('rot', '<f4', (4,)),
                   ('scale', '<f4', (3,)),
                   ('alpha', '<f4'),
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    pws = gs['pos']
+    pws = gs['pw']
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
@@ -87,13 +88,12 @@ if __name__ == "__main__":
     # step5. Blend the 2d Gaussian to image
     cinv2ds, areas = inverse_cov2d(cov2ds)
 
-    splat(height, width, us, cinv2ds, gs['alpha'], 
+    splat(height, width, us, cinv2ds, gs['alpha'],
           depths, colors, areas, im)
-    
+
     # from PIL import Image
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
     # print(pil_img.mode)
     # pil_img.save('test.png')
 
     plt.show()
-

@@ -50,7 +50,7 @@ def matrix_to_quaternion(matrices):
 def load_ply(path, T=None):
     max_sh_degree = 3
     plydata = PlyData.read(path)
-    pos = np.stack((np.asarray(plydata.elements[0]["x"]),
+    pws = np.stack((np.asarray(plydata.elements[0]["x"]),
                     np.asarray(plydata.elements[0]["y"]),
                     np.asarray(plydata.elements[0]["z"])),  axis=1)
 
@@ -68,7 +68,7 @@ def load_ply(path, T=None):
 
     rots /= np.linalg.norm(rots, axis=1)[:, np.newaxis]
 
-    shs = np.zeros([pos.shape[0], 48])
+    shs = np.zeros([pws.shape[0], 48])
     shs[:, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
     shs[:, 1] = np.asarray(plydata.elements[0]["f_dc_1"])
     shs[:, 2] = np.asarray(plydata.elements[0]["f_dc_2"])
@@ -81,14 +81,14 @@ def load_ply(path, T=None):
 
     shs[:, 3:] = shs[:, 3:].reshape(-1, 3, 15).transpose([0, 2, 1]).reshape(-1, 45)
 
-    pos = pos.astype(np.float32)
+    pws = pws.astype(np.float32)
     rots = rots.astype(np.float32)
     scales = np.exp(scales)
     scales = scales.astype(np.float32)
     alphas = alphas.astype(np.float32)
     shs = shs.astype(np.float32)
 
-    dtypes = [('pos', '<f4', (3,)),
+    dtypes = [('pw', '<f4', (3,)),
               ('rot', '<f4', (4,)),
               ('scale', '<f4', (3,)),
               ('alpha', '<f4'),
@@ -96,7 +96,7 @@ def load_ply(path, T=None):
 
     if (T is not None):
         # Transform to world
-        pos = (T @ pos.T).T
+        pws = (T @ pws.T).T
         w = rots[:, 0]
         x = rots[:, 1]
         y = rots[:, 2]
@@ -110,7 +110,7 @@ def load_ply(path, T=None):
         rots = matrix_to_quaternion(R_new)
 
     gs = np.rec.fromarrays(
-        [pos, rots, scales, alphas, shs], dtype=dtypes)
+        [pws, rots, scales, alphas, shs], dtype=dtypes)
 
     return gs
 
