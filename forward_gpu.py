@@ -2,7 +2,7 @@ import torch
 import gsplatcu as gsc
 import numpy as np
 import matplotlib.pyplot as plt
-from gsplat.read_ply import *
+from gsplat.gau_io import *
 
 
 if __name__ == "__main__":

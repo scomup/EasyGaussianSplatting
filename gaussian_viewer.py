@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
-from gsplat.read_ply import *
+from gsplat.gau_io import *
 
 import sys
 import os

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import gsplatcu as gsc
 import torchvision
 from gsplat.pytorch_ssim import gau_loss
-from gsplat.read_ply import *
+from gsplat.gau_io import *
 from gsplat.gausplat import *
 from gsnet import GS2DNet
 from gsplat.gausplat_dataset import *

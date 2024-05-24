@@ -3,7 +3,7 @@ import numpy as np
 import torch.optim as optim
 import matplotlib.pyplot as plt
 from gsplat.pytorch_ssim import gau_loss
-from gsplat.read_ply import *
+from gsplat.gau_io import *
 from gsplat.gausplat_dataset import *
 from gsnet import GSNet, logit
 from random import randint
@@ -34,12 +34,12 @@ if __name__ == "__main__":
     l = [
         {'params': [rots], 'lr': 0.001, "name": "rot"},
         {'params': [scales], 'lr': 0.005, "name": "scale"},
-        {'params': [shs], 'lr': 0.0025, "name": "sh"},
-        {'params': [alphas], 'lr': 0.05, "name": "alpha"},
+        {'params': [shs], 'lr': 0.001, "name": "sh"},
+        {'params': [alphas], 'lr': 0.001, "name": "alpha"},
         {'params': [pws], 'lr': 0.001, "name": "pw"}
     ]
 
-    l = [rots, scales, shs, alphas, pws]
+    # l = [rots, scales, shs, alphas, pws]
     optimizer = optim.Adam(l, lr=0.001, eps=1e-15)
 
     cam0, _ = gs_set[0]

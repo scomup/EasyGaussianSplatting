@@ -94,13 +94,19 @@ def load_ply(path, T=None):
               ('alpha', '<f4'),
               ('sh', '<f4', (sh_dim,))]
 
-    if (T is not None):
+    gs = np.rec.fromarrays(
+        [pws, rots, scales, alphas, shs], dtype=dtypes)
+
+    return gs
+
+
+def rotate_gaussian(T, gs):
         # Transform to world
-        pws = (T @ pws.T).T
-        w = rots[:, 0]
-        x = rots[:, 1]
-        y = rots[:, 2]
-        z = rots[:, 3]
+        pws = (T @ gs['pw'].T).T
+        w = gs['rot'][:, 0]
+        x = gs['rot'][:, 1]
+        y = gs['rot'][:, 2]
+        z = gs['rot'][:, 3]
         R = np.array([
             [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
             [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
@@ -108,12 +114,11 @@ def load_ply(path, T=None):
         ]).transpose(2, 0, 1)
         R_new = T @ R
         rots = matrix_to_quaternion(R_new)
-
+        gs['pw'] = 
     gs = np.rec.fromarrays(
         [pws, rots, scales, alphas, shs], dtype=dtypes)
 
     return gs
-
 
 if __name__ == "__main__":
     gs = load_ply("/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply")

@@ -1,5 +1,5 @@
 from gsplat.gausplat import *
-from gsplat.read_ply import *
+from gsplat.gau_io import *
 
 
 if __name__ == "__main__":

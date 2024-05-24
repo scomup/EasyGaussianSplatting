@@ -3,7 +3,7 @@
 from custom_items import *
 from viewer import *
 import numpy as np
-from read_ply import *
+from gau_io import *
 
 import sys
 import os
