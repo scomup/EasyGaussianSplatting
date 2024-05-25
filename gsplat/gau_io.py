@@ -129,11 +129,7 @@ def load_gs(fn):
 def save_gs(fn, gs):
     np.save(fn, gs)
 
-def save_torch_params(fn, _rots, _scales, shs, _alphas, pws):
-    scales = torch.exp(_scales)  # > 0
-    alphas = torch.sigmoid(_alphas)  # 0 ~ 1
-    rots = torch.nn.functional.normalize(_rots)  # the a norm is 1,
-
+def save_torch_params(fn, rots, scales, shs, alphas, pws):
     rots = rots.detach().cpu().numpy()
     scales = scales.detach().cpu().numpy()
     shs = shs.detach().cpu().numpy()

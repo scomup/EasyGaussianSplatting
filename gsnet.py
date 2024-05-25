@@ -11,15 +11,12 @@ def logit(x):
 
 class GSNet(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, _rots, _scales, shs, _alphas, pws, camera):
+    def forward(ctx, rots, scales, shs, alphas, pws, camera):
         # Store the static parameters in the context
         ctx.camera = camera
 
         # step0. activation
         # Limit the value of scales, alphas, rots within the specified range.
-        scales = torch.exp(_scales)  # > 0
-        alphas = torch.sigmoid(_alphas)  # 0 ~ 1
-        rots = torch.nn.functional.normalize(_rots)  # the a norm is 1,
 
         global Rcw, tcw, twc, fx, fy, cx, cy, height, width
         # step1. Transform pw to camera frame,

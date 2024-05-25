@@ -45,7 +45,7 @@ if __name__ == '__main__':
                             ], dtype=np.float32)
     # ply_fn = "/home/liu/workspace/gaussian-splatting/output/a531e75d-7/point_cloud/iteration_30000/point_cloud.ply"
     # gs = load_ply(ply_fn, cam_2_world)
-
+    # gs = load_gs('epoch0020.npy')
     gs_data = gs.view(np.float32).reshape(gs.shape[0], -1)
 
     app = QApplication([])
