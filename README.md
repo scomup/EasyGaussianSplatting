@@ -49,7 +49,7 @@ python3 forword_cpu.py --gs='THE_PATH_OF_YOUR_TRAINED_FILE'
 ```bash
 python3 forword_gpu.py --gs='THE_PATH_OF_YOUR_TRAINED_FILE'
 ```
-![forword demo](imgs/forword.png)
+![forward demo](imgs/forward.png)
 
 ## Training
 
