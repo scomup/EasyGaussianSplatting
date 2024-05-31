@@ -899,7 +899,7 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
 
     float3 last_color = {0, 0, 0};
 
-    float tau = final_tau[pix_idx];
+    float tau = inside ? final_tau[pix_idx] : 0;
     int cont = contrib[pix_idx];
 
     for (int i = 0; i < gs_num; i++)
