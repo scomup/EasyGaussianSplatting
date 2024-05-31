@@ -4,41 +4,16 @@ import gsplatcu as gsc
 import numpy as np
 from gsplat.sh_coef import *
 from backward_cpu import *
+from gsplat.gau_io import *
 
 
 if __name__ == "__main__":
-    sh_dim = 48
-    gs_data = np.random.rand(4, 11 + sh_dim)
-    gs_data0 = np.array([[0.,  0.,  0.,  # xyz
-                        0.8537127, 0.4753723, 0.0950745, 0.1901489,  # rot
-                        0.5,  0.5,  0.5,  # size
-                        1.,
-                        1.772484,  -1.772484,  1.772484],
-                        [1.,  0.,  0.,
-                        1.,  0.,  0., 0.,
-                        2,  0.5,  0.5,
-                        1.,
-                        1.772484,  -1.772484, -1.772484],
-                        [0.,  1.,  0.,
-                        1.,  0.,  0., 0.,
-                        0.5,  2,  0.5,
-                        1.,
-                        -1.772484, 1.772484, -1.772484],
-                        [0.,  0.,  1.,
-                        1.,  0.,  0., 0.,
-                        0.5,  0.5,  2,
-                        1.,
-                        -1.772484, -1.772484,  1.772484]
-                         ], dtype=np.float64)
-
-    gs_data[:, :14] = gs_data0
-    dtypes = [('pw', '<f8', (3,)),
-              ('rot', '<f8', (4,)),
-              ('scale', '<f8', (3,)),
-              ('alpha', '<f8'),
-              ('sh', '<f8', (sh_dim,))]
-    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    sh_rest_dim = 45
+    sh_dim = 3 + sh_rest_dim
+    gs = get_example_gs()
     gs_num = gs.shape[0]
+    rest_shs = np.random.rand(gs_num, sh_rest_dim)
+    shs = np.concatenate((gs['sh'], rest_shs), axis=1).astype(np.float64)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -54,12 +29,10 @@ if __name__ == "__main__":
     cy = height/2.
     image_gt = np.zeros([height, width, 3])
 
-    pws = gs['pw']
-    alphas = gs['alpha']
-    rots = gs['rot']
-    scales = gs['scale']
-    shs = gs['sh']
-    gs_num = gs['pw'].shape[0]
+    pws = gs['pw'].astype(np.float64)
+    alphas = gs['alpha'].astype(np.float64)
+    rots = gs['rot'].astype(np.float64)
+    scales = gs['scale'].astype(np.float64)
 
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])

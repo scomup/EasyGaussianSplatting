@@ -2,6 +2,15 @@ import numpy as np
 from plyfile import PlyData
 import torch
 
+
+def gsdata_type(sh_dim):
+    return [('pw', '<f4', (3,)),
+            ('rot', '<f4', (4,)),
+            ('scale', '<f4', (3,)),
+            ('alpha', '<f4'),
+            ('sh', '<f4', (sh_dim))]
+
+
 def matrix_to_quaternion(matrices):
     m00, m01, m02 = matrices[:, 0, 0], matrices[:, 0, 1], matrices[:, 0, 2]
     m10, m11, m12 = matrices[:, 1, 0], matrices[:, 1, 1], matrices[:, 1, 2]
@@ -87,11 +96,7 @@ def load_ply(path, T=None):
     alphas = alphas.astype(np.float32)
     shs = shs.astype(np.float32)
 
-    dtypes = [('pw', '<f4', (3,)),
-              ('rot', '<f4', (4,)),
-              ('scale', '<f4', (3,)),
-              ('alpha', '<f4'),
-              ('sh', '<f4', (sh_dim,))]
+    dtypes = gsdata_type(sh_dim)
 
     gs = np.rec.fromarrays(
         [pws, rots, scales, alphas, shs], dtype=dtypes)
@@ -117,6 +122,7 @@ def rotate_gaussian(T, gs):
     gs['rot'] = rots
     return gs
 
+
 def load_gs(fn):
     if fn.endswith('.ply'):
         return load_ply(fn)
@@ -126,23 +132,49 @@ def load_gs(fn):
         print("%s is not a supported file." % fn)
         exit(0)
 
+
 def save_gs(fn, gs):
     np.save(fn, gs)
+
 
 def save_torch_params(fn, rots, scales, shs, alphas, pws):
     rots = rots.detach().cpu().numpy()
     scales = scales.detach().cpu().numpy()
     shs = shs.detach().cpu().numpy()
-    alphas = alphas.detach().cpu().numpy()
+    alphas = alphas.detach().cpu().numpy().squeeze()
     pws = pws.detach().cpu().numpy()
-    dtypes = [('pw', '<f4', (3,)),
-          ('rot', '<f4', (4,)),
-          ('scale', '<f4', (3,)),
-          ('alpha', '<f4'),
-          ('sh', '<f4', (shs.shape[1],))]
+    dtypes = gsdata_type(shs.shape[1])
     gs = np.rec.fromarrays(
         [pws, rots, scales, alphas, shs], dtype=dtypes)
     np.save(fn, gs)
+
+
+def get_example_gs():
+    gs_data = np.array([[0.,  0.,  0.,  # xyz
+                         1.,  0.,  0., 0.,  # rot
+                         0.05,  0.05,  0.05,  # size
+                         1.,
+                         1.772484,  -1.772484,  1.772484],
+                        [1.,  0.,  0.,
+                         1.,  0.,  0., 0.,
+                         0.2,  0.05,  0.05,
+                         1.,
+                         1.772484,  -1.772484, -1.772484],
+                        [0.,  1.,  0.,
+                         1.,  0.,  0., 0.,
+                         0.05,  0.2,  0.05,
+                         1.,
+                         -1.772484, 1.772484, -1.772484],
+                        [0.,  0.,  1.,
+                         1.,  0.,  0., 0.,
+                         0.05,  0.05,  0.2,
+                         1.,
+                         -1.772484, -1.772484,  1.772484]
+                        ], dtype=np.float32)
+    dtypes = gsdata_type(3)
+    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    return gs
+
 
 if __name__ == "__main__":
     gs = load_gs("/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply")

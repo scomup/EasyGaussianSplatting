@@ -14,35 +14,7 @@ if __name__ == "__main__":
         gs = load_gs(ply_fn)
     else:
         print("not gaussians file.")
-        gs_data = np.array([[0.,  0.,  0.,  # xyz
-                            1.,  0.,  0., 0.,  # rot
-                            0.05,  0.05,  0.05,  # size
-                            1.,
-                            1.772484,  -1.772484,  1.772484],
-                            [1.,  0.,  0.,
-                            1.,  0.,  0., 0.,
-                            0.2,  0.05,  0.05,
-                            1.,
-                            1.772484,  -1.772484, -1.772484],
-                            [0.,  1.,  0.,
-                            1.,  0.,  0., 0.,
-                            0.05,  0.2,  0.05,
-                            1.,
-                            -1.772484, 1.772484, -1.772484],
-                            [0.,  0.,  1.,
-                            1.,  0.,  0., 0.,
-                            0.05,  0.05,  0.2,
-                            1.,
-                            -1.772484, -1.772484,  1.772484]
-                            ], dtype=np.float32)
-
-        dtypes = [('pw', '<f4', (3,)),
-                  ('rot', '<f4', (4,)),
-                  ('scale', '<f4', (3,)),
-                  ('alpha', '<f4'),
-                  ('sh', '<f4', (3,))]
-
-        gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+        gs = get_example_gs()
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -59,7 +31,6 @@ if __name__ == "__main__":
     cy = height / 2
 
     twc = np.linalg.inv(Rcw) @ (-tcw)
-
 
     fig, ax = plt.subplots()
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)

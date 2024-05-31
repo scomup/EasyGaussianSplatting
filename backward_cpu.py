@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from gsplat.sh_coef import *
+from gsplat.gau_io import *
 
 
 def upper_triangular(mat):
@@ -499,38 +500,17 @@ def backward(rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt,
 
 
 if __name__ == "__main__":
-    sh_dim = 48
-    gs_data = np.random.rand(4, 11 + sh_dim)
-    gs_data0 = np.array([[0.,  0.,  0.,  # xyz
-                        1.,  0.,  0., 0.,  # rot
-                        0.5,  0.5,  0.5,  # size
-                        1.,
-                        1.772484,  -1.772484,  1.772484],
-                        [1.,  0.,  0.,
-                        1.,  0.,  0., 0.,
-                        2,  0.5,  0.5,
-                        1.,
-                        1.772484,  -1.772484, -1.772484],
-                        [0.,  1.,  0.,
-                        1.,  0.,  0., 0.,
-                        0.5,  2,  0.5,
-                        1.,
-                        -1.772484, 1.772484, -1.772484],
-                        [0.,  0.,  1.,
-                        1.,  0.,  0., 0.,
-                        0.5,  0.5,  2,
-                        1.,
-                        -1.772484, -1.772484,  1.772484]
-                         ], dtype=np.float64)
-
-    gs_data[:, :14] = gs_data0
-    dtypes = [('pw', '<f8', (3,)),
-              ('rot', '<f8', (4,)),
-              ('scale', '<f8', (3,)),
-              ('alpha', '<f8'),
-              ('sh', '<f8', (sh_dim,))]
-    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    sh_rest_dim = 45
+    sh_dim = 3 + sh_rest_dim
+    gs = get_example_gs()
     gs_num = gs.shape[0]
+    rest_shs = np.random.rand(gs_num, sh_rest_dim)
+    shs = np.concatenate((gs['sh'], rest_shs), axis=1).astype(np.float64)
+
+    pws = gs['pw'].astype(np.float64)
+    alphas = gs['alpha'].astype(np.float64)
+    rots = gs['rot'].astype(np.float64)
+    scales = gs['scale'].astype(np.float64)
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -546,9 +526,6 @@ if __name__ == "__main__":
     cy = height/2.
 
     image_gt = np.zeros([height, width, 3])
-
-    pws = gs['pw']
-    gs_num = gs['pw'].shape[0]
 
     colors = np.zeros([gs_num, 3])
     us = np.zeros([gs_num, 2])
@@ -582,11 +559,11 @@ if __name__ == "__main__":
 
         # step2. Calcuate the 3d covariance.
         cov3ds[i], dcov3d_drots[i], dcov3d_dscales[i] = compute_cov_3d(
-            gs['rot'][i], gs['scale'][i], True)
+            rots[i], scales[i], True)
         dcov3d_dq_numerical = numerical_derivative(
-            compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 0)
+            compute_cov_3d, [rots[i], scales[i]], 0)
         dcov3d_ds_numerical = numerical_derivative(
-            compute_cov_3d, [gs['rot'][i], gs['scale'][i]], 1)
+            compute_cov_3d, [rots[i], scales[i]], 1)
         print("%s check dcov3d%d_dq%d" % (check(
             dcov3d_dq_numerical, dcov3d_drots[i]), i, i))
         print("%s check dcov3d%d_ds%d" % (check(
@@ -607,11 +584,11 @@ if __name__ == "__main__":
 
         # step4. Compute color.
         colors[i], dcolor_dshs[i], dcolor_dpws[i] = sh2color(
-            gs['sh'][i], pws[i], twc, True)
+            shs[i], pws[i], twc, True)
         dcolor_dsh_numerical = numerical_derivative(
-            sh2color, [gs['sh'][i], pws[i], twc], 0)
+            sh2color, [shs[i], pws[i], twc], 0)
         dcolor_dpw_numerical = numerical_derivative(
-            sh2color, [gs['sh'][i], pws[i], twc], 1)
+            sh2color, [shs[i], pws[i], twc], 1)
         print("%s check dcolor%d_dsh%d" % (check(
             dcolor_dsh_numerical[0, range(0, sh_dim, 3)], dcolor_dshs[i]), i, i))
         print("%s check dcolor%d_dsh%d" % (check(
@@ -629,7 +606,7 @@ if __name__ == "__main__":
     colors = colors[idx].reshape(-1)
     cov2ds = cov2ds[idx].reshape(-1)
     cinv2ds = cinv2ds[idx].reshape(-1)
-    alphas = gs['alpha'][idx]
+    alphas = alphas[idx]
     us = us[idx].reshape(-1)
     x = np.array([16, 8])
 
@@ -692,12 +669,12 @@ if __name__ == "__main__":
     print("%s check dloss_du" % check(dloss_dus_numerial, dloss_dus))
 
     loss, dloss_drots, dloss_dscales, dloss_dshs, dloss_dalphas, dloss_dpws = backward(
-        gs['rot'], gs['scale'], gs['sh'], gs['alpha'], gs['pw'], Rcw, tcw, fx, fy, cx, cy, image_gt, True)
-    rots = gs['rot'].reshape(-1)
-    scales = gs['scale'].reshape(-1)
-    shs = gs['sh'].reshape(-1)
-    alphas = gs['alpha'].reshape(-1)
-    pws = gs['pw'].reshape(-1)
+        rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt, True)
+    rots = rots.reshape(-1)
+    scales = scales.reshape(-1)
+    shs = shs.reshape(-1)
+    alphas = alphas.reshape(-1)
+    pws = pws.reshape(-1)
 
     dloss_drots_numerial = numerical_derivative(
         backward, [rots, scales, shs, alphas, pws, Rcw, tcw, fx, fy, cx, cy, image_gt], 0)

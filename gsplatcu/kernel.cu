@@ -164,6 +164,9 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     float *__restrict__ final_tau)
 
 {
+    /*
+    More details are discussed in section 5 of the forward.pdf
+    */
     const uint2 tile = {blockIdx.x, blockIdx.y};
     const uint2 pix = {tile.x * BLOCK + threadIdx.x,
                        tile.y * BLOCK + threadIdx.y};
@@ -237,7 +240,7 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
 
         cont_tmp = cont_tmp + 1;
 
-        // forward.md (5.1)
+        // forward.pdf (F.5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
         float maha_dist = max(0.0f, mahaSqDist(cinv, d));
 
@@ -245,11 +248,11 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
         if (alpha_prime < 0.002f)
             continue;
 
-        // forward.md (5)
+        // forward.pdf (F.5)
         finial_color += tau * alpha_prime * color;
         cont = cont_tmp; // how many gs contribute to this pixel.
 
-        // forward.md (5.2)
+        // forward.pdf (F.5.2)
         tau = tau * (1.f - alpha_prime);
 
         if (tau < 0.0001f)
@@ -289,7 +292,7 @@ __global__ void inverseCov2D(
     if (depths[i] < 0.2)
         return;
 
-    // forward.md 5.3
+    // forward.pdf (F.5.3)
     const float a = cov2ds[i * 3];
     const float b = cov2ds[i * 3 + 1];
     const float c = cov2ds[i * 3 + 2];
@@ -300,7 +303,7 @@ __global__ void inverseCov2D(
         depths[i] = -1.f;
         return;
     }
-
+    // forward.pdf (F.5.3)
     const float det_inv = 1.f / det;
     cinv2ds[i * 3 + 0] = det_inv * c;
     cinv2ds[i * 3 + 1] = -det_inv * b;
@@ -310,8 +313,8 @@ __global__ void inverseCov2D(
 
     if (dcinv2d_dcov2ds != nullptr)
     {
+        // backward.pdf (B.5.3)
         const float det2_inv = det_inv / det;
-
         dcinv2d_dcov2ds[i * 9 + 0] = -c * c * det2_inv;
         dcinv2d_dcov2ds[i * 9 + 1] = 2 * b * c * det2_inv;
         dcinv2d_dcov2ds[i * 9 + 2] = -a * c * det2_inv + det_inv;
@@ -367,7 +370,7 @@ __global__ void computeCov3D(
         R(0, 0) * s0, R(0, 1) * s1, R(0, 2) * s2,
         R(1, 0) * s0, R(1, 1) * s1, R(1, 2) * s2,
         R(2, 0) * s0, R(2, 1) * s1, R(2, 2) * s2};
-
+    // forward.pdf (F.2)
     Matrix<3, 3> Sigma = M * M.transpose();
 
     cov3ds[i * 6 + 0] = Sigma(0, 0);
@@ -403,7 +406,9 @@ __global__ void computeCov3D(
                                  R(2, 0), 0, 0,
                                  0, R(2, 1), 0,
                                  0, 0, R(2, 2)};
+        // backward.pdf (B.2a)
         Matrix<6, 4> dcov3d_drot = dcov3d_dm * dm_rot;
+        // backward.pdf (B.2b)
         Matrix<6, 3> dcov3d_dscale = dcov3d_dm * dm_scale;
         dcov3d_drots[i * 24 + 0] = dcov3d_drot(0, 0);
         dcov3d_drots[i * 24 + 1] = dcov3d_drot(0, 1);
@@ -507,6 +512,7 @@ __global__ void computeCov2D(
 
     Matrix<2, 3> M = J * R;
 
+    // forward.pdf (F.3)
     Matrix<2, 2> Sigma_prime = M * Sigma * M.transpose();
 
     // make sure the cov2d is not too small.
@@ -516,6 +522,7 @@ __global__ void computeCov2D(
 
     if (dcov2d_dcov3ds != nullptr && dcov2d_dpcs != nullptr)
     {
+        // backward.pdf (B.3a)
         Matrix<3, 6> dcov2d_dcov3d = {M(0, 0) * M(0, 0),
                                       2 * M(0, 0) * M(0, 1),
                                       2 * M(0, 0) * M(0, 2),
@@ -559,6 +566,7 @@ __global__ void computeCov2D(
                                0, -focal_y * R(2, 1) * z2_inv, -focal_y * R(1, 1) * z2_inv + 2 * focal_y * R(2, 1) * y * z3_inv,
                                0, -focal_y * R(2, 2) * z2_inv, -focal_y * R(1, 2) * z2_inv + 2 * focal_y * R(2, 2) * y * z3_inv};
 
+        // backward.pdf (B.3b)
         Matrix<3, 3> dcov2d_dpc = dcov2d_dm * dm_dpc;
 
         dcov2d_dpcs[i * 9 + 0] = dcov2d_dpc(0, 0);
@@ -620,6 +628,7 @@ __global__ void project(
         Rcw[3], Rcw[4], Rcw[5],
         Rcw[6], Rcw[7], Rcw[8]};
 
+    // forward.pdf (F.1.1)
     Matrix<3, 1> pc = R * pw + t;
 
     const float x = pc(0);
@@ -631,6 +640,7 @@ __global__ void project(
     const float x_focal_x = x * focal_x;
     const float y_focal_y = y * focal_y;
 
+    // forward.pdf (F.1.2)
     const float u0 = x_focal_x * z_inv + center_x;
     const float u1 = y_focal_y * z_inv + center_y;
 
@@ -644,6 +654,7 @@ __global__ void project(
 
     if (du_dpcs != nullptr)
     {
+        // backward.pdf (B.1.2)
         du_dpcs[i * 6 + 0] = focal_x * z_inv;
         du_dpcs[i * 6 + 2] = -x_focal_x * z2_inv;
         du_dpcs[i * 6 + 4] = focal_y * z_inv;
@@ -864,7 +875,9 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
         float *__restrict__ dloss_dalphas,
         float *__restrict__ dloss_dcolors)
 {
-
+    /*
+    More details are discussed in section 5 of the backward.pdf
+    */
     const uint2 tile = {blockIdx.x, blockIdx.y};
     const uint2 pix = {tile.x * BLOCK + threadIdx.x,
                        tile.y * BLOCK + threadIdx.y};
@@ -941,34 +954,37 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
         const float3 color = shared_color[j];
         const int gs_id = shared_gsid[j];
         const float2 d = u - pix;
+        // forward.pdf (eq.F.5.1)
         const float maha_dist = max(0.0f, mahaSqDist(cinv2d, d));
         const float g = exp(-0.5f * maha_dist);
         const float alpha_prime = min(0.99f, alpha * g);
 
         if (alpha_prime < 0.002f)
             continue;
-
+        // forward.pdf (eq.F.5.2)
         tau = tau / (1.f - alpha_prime);
     
-        const float dgamma_dcolor = alpha_prime * tau;
-
+        // backward.pdf (eq.B.5a)
         const float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
+        // backward.pdf (eq.B.5.1a)
         const float dalphaprime_dalpha = g;
         const float dloss_dalphaprime = dot(dloss_dgamma, dgamma_dalphaprime); 
         const float dloss_dalpha = dloss_dalphaprime * dalphaprime_dalpha;
         atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
 
+        // backward.pdf (eq.B.5b)
+        const float dgamma_dcolor = alpha_prime * tau;
         float3 dloss_dcolor = dloss_dgamma * dgamma_dcolor;
         atomicAdd(&dloss_dcolors[gs_id * 3 + 0], dloss_dcolor.x);
         atomicAdd(&dloss_dcolors[gs_id * 3 + 1], dloss_dcolor.y);
         atomicAdd(&dloss_dcolors[gs_id * 3 + 2], dloss_dcolor.z);
-
+        // backward.pdf (eq.B.5.2b)
         float2 dalphaprime_du = {(-cinv2d.x*d.x - cinv2d.y*d.y) * alpha_prime, 
                                  (-cinv2d.y*d.x - cinv2d.z*d.y) * alpha_prime};
         float2 dloss_du = dloss_dalphaprime * dalphaprime_du;
         atomicAdd(&dloss_dus[gs_id].x, dloss_du.x);
         atomicAdd(&dloss_dus[gs_id].y, dloss_du.y);
-
+        // backward.pdf (eq.B.5.2c)
         float3 dalphaprime_dcinv2d = {-0.5f * alpha_prime * (d.x * d.x),
                                       -1.0f * alpha_prime * (d.x * d.y),
                                       -0.5f * alpha_prime * (d.y * d.y)};
@@ -976,7 +992,8 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
         atomicAdd(&dloss_dcinv2ds[gs_id].x, dloss_dcinv2d.x);
         atomicAdd(&dloss_dcinv2ds[gs_id].y, dloss_dcinv2d.y);
         atomicAdd(&dloss_dcinv2ds[gs_id].z, dloss_dcinv2d.z);
-        
+
+        // save gamma_cur2last for next step.
         gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
     }
 }
