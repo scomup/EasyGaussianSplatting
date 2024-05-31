@@ -128,22 +128,25 @@ def compute_cov_3d(scale, rot):
     return cov3d
 
 
-def compute_cov_2d(pc, K, cov3d, Rcw):
+def compute_cov_2d(pc, fx, fy, width, height, cov3d, Rcw):
     x = pc[:, 0]
     y = pc[:, 1]
     z = pc[:, 2]
-    focal_x = K[0, 0]
-    focal_y = K[1, 1]
-    # c_x = K[0, 2]
-    # c_y = K[1, 2]
-    # u_ndc = (u - np.array([c_x, c_y]))/np.array([2*c_x, 2*c_y])
-    # out_idx = np.where(np.max(u_ndc, axis=1) > 1.3)[0]
+
+    tan_fovx = 2 * np.arctan(width/(2*fx))
+    tan_fovy = 2 * np.arctan(height/(2*fy))
+
+    limx = 1.3 * tan_fovx
+    limy = 1.3 * tan_fovy
+    x = np.clip(x / z, -limx, limx) * z
+    y = np.clip(y / z, -limy, limy) * z
+
     J = np.zeros([pc.shape[0], 3, 3])
     z2 = z * z
-    J[:, 0, 0] = focal_x / z
-    J[:, 0, 2] = -(focal_x * x) / z2
-    J[:, 1, 1] = focal_y / z
-    J[:, 1, 2] = -(focal_y * y) / z2
+    J[:, 0, 0] = fx / z
+    J[:, 0, 2] = -(fx * x) / z2
+    J[:, 1, 1] = fy / z
+    J[:, 1, 2] = -(fy * y) / z2
 
     T = J @ Rcw
 
@@ -158,14 +161,15 @@ def compute_cov_2d(pc, K, cov3d, Rcw):
     return cov2d
 
 
-def project(pw, Rcw, tcw, K):
+def project(pw, Rcw, tcw, fx, fy, cx, cy):
     # project the mean of 2d gaussian to image.
     # forward.md (1.1) (1.2)
     pc = (Rcw @ pw.T).T + tcw
-    depth = pc[:, 2]
-    pc_proj = (K @ pc.T).T
-    pc_proj /= pc_proj[:, 2][:, np.newaxis]
-    u = pc_proj[:, :2]
+    x = pc[:, 0]
+    y = pc[:, 1]
+    z = pc[:, 2]
+    u = np.stack([(x * fx / z + cx),
+                  (y * fy / z + cy)], axis=1)
     return u, pc
 
 
@@ -175,7 +179,7 @@ def inverse_cov2d(cov2d):
     det_inv = 1. / (cov2d[:, 0] * cov2d[:, 2] - cov2d[:, 1] * cov2d[:, 1] + 0.000001)
     cinv2d = np.array([cov2d[:, 2] * det_inv, -cov2d[:, 1] * det_inv, cov2d[:, 0] * det_inv]).T
     areas = 3 * np.sqrt(np.vstack([cov2d[:, 0], cov2d[:, 2]])).T
-    return cinv2d, areas
+    return cinv2d, areas.astype(np.int32)
 
 
 def splat(height, width, us, cinv2d, alpha, depth, color, areas, im=None):
@@ -235,5 +239,7 @@ def splat(height, width, us, cinv2d, alpha, depth, color, areas, im=None):
     end = time.time()
     time_diff = end - start
     print("add patch time %f\n" % time_diff)
-
+    if (im is not None):
+        im.set_data(image)
+        plt.pause(0.1)
     return image

@@ -186,9 +186,9 @@ class SHNet(torch.autograd.Function):
         return color.reshape(3, height, width)
 
     @staticmethod
-    def backward(ctx, dL_dC):
+    def backward(ctx, dloss_dcolor):
         dCdSH,  = ctx.saved_tensors
-        dLdSH = dL_dC.reshape(3, -1) @ dCdSH
+        dLdSH = dloss_dcolor.reshape(3, -1) @ dCdSH
         return dLdSH.T
 
 

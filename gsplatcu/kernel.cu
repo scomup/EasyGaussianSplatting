@@ -9,27 +9,35 @@
 
 inline __device__ void fetch2shared(
     int32_t n,
+    const bool is_backward,
     const int2 range,
-    const int *__restrict__ gs_id_per_patch,
+    const int *__restrict__ gsid_per_patch,
     const float *__restrict__ us,
-    const float *__restrict__ cinv2d,
+    const float *__restrict__ cinv2ds,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
     float2 *shared_pos2d,
     float3 *shared_cinv2d,
     float *shared_alpha,
-    float3 *shared_color)
+    float3 *shared_color,
+    int *shared_gsid)
 {
-    int i = blockDim.x * threadIdx.y + threadIdx.x; // block idx
-    int j = range.x + n * BLOCK_SIZE + i;           // patch idx
-    if (j < range.y)
+    int i = blockDim.x * threadIdx.y + threadIdx.x;  // block idx
+    int j; // patch idx
+    if (is_backward == true)
+        j = range.y - n * BLOCK_SIZE - i - 1;
+    else
+        j = range.x + n * BLOCK_SIZE + i;
+
+    if (j < range.y && j >= range.x)
     {
-        int gs_id = gs_id_per_patch[j];
+        int gs_id = gsid_per_patch[j];
+        shared_gsid[i] = gs_id;
         shared_pos2d[i].x = us[gs_id * 2];
         shared_pos2d[i].y = us[gs_id * 2 + 1];
-        shared_cinv2d[i].x = cinv2d[gs_id * 3];
-        shared_cinv2d[i].y = cinv2d[gs_id * 3 + 1];
-        shared_cinv2d[i].z = cinv2d[gs_id * 3 + 2];
+        shared_cinv2d[i].x = cinv2ds[gs_id * 3];
+        shared_cinv2d[i].y = cinv2ds[gs_id * 3 + 1];
+        shared_cinv2d[i].z = cinv2ds[gs_id * 3 + 2];
         shared_alpha[i] = alphas[gs_id];
         shared_color[i].x = colors[gs_id * 3];
         shared_color[i].y = colors[gs_id * 3 + 1];
@@ -37,20 +45,26 @@ inline __device__ void fetch2shared(
     }
 }
 
-__global__ void createKey(const int gs_num,
-                          const dim3 grid,
-                          const uint4 *__restrict__ rects,
-                          const float *__restrict__ depths,
-                          const uint *__restrict__ patch_offset_per_gs,
-                          uint64_t *__restrict__ patch_keys,
-                          int *__restrict__ gs_id_per_patch)
+__global__ void createKeys(
+    const int gs_num,
+    const float* __restrict__ depths,
+    const uint32_t* __restrict__ patch_offset_per_gs,
+    const uint4* __restrict__ rects,
+    const dim3 grid,
+    uint64_t* __restrict__ patch_keys,
+    int* __restrict__ gsid_per_patch)
 {
-    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (idx >= gs_num)
+    if (i >= gs_num)
         return;
-    uint32_t off = (idx == 0) ? 0 : patch_offset_per_gs[idx - 1];
-    uint4 rect = rects[idx];
+
+    const float depth = depths[i];
+    if (depth < 0.2)
+        return;
+
+    uint32_t off = (i == 0) ? 0 : patch_offset_per_gs[i - 1];
+    uint4 rect = rects[i];
 
     for (uint y = rect.y; y < rect.w; y++)
     {
@@ -58,42 +72,34 @@ __global__ void createKey(const int gs_num,
         {
             uint64_t key = (y * grid.x + x);
             key <<= 32;
-            uint32_t depth_cm = depths[idx] * 1000; // mm
+            uint32_t depth_cm = depth * 1000; // mm
             key |= depth_cm;
             patch_keys[off] = key;
-            gs_id_per_patch[off] = idx;
+            gsid_per_patch[off] = i;
             off++;
         }
     }
 }
 
-__global__ void getRect(
-    const int width,
-    const int height,
-    int gs_num,
-    const float *__restrict__ us,
-    const float *__restrict__ areas,
-    const float *__restrict__ depths,
+__global__ void getRects(
+    const int gs_num,
+    const float* __restrict__ us,
+    const int* __restrict__ areas,
+    float* __restrict__ depths,
     const dim3 grid,
     uint4 *__restrict__ gs_rects,
-    uint *__restrict__ patch_num_per_gs)
+    uint* __restrict__ patch_num_per_gs)
 {
     const int idx = blockIdx.x * blockDim.x + threadIdx.x;
-
     if (idx >= gs_num)
         return;
 
-    float d = depths[idx];
-    float2 u = {us[idx * 2], us[idx * 2 + 1]};
+    patch_num_per_gs[idx] = 0;
 
-    float x_norm = u.x / width * 2.f - 1.f;
-    float y_norm = u.y / height * 2.f - 1.f;
-    if (abs(x_norm) > 1.3 || abs(y_norm) > 1.3 || d < 0.1 || d > 100)
-    {
-        gs_rects[idx] = {0, 0, 0, 0};
-        patch_num_per_gs[idx] = 0;
+    if (depths[idx] < 0.2)
         return;
-    }
+
+    float2 u = { us[2 * idx], us[2 * idx + 1]};
 
     float xs = areas[idx * 2];
     float ys = areas[idx * 2 + 1];
@@ -105,11 +111,19 @@ __global__ void getRect(
         min(grid.y, max((int)0, (int)(DIV_ROUND_UP(u.y + ys, BLOCK))))  // max_y
     };
 
+    uint n = (rect.w - rect.y) * (rect.z - rect.x);
+
+    if (n == 0)
+    {
+        depths[idx] = -1.f;
+        return;
+    }
     gs_rects[idx] = rect;
-    patch_num_per_gs[idx] = (rect.z - rect.x) * (rect.w - rect.y);
+    patch_num_per_gs[idx] = n;
 }
 
-__global__ void getRange(
+
+__global__ void getRanges(
     const int patch_num,
     const uint64_t *__restrict__ patch_keys,
     int *__restrict__ patch_range_per_tile)
@@ -140,9 +154,9 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     const int width,
     const int height,
     const int *__restrict__ patch_range_per_tile,
-    const int *__restrict__ gs_id_per_patch,
+    const int *__restrict__ gsid_per_patch,
     const float *__restrict__ us,
-    const float *__restrict__ cinv2d,
+    const float *__restrict__ cinv2ds,
     const float *__restrict__ alphas,
     const float *__restrict__ colors,
     float *__restrict__ image,
@@ -150,6 +164,9 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     float *__restrict__ final_tau)
 
 {
+    /*
+    More details are discussed in section 5 of the forward.pdf
+    */
     const uint2 tile = {blockIdx.x, blockIdx.y};
     const uint2 pix = {tile.x * BLOCK + threadIdx.x,
                        tile.y * BLOCK + threadIdx.y};
@@ -173,6 +190,7 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     __shared__ float3 shared_cinv2d[BLOCK_SIZE];
     __shared__ float shared_alpha[BLOCK_SIZE];
     __shared__ float3 shared_color[BLOCK_SIZE];
+    __shared__ int shared_gsid[BLOCK_SIZE];
 
     float3 finial_color = {0, 0, 0};
 
@@ -195,16 +213,18 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
         {
             // fetch 2d gaussian data to share memory
             fetch2shared(i / BLOCK_SIZE,
+                         false,
                          range,
-                         gs_id_per_patch,
+                         gsid_per_patch,
                          us,
-                         cinv2d,
+                         cinv2ds,
                          alphas,
                          colors,
                          shared_pos2d,
                          shared_cinv2d,
                          shared_alpha,
-                         shared_color);
+                         shared_color,
+                         shared_gsid);
             __syncthreads();
         }
 
@@ -220,7 +240,7 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
 
         cont_tmp = cont_tmp + 1;
 
-        // forward.md (5.1)
+        // forward.pdf (F.5.1)
         // mahalanobis squared distance for 2d gaussian to this pix
         float maha_dist = max(0.0f, mahaSqDist(cinv, d));
 
@@ -228,17 +248,12 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
         if (alpha_prime < 0.002f)
             continue;
 
-        // forward.md (5)
+        // forward.pdf (F.5)
         finial_color += tau * alpha_prime * color;
         cont = cont_tmp; // how many gs contribute to this pixel.
 
-        // forward.md (5.2)
+        // forward.pdf (F.5.2)
         tau = tau * (1.f - alpha_prime);
-
-        // if(pix.x == 167 && pix.y == 392)
-        // {
-        //     printf("%i, finial_color %f %f %f\n", i, finial_color.x, finial_color.y, finial_color.z);
-        // }
 
         if (tau < 0.0001f)
         {
@@ -257,49 +272,58 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     }
 }
 
+
 __global__ void inverseCov2D(
     int gs_num,
     const float *__restrict__ cov2ds,
+    float *__restrict__ depths,
     float *__restrict__ cinv2ds,
-    float *__restrict__ areas,
+    int *__restrict__ areas,
     float *__restrict__ dcinv2d_dcov2ds)
 {
     // compute inverse of cov2d
     // Determine the drawing area of 2d Gaussian.
 
-    const int gs_id = blockIdx.x * blockDim.x + threadIdx.x;
+    const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-    if (gs_id >= gs_num)
+    if (i >= gs_num)
         return;
-    // forward.md 5.3
-    const float a = cov2ds[gs_id * 3];
-    const float b = cov2ds[gs_id * 3 + 1];
-    const float c = cov2ds[gs_id * 3 + 2];
+
+    if (depths[i] < 0.2)
+        return;
+
+    // forward.pdf (F.5.3)
+    const float a = cov2ds[i * 3];
+    const float b = cov2ds[i * 3 + 1];
+    const float c = cov2ds[i * 3 + 2];
 
     const float det = a * c - b * b;
     if (det == 0.0f)
+    {
+        depths[i] = -1.f;
         return;
-
+    }
+    // forward.pdf (F.5.3)
     const float det_inv = 1.f / det;
-    cinv2ds[gs_id * 3 + 0] = det_inv * c;
-    cinv2ds[gs_id * 3 + 1] = -det_inv * b;
-    cinv2ds[gs_id * 3 + 2] = det_inv * a;
-    areas[gs_id * 2 + 0] = 3 * sqrt(abs(a));
-    areas[gs_id * 2 + 1] = 3 * sqrt(abs(c));
+    cinv2ds[i * 3 + 0] = det_inv * c;
+    cinv2ds[i * 3 + 1] = -det_inv * b;
+    cinv2ds[i * 3 + 2] = det_inv * a;
+    areas[i * 2 + 0] = int(ceil(3 * sqrt(abs(a))));
+    areas[i * 2 + 1] = int(ceil(3 * sqrt(abs(c))));
 
     if (dcinv2d_dcov2ds != nullptr)
     {
+        // backward.pdf (B.5.3)
         const float det2_inv = det_inv / det;
-
-        dcinv2d_dcov2ds[gs_id * 9 + 0] = -c * c * det2_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 1] = 2 * b * c * det2_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 2] = -a * c * det2_inv + det_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 3] = b * c * det2_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 4] = -2 * b * b * det2_inv - det_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 5] = a * b * det2_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 6] = -a * c * det2_inv + det_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 7] = 2 * a * b * det2_inv;
-        dcinv2d_dcov2ds[gs_id * 9 + 8] = -a * a * det2_inv;
+        dcinv2d_dcov2ds[i * 9 + 0] = -c * c * det2_inv;
+        dcinv2d_dcov2ds[i * 9 + 1] = 2 * b * c * det2_inv;
+        dcinv2d_dcov2ds[i * 9 + 2] = -a * c * det2_inv + det_inv;
+        dcinv2d_dcov2ds[i * 9 + 3] = b * c * det2_inv;
+        dcinv2d_dcov2ds[i * 9 + 4] = -2 * b * b * det2_inv - det_inv;
+        dcinv2d_dcov2ds[i * 9 + 5] = a * b * det2_inv;
+        dcinv2d_dcov2ds[i * 9 + 6] = -a * c * det2_inv + det_inv;
+        dcinv2d_dcov2ds[i * 9 + 7] = 2 * a * b * det2_inv;
+        dcinv2d_dcov2ds[i * 9 + 8] = -a * a * det2_inv;
     }
 }
 
@@ -307,6 +331,7 @@ __global__ void computeCov3D(
     int32_t gs_num,
     const float *__restrict__ rots,
     const float *__restrict__ scales,
+    const float *__restrict__ depths,
     float *__restrict__ cov3ds,
     float *__restrict__ dcov3d_drots,
     float *__restrict__ dcov3d_dscales)
@@ -314,6 +339,9 @@ __global__ void computeCov3D(
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (i >= gs_num)
+        return;
+
+    if (depths[i] < 0.2)
         return;
 
     float w = rots[i * 4 + 0];
@@ -342,7 +370,7 @@ __global__ void computeCov3D(
         R(0, 0) * s0, R(0, 1) * s1, R(0, 2) * s2,
         R(1, 0) * s0, R(1, 1) * s1, R(1, 2) * s2,
         R(2, 0) * s0, R(2, 1) * s1, R(2, 2) * s2};
-
+    // forward.pdf (F.2)
     Matrix<3, 3> Sigma = M * M.transpose();
 
     cov3ds[i * 6 + 0] = Sigma(0, 0);
@@ -378,7 +406,9 @@ __global__ void computeCov3D(
                                  R(2, 0), 0, 0,
                                  0, R(2, 1), 0,
                                  0, 0, R(2, 2)};
+        // backward.pdf (B.2a)
         Matrix<6, 4> dcov3d_drot = dcov3d_dm * dm_rot;
+        // backward.pdf (B.2b)
         Matrix<6, 3> dcov3d_dscale = dcov3d_dm * dm_scale;
         dcov3d_drots[i * 24 + 0] = dcov3d_drot(0, 0);
         dcov3d_drots[i * 24 + 1] = dcov3d_drot(0, 1);
@@ -431,8 +461,11 @@ __global__ void computeCov2D(
     const float *__restrict__ cov3ds,
     const float *__restrict__ pcs,
     const float *__restrict__ Rcw,
+    const float *__restrict__ depths,
     const float focal_x,
     const float focal_y,
+    const float tan_fovx,
+    const float tan_fovy,
     float *__restrict__ cov2ds,
     float *__restrict__ dcov2d_dcov3ds,
     float *__restrict__ dcov2d_dpcs)
@@ -442,8 +475,11 @@ __global__ void computeCov2D(
     if (i >= gs_num)
         return;
 
-    const float x = pcs[i * 3 + 0];
-    const float y = pcs[i * 3 + 1];
+    if(depths[i] < 0.2)
+        return;
+
+    float x = pcs[i * 3 + 0];
+    float y = pcs[i * 3 + 1];
     const float z = pcs[i * 3 + 2];
     const float a = cov3ds[i * 6 + 0];
     const float b = cov3ds[i * 6 + 1];
@@ -451,6 +487,12 @@ __global__ void computeCov2D(
     const float d = cov3ds[i * 6 + 3];
     const float e = cov3ds[i * 6 + 4];
     const float f = cov3ds[i * 6 + 5];
+
+    const float limx = 1.3f * tan_fovx;
+    const float limy = 1.3f * tan_fovy;
+    x = min(limx, max(-limx, x / z)) * z;
+    y = min(limy, max(-limy, y / z)) * z;
+
 
     float z2 = z * z;
 
@@ -470,6 +512,7 @@ __global__ void computeCov2D(
 
     Matrix<2, 3> M = J * R;
 
+    // forward.pdf (F.3)
     Matrix<2, 2> Sigma_prime = M * Sigma * M.transpose();
 
     // make sure the cov2d is not too small.
@@ -479,6 +522,7 @@ __global__ void computeCov2D(
 
     if (dcov2d_dcov3ds != nullptr && dcov2d_dpcs != nullptr)
     {
+        // backward.pdf (B.3a)
         Matrix<3, 6> dcov2d_dcov3d = {M(0, 0) * M(0, 0),
                                       2 * M(0, 0) * M(0, 1),
                                       2 * M(0, 0) * M(0, 2),
@@ -522,6 +566,7 @@ __global__ void computeCov2D(
                                0, -focal_y * R(2, 1) * z2_inv, -focal_y * R(1, 1) * z2_inv + 2 * focal_y * R(2, 1) * y * z3_inv,
                                0, -focal_y * R(2, 2) * z2_inv, -focal_y * R(1, 2) * z2_inv + 2 * focal_y * R(2, 2) * y * z3_inv};
 
+        // backward.pdf (B.3b)
         Matrix<3, 3> dcov2d_dpc = dcov2d_dm * dm_dpc;
 
         dcov2d_dpcs[i * 9 + 0] = dcov2d_dpc(0, 0);
@@ -566,6 +611,7 @@ __global__ void project(
     const float center_y,
     float *__restrict__ us,
     float *__restrict__ pcs,
+    float *__restrict__ depths,
     float *__restrict__ du_dpcs)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -582,6 +628,7 @@ __global__ void project(
         Rcw[3], Rcw[4], Rcw[5],
         Rcw[6], Rcw[7], Rcw[8]};
 
+    // forward.pdf (F.1.1)
     Matrix<3, 1> pc = R * pw + t;
 
     const float x = pc(0);
@@ -593,6 +640,7 @@ __global__ void project(
     const float x_focal_x = x * focal_x;
     const float y_focal_y = y * focal_y;
 
+    // forward.pdf (F.1.2)
     const float u0 = x_focal_x * z_inv + center_x;
     const float u1 = y_focal_y * z_inv + center_y;
 
@@ -602,9 +650,11 @@ __global__ void project(
     pcs[i * 3 + 0] = x;
     pcs[i * 3 + 1] = y;
     pcs[i * 3 + 2] = z;
+    depths[i] = z;
 
     if (du_dpcs != nullptr)
     {
+        // backward.pdf (B.1.2)
         du_dpcs[i * 6 + 0] = focal_x * z_inv;
         du_dpcs[i * 6 + 2] = -x_focal_x * z2_inv;
         du_dpcs[i * 6 + 4] = focal_y * z_inv;
@@ -653,7 +703,6 @@ __global__ void sh2Color(
         d0 = pws[3 * i + 0] - twc[0];
         d1 = pws[3 * i + 1] - twc[1];
         d2 = pws[3 * i + 2] - twc[2];
-
         normd = sqrt(d0 * d0 + d1 * d1 + d2 * d2);
         x = d0 / normd;
         y = d1 / normd;
@@ -720,23 +769,25 @@ __global__ void sh2Color(
     // calc the jacobians
     if (dcolor_dshs != nullptr && dcolor_dpws != nullptr)
     {
-        const int sh_dim_div3 = sh_dim / 3;
-        const float normd3_inv = 1.f / (normd * normd * normd);
-        const float normd_inv = 1.f / normd;
-        const float dr_dpw00 = -d0 * d0 * normd3_inv + normd_inv;
-        const float dr_dpw11 = -d1 * d1 * normd3_inv + normd_inv;
-        const float dr_dpw22 = -d2 * d2 * normd3_inv + normd_inv;
-        const float dr_dpw01 = -d0 * d1 * normd3_inv;
-        const float dr_dpw02 = -d0 * d2 * normd3_inv;
-        const float dr_dpw12 = -d1 * d2 * normd3_inv;
-        Matrix<3, 3> dr_dpw = {dr_dpw00, dr_dpw01, dr_dpw02, dr_dpw01, dr_dpw11, dr_dpw12, dr_dpw02, dr_dpw12, dr_dpw22};
         float3 dc_dr0 = {0, 0, 0};
         float3 dc_dr1 = {0, 0, 0};
         float3 dc_dr2 = {0, 0, 0};
+        Matrix<3, 3> dr_dpw = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
+        const int sh_dim_div3 = sh_dim / 3;
         dcolor_dshs[sh_dim_div3 * i + 0] = SH_C0_0;
         if (sh_dim > 3)
         {
+            const float normd3_inv = 1.f / (normd * normd * normd);
+            const float normd_inv = 1.f / normd;
+            const float dr_dpw00 = -d0 * d0 * normd3_inv + normd_inv;
+            const float dr_dpw11 = -d1 * d1 * normd3_inv + normd_inv;
+            const float dr_dpw22 = -d2 * d2 * normd3_inv + normd_inv;
+            const float dr_dpw01 = -d0 * d1 * normd3_inv;
+            const float dr_dpw02 = -d0 * d2 * normd3_inv;
+            const float dr_dpw12 = -d1 * d2 * normd3_inv;
+            dr_dpw = {dr_dpw00, dr_dpw01, dr_dpw02, dr_dpw01, dr_dpw11, dr_dpw12, dr_dpw02, dr_dpw12, dr_dpw22};
+
             dcolor_dshs[sh_dim_div3 * i + 1] = dc_dsh1;
             dcolor_dshs[sh_dim_div3 * i + 2] = dc_dsh2;
             dcolor_dshs[sh_dim_div3 * i + 3] = dc_dsh3;
@@ -806,57 +857,27 @@ __global__ void sh2Color(
     colors[3 * i + 2] = color.z;
 }
 
-
-inline __device__ void fetch2sharedB(
-    int32_t n,
-    const int2 range,
-    const int *__restrict__ gs_id_per_patch,
-    const float *__restrict__ us,
-    const float *__restrict__ cinv2d,
-    const float *__restrict__ alphas,
-    const float *__restrict__ colors,
-    float2 *shared_pos2d,
-    float3 *shared_cinv2d,
-    float *shared_alpha,
-    float3 *shared_color,
-    int *shared_gsid)
+__global__ void __launch_bounds__(BLOCK *BLOCK)
+    drawB(
+        const int width, 
+        const int height,
+        const int *__restrict__ patch_range_per_tile,
+        const int *__restrict__ gsid_per_patch,
+        const float *__restrict__ us,
+        const float *__restrict__ cinv2ds,
+        const float *__restrict__ alphas,
+        const float *__restrict__ colors,
+        const float *__restrict__ final_tau,
+        const int *__restrict__ contrib,
+        const float *__restrict__ dloss_dgammas,
+        float2 *__restrict__ dloss_dus,
+        float3 *__restrict__ dloss_dcinv2ds,
+        float *__restrict__ dloss_dalphas,
+        float *__restrict__ dloss_dcolors)
 {
-    int i = blockDim.x * threadIdx.y + threadIdx.x;  // block idx
-    int j = range.y - n * BLOCK_SIZE - i - 1;  // patch idx
-
-    if (j >= range.x)
-    {
-        int gs_id = gs_id_per_patch[j];
-        shared_gsid[i] = gs_id;
-        shared_pos2d[i].x = us[gs_id * 2];
-        shared_pos2d[i].y = us[gs_id * 2 + 1];
-        shared_cinv2d[i].x = cinv2d[gs_id * 3];
-        shared_cinv2d[i].y = cinv2d[gs_id * 3 + 1];
-        shared_cinv2d[i].z = cinv2d[gs_id * 3 + 2];
-        shared_alpha[i] =   alphas[gs_id];
-        shared_color[i].x = colors[gs_id * 3];
-        shared_color[i].y = colors[gs_id * 3 + 1];
-        shared_color[i].z = colors[gs_id * 3 + 2];
-    }
-}
-
-__global__ void  drawB __launch_bounds__(BLOCK * BLOCK)(
-    const int width,
-    const int height,
-    const int *__restrict__ patch_range_per_tile,
-    const int *__restrict__ gs_id_per_patch,
-    const float *__restrict__ us,
-    const float *__restrict__ cinv2d,
-    const float *__restrict__ alphas,
-    const float *__restrict__ colors,
-    const int *__restrict__ contrib,
-    const float *__restrict__ final_tau,
-    const float *__restrict__ dloss_dgammas,
-    float *__restrict__ dloss_dus,
-    float *__restrict__ dloss_dcinv2ds,
-    float *__restrict__ dloss_dalphas,
-    float *__restrict__ dloss_dcolors)
-{
+    /*
+    More details are discussed in section 5 of the backward.pdf
+    */
     const uint2 tile = {blockIdx.x, blockIdx.y};
     const uint2 pix = {tile.x * BLOCK + threadIdx.x,
                        tile.y * BLOCK + threadIdx.y};
@@ -864,35 +885,36 @@ __global__ void  drawB __launch_bounds__(BLOCK * BLOCK)(
     const int tile_idx = tile.y * gridDim.x + tile.x;
     const uint32_t pix_idx = width * pix.y + pix.x;
 
-	const bool inside = pix.x < width && pix.y < height;
-	const int2 range = {patch_range_per_tile[2 * tile_idx], 
+    const bool inside = pix.x < width && pix.y < height;
+    const int2 range = {patch_range_per_tile[2 * tile_idx],
                         patch_range_per_tile[2 * tile_idx + 1]};
-    
-	const int gs_num = range.y - range.x;
+
+    const int gs_num = range.y - range.x;
 
     // not patch for this tile.
     if (gs_num == 0)
         return;
 
-	bool thread_is_finished = !inside;
+    bool thread_is_finished = !inside;
 
-	__shared__ float2 shared_pos2d[BLOCK_SIZE];
-	__shared__ float3 shared_cinv2d[BLOCK_SIZE];
-    __shared__ float  shared_alpha[BLOCK_SIZE];
+    __shared__ float2 shared_pos2d[BLOCK_SIZE];
+    __shared__ float3 shared_cinv2d[BLOCK_SIZE];
+    __shared__ float shared_alpha[BLOCK_SIZE];
     __shared__ float3 shared_color[BLOCK_SIZE];
     __shared__ int shared_gsid[BLOCK_SIZE];
 
 
-    float3 gamma_cur2last = {0, 0, 0}; // the accumulated color of the pix from current to last gaussians (backward)
+    float3 gamma_cur2last = {0, 0, 0};
 
     float3 dloss_dgamma = {dloss_dgammas[0 * height * width + pix_idx],
                            dloss_dgammas[1 * height * width + pix_idx],
                            dloss_dgammas[2 * height * width + pix_idx]};
 
-    float tau = final_tau[pix_idx];
+    float3 last_color = {0, 0, 0};
+
+    float tau = inside ? final_tau[pix_idx] : 0;
     int cont = contrib[pix_idx];
 
-    // for all 2d gaussian 
     for (int i = 0; i < gs_num; i++)
     {
         int finished_thread_num = __syncthreads_count(thread_is_finished);
@@ -905,12 +927,13 @@ __global__ void  drawB __launch_bounds__(BLOCK * BLOCK)(
         if (j == 0)
         {
             // fetch 2d gaussian data to share memory
-            // fetch to shared memory by backward order 
-            fetch2sharedB(i / BLOCK_SIZE,
+            // fetch to shared memory by backward order
+            fetch2shared(i / BLOCK_SIZE,
+                         true,
                          range,
-                         gs_id_per_patch,
+                         gsid_per_patch,
                          us,
-                         cinv2d,
+                         cinv2ds,
                          alphas,
                          colors,
                          shared_pos2d,
@@ -921,55 +944,56 @@ __global__ void  drawB __launch_bounds__(BLOCK * BLOCK)(
             __syncthreads();
         }
 
-        // becasuse we fetch data by backward, we skip i < gs_num - cont
-        if ( i < gs_num - cont)
+        // Because we fetch data backwards, we skip the last CONT Gaussian data
+        if (i < gs_num - cont)
             continue;
 
-        float2 u = shared_pos2d[j];
-        float3 cinv2d = shared_cinv2d[j];
-        float alpha = shared_alpha[j];
-        float3 color = shared_color[j];
-        int gs_id = shared_gsid[j];
-        float2 d = u - pix;
-        float maha_dist = max(0.0f,  mahaSqDist(cinv2d, d));
-        float g = exp(-0.5f * maha_dist);
-        float alpha_prime = min(0.99f, alpha * g);
+        const float2 u = shared_pos2d[j];
+        const float3 cinv2d = shared_cinv2d[j];
+        const float alpha = shared_alpha[j];
+        const float3 color = shared_color[j];
+        const int gs_id = shared_gsid[j];
+        const float2 d = u - pix;
+        // forward.pdf (eq.F.5.1)
+        const float maha_dist = max(0.0f, mahaSqDist(cinv2d, d));
+        const float g = exp(-0.5f * maha_dist);
+        const float alpha_prime = min(0.99f, alpha * g);
 
         if (alpha_prime < 0.002f)
             continue;
-
-        tau = tau / (1 - alpha_prime);
-
-        float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
-        float dalphaprime_dalpha = g;
-        float dloss_dalphaprime = dot(dloss_dgamma, dgamma_dalphaprime); 
-        float dloss_dalpha = dloss_dalphaprime * dalphaprime_dalpha;
+        // forward.pdf (eq.F.5.2)
+        tau = tau / (1.f - alpha_prime);
     
+        // backward.pdf (eq.B.5a)
+        const float3 dgamma_dalphaprime = tau * (color - gamma_cur2last);
+        // backward.pdf (eq.B.5.1a)
+        const float dalphaprime_dalpha = g;
+        const float dloss_dalphaprime = dot(dloss_dgamma, dgamma_dalphaprime); 
+        const float dloss_dalpha = dloss_dalphaprime * dalphaprime_dalpha;
         atomicAdd(&dloss_dalphas[gs_id], dloss_dalpha);
 
-        float dgamma_dcolor = tau * alpha_prime;
+        // backward.pdf (eq.B.5b)
+        const float dgamma_dcolor = alpha_prime * tau;
         float3 dloss_dcolor = dloss_dgamma * dgamma_dcolor;
         atomicAdd(&dloss_dcolors[gs_id * 3 + 0], dloss_dcolor.x);
         atomicAdd(&dloss_dcolors[gs_id * 3 + 1], dloss_dcolor.y);
         atomicAdd(&dloss_dcolors[gs_id * 3 + 2], dloss_dcolor.z);
-
+        // backward.pdf (eq.B.5.2b)
         float2 dalphaprime_du = {(-cinv2d.x*d.x - cinv2d.y*d.y) * alpha_prime, 
                                  (-cinv2d.y*d.x - cinv2d.z*d.y) * alpha_prime};
         float2 dloss_du = dloss_dalphaprime * dalphaprime_du;
-
-        atomicAdd(&dloss_dus[gs_id * 2 + 0], dloss_du.x);
-        atomicAdd(&dloss_dus[gs_id * 2 + 1], dloss_du.y);
-
+        atomicAdd(&dloss_dus[gs_id].x, dloss_du.x);
+        atomicAdd(&dloss_dus[gs_id].y, dloss_du.y);
+        // backward.pdf (eq.B.5.2c)
         float3 dalphaprime_dcinv2d = {-0.5f * alpha_prime * (d.x * d.x),
-                                      -alpha_prime * (d.x * d.y),
+                                      -1.0f * alpha_prime * (d.x * d.y),
                                       -0.5f * alpha_prime * (d.y * d.y)};
         float3 dloss_dcinv2d = dloss_dalphaprime * dalphaprime_dcinv2d;
-        
-        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 0], dloss_dcinv2d.x);
-        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 1], dloss_dcinv2d.y);
-        atomicAdd(&dloss_dcinv2ds[gs_id * 3 + 2], dloss_dcinv2d.z);
-    
-        // update gamma_cur2last for next iteration.
+        atomicAdd(&dloss_dcinv2ds[gs_id].x, dloss_dcinv2d.x);
+        atomicAdd(&dloss_dcinv2ds[gs_id].y, dloss_dcinv2d.y);
+        atomicAdd(&dloss_dcinv2ds[gs_id].z, dloss_dcinv2d.z);
+
+        // save gamma_cur2last for next step.
         gamma_cur2last = alpha_prime * color + (1 - alpha_prime) * gamma_cur2last;
     }
 }

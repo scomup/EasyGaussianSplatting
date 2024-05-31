@@ -1,48 +1,20 @@
 from gsplat.gausplat import *
-from gsplat.read_ply import *
+from gsplat.gau_io import *
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--ply", help="the ply path")
+    parser.add_argument("--gs", help="the input 3d gaussians path")
     args = parser.parse_args()
 
-    if args.ply:
-        ply_fn = args.ply
+    if args.gs:
+        ply_fn = args.gs
         print("Try to load %s ..." % ply_fn)
-        gs = load_ply(ply_fn)
+        gs = load_gs(ply_fn)
     else:
-        print("not fly file.")
-        gs_data = np.array([[0.,  0.,  0.,  # xyz
-                            1.,  0.,  0., 0.,  # rot
-                            0.05,  0.05,  0.05,  # size
-                            1.,
-                            1.772484,  -1.772484,  1.772484],
-                            [1.,  0.,  0.,
-                            1.,  0.,  0., 0.,
-                            0.2,  0.05,  0.05,
-                            1.,
-                            1.772484,  -1.772484, -1.772484],
-                            [0.,  1.,  0.,
-                            1.,  0.,  0., 0.,
-                            0.05,  0.2,  0.05,
-                            1.,
-                            -1.772484, 1.772484, -1.772484],
-                            [0.,  0.,  1.,
-                            1.,  0.,  0., 0.,
-                            0.05,  0.05,  0.2,
-                            1.,
-                            -1.772484, -1.772484,  1.772484]
-                            ], dtype=np.float32)
-
-        dtypes = [('pw', '<f4', (3,)),
-                  ('rot', '<f4', (4,)),
-                  ('scale', '<f4', (3,)),
-                  ('alpha', '<f4'),
-                  ('sh', '<f4', (3,))]
-
-        gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+        print("not gaussians file.")
+        gs = get_example_gs()
 
     # Camera info
     tcw = np.array([1.03796196, 0.42017467, 4.67804612])
@@ -53,16 +25,12 @@ if __name__ == "__main__":
     width = int(979)  # 1957  # 979
     height = int(546)  # 1091  # 546
 
-    focal_x = 581.6273640151177
-    focal_y = 578.140202494143
-    center_x = width / 2
-    center_y = height / 2
+    fx = 581.6273640151177
+    fy = 578.140202494143
+    cx = width / 2
+    cy = height / 2
 
     twc = np.linalg.inv(Rcw) @ (-tcw)
-
-    K = np.array([[focal_x, 0, center_x],
-                  [0, focal_y, center_y],
-                  [0, 0, 1.]])
 
     fig, ax = plt.subplots()
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
@@ -72,7 +40,7 @@ if __name__ == "__main__":
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = project(pws, Rcw, tcw, K)
+    us, pcs = project(pws, Rcw, tcw, fx, fy, cx, cy)
 
     depths = pcs[:, 2]
 
@@ -80,7 +48,7 @@ if __name__ == "__main__":
     cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2ds = compute_cov_2d(pcs, K, cov3ds, Rcw)
+    cov2ds = compute_cov_2d(pcs, fx, fy, width, height, cov3ds, Rcw)
 
     # step4. get color info
     colors = sh2color(gs['sh'], pws, twc)
@@ -95,5 +63,5 @@ if __name__ == "__main__":
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
     # print(pil_img.mode)
     # pil_img.save('test.png')
-
+    #  plt.imshow(image)
     plt.show()

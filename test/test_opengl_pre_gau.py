@@ -6,7 +6,7 @@ import time
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-from read_ply import *
+from gau_io import *
 
 
 def div_round_up(x, y):

@@ -1,5 +1,14 @@
 import numpy as np
 from plyfile import PlyData
+import torch
+
+
+def gsdata_type(sh_dim):
+    return [('pw', '<f4', (3,)),
+            ('rot', '<f4', (4,)),
+            ('scale', '<f4', (3,)),
+            ('alpha', '<f4'),
+            ('sh', '<f4', (sh_dim))]
 
 
 def matrix_to_quaternion(matrices):
@@ -48,7 +57,6 @@ def matrix_to_quaternion(matrices):
 
 
 def load_ply(path, T=None):
-    max_sh_degree = 3
     plydata = PlyData.read(path)
     pws = np.stack((np.asarray(plydata.elements[0]["x"]),
                     np.asarray(plydata.elements[0]["y"]),
@@ -68,18 +76,18 @@ def load_ply(path, T=None):
 
     rots /= np.linalg.norm(rots, axis=1)[:, np.newaxis]
 
-    shs = np.zeros([pws.shape[0], 48])
+    sh_dim = len(plydata.elements[0][0])-14
+    shs = np.zeros([pws.shape[0], sh_dim])
     shs[:, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
     shs[:, 1] = np.asarray(plydata.elements[0]["f_dc_1"])
     shs[:, 2] = np.asarray(plydata.elements[0]["f_dc_2"])
 
-    sh_rest_dim = len(plydata.elements[0][0])-17
-
+    sh_rest_dim = sh_dim - 3
     for i in range(sh_rest_dim):
         name = "f_rest_%d" % i
         shs[:, 3 + i] = np.asarray(plydata.elements[0][name])
 
-    shs[:, 3:] = shs[:, 3:].reshape(-1, 3, 15).transpose([0, 2, 1]).reshape(-1, 45)
+    shs[:, 3:] = shs[:, 3:].reshape(-1, 3, sh_rest_dim//3).transpose([0, 2, 1]).reshape(-1, sh_rest_dim)
 
     pws = pws.astype(np.float32)
     rots = rots.astype(np.float32)
@@ -88,26 +96,7 @@ def load_ply(path, T=None):
     alphas = alphas.astype(np.float32)
     shs = shs.astype(np.float32)
 
-    dtypes = [('pw', '<f4', (3,)),
-              ('rot', '<f4', (4,)),
-              ('scale', '<f4', (3,)),
-              ('alpha', '<f4'),
-              ('sh', '<f4', (48,))]
-
-    if (T is not None):
-        # Transform to world
-        pws = (T @ pws.T).T
-        w = rots[:, 0]
-        x = rots[:, 1]
-        y = rots[:, 2]
-        z = rots[:, 3]
-        R = np.array([
-            [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
-            [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
-            [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
-        ]).transpose(2, 0, 1)
-        R_new = T @ R
-        rots = matrix_to_quaternion(R_new)
+    dtypes = gsdata_type(sh_dim)
 
     gs = np.rec.fromarrays(
         [pws, rots, scales, alphas, shs], dtype=dtypes)
@@ -115,6 +104,78 @@ def load_ply(path, T=None):
     return gs
 
 
+def rotate_gaussian(T, gs):
+    # Transform to world
+    pws = (T @ gs['pw'].T).T
+    w = gs['rot'][:, 0]
+    x = gs['rot'][:, 1]
+    y = gs['rot'][:, 2]
+    z = gs['rot'][:, 3]
+    R = np.array([
+        [1.0 - 2*(y**2 + z**2), 2*(x*y - z*w), 2*(x * z + y * w)],
+        [2*(x*y + z*w), 1.0 - 2*(x**2 + z**2), 2*(y*z - x*w)],
+        [2*(x*z - y*w), 2*(y*z + x*w), 1.0 - 2*(x**2 + y**2)]
+    ]).transpose(2, 0, 1)
+    R_new = T @ R
+    rots = matrix_to_quaternion(R_new)
+    gs['pw'] = pws
+    gs['rot'] = rots
+    return gs
+
+
+def load_gs(fn):
+    if fn.endswith('.ply'):
+        return load_ply(fn)
+    elif fn.endswith('.npy'):
+        return np.load(fn)
+    else:
+        print("%s is not a supported file." % fn)
+        exit(0)
+
+
+def save_gs(fn, gs):
+    np.save(fn, gs)
+
+
+def save_torch_params(fn, rots, scales, shs, alphas, pws):
+    rots = rots.detach().cpu().numpy()
+    scales = scales.detach().cpu().numpy()
+    shs = shs.detach().cpu().numpy()
+    alphas = alphas.detach().cpu().numpy().squeeze()
+    pws = pws.detach().cpu().numpy()
+    dtypes = gsdata_type(shs.shape[1])
+    gs = np.rec.fromarrays(
+        [pws, rots, scales, alphas, shs], dtype=dtypes)
+    np.save(fn, gs)
+
+
+def get_example_gs():
+    gs_data = np.array([[0.,  0.,  0.,  # xyz
+                         1.,  0.,  0., 0.,  # rot
+                         0.05,  0.05,  0.05,  # size
+                         1.,
+                         1.772484,  -1.772484,  1.772484],
+                        [1.,  0.,  0.,
+                         1.,  0.,  0., 0.,
+                         0.2,  0.05,  0.05,
+                         1.,
+                         1.772484,  -1.772484, -1.772484],
+                        [0.,  1.,  0.,
+                         1.,  0.,  0., 0.,
+                         0.05,  0.2,  0.05,
+                         1.,
+                         -1.772484, 1.772484, -1.772484],
+                        [0.,  0.,  1.,
+                         1.,  0.,  0., 0.,
+                         0.05,  0.05,  0.2,
+                         1.,
+                         -1.772484, -1.772484,  1.772484]
+                        ], dtype=np.float32)
+    dtypes = gsdata_type(3)
+    gs = np.frombuffer(gs_data.tobytes(), dtype=dtypes)
+    return gs
+
+
 if __name__ == "__main__":
-    gs = load_ply("/home/liu/workspace/gaussian-splatting/output/fb15ba66-e/point_cloud/iteration_7000/point_cloud.ply")
+    gs = load_gs("/home/liu/workspace/gaussian-splatting/output/train/point_cloud/iteration_10/point_cloud.ply")
     print(gs.shape)

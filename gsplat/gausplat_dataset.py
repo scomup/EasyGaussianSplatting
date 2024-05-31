@@ -2,6 +2,7 @@ from torch.utils.data import Dataset
 from pathlib import Path
 from typing import List, Tuple
 from gsplat.read_write_model import *
+# from read_write_model import *
 from PIL import Image
 import torch
 import torchvision
@@ -23,7 +24,7 @@ class Camera:
 
 
 class GSplatDataset(Dataset):
-    def __init__(self, path, device='cpu') -> None:
+    def __init__(self, path, device='cuda') -> None:
         super().__init__()
         self.device = device
         camera_params, image_params = read_model(Path(path, "sparse/0"), ext='.bin')
@@ -46,6 +47,11 @@ class GSplatDataset(Dataset):
             camera = Camera(image_param.id, width, height, fx, fy, cx, cy, Rcw, tcw)
             self.cameras.append(camera)
             self.images.append(image)
+        try:
+            self.gs = np.load(Path(path, "sparse/0/points3D.npy"))
+        except:
+            self.gs = read_points_bin_as_gau(Path(path, "sparse/0/points3D.bin"))
+            np.save(Path(path, "sparse/0/points3D.npy"), self.gs)
 
     def __getitem__(self, index: int):
         return self.cameras[index], self.images[index]
@@ -58,4 +64,3 @@ if __name__ == "__main__":
     path = '/home/liu/bag/gaussian-splatting/tandt/train'
     gs_dataset = GSplatDataset(path)
     gs_dataset[0]
-

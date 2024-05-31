@@ -4,10 +4,21 @@
  * For the full license information, please view the LICENSE file.
  */
 
+#include <math.h>
+#include <torch/extension.h>
+#include <cstdio>
+#include <sstream>
+#include <iostream>
+#include <tuple>
+#include <stdio.h>
+#include <cuda_runtime_api.h>
+#include <memory>
+#include <fstream>
+#include <string>
+#include <functional>
 #include <thrust/sort.h>
 #include <thrust/device_vector.h>
 #include "kernel.cuh"
-
 
 
 std::vector<torch::Tensor> splat(
@@ -40,17 +51,14 @@ std::vector<torch::Tensor> splat(
     thrust::device_vector<uint>  patch_num_per_gs(gs_num);
     thrust::device_vector<uint>  patch_offset_per_gs(gs_num);
 
-    getRect<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
-        width,
-        height,
+    getRects<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE >>>(
         gs_num,
         us.contiguous().data_ptr<float>(),
-        areas.contiguous().data_ptr<float>(),
+        areas.contiguous().data_ptr<int>(),
         depths.contiguous().data_ptr<float>(),
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
         thrust::raw_pointer_cast(patch_num_per_gs.data()));
-    cudaDeviceSynchronize();
 
     thrust::inclusive_scan(patch_num_per_gs.begin(), patch_num_per_gs.end(), patch_offset_per_gs.begin());
 
@@ -58,34 +66,34 @@ std::vector<torch::Tensor> splat(
     uint patch_num = (uint)patch_offset_per_gs[gs_num - 1];  // copy to cpu memory
 
     thrust::device_vector<uint64_t> patch_keys(patch_num);
-    thrust::device_vector<int> gs_id_per_patch(patch_num);
-    
-    createKey<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
+    thrust::device_vector<int> gsid_per_patch(patch_num);
+
+    createKeys <<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>> (
         gs_num,
-        grid,
-        thrust::raw_pointer_cast(gs_rects.data()),
-        depths.contiguous().data_ptr<float>(),
+        depths.data_ptr<float>(),
         thrust::raw_pointer_cast(patch_offset_per_gs.data()),
+        thrust::raw_pointer_cast(gs_rects.data()),
+        grid,
         thrust::raw_pointer_cast(patch_keys.data()),
-        thrust::raw_pointer_cast(gs_id_per_patch.data()));
-    cudaDeviceSynchronize();
+        thrust::raw_pointer_cast(gsid_per_patch.data()));
 
-    thrust::sort_by_key(patch_keys.begin(), patch_keys.end(), gs_id_per_patch.begin());
-
+    thrust::sort_by_key(patch_keys.begin(), patch_keys.end(), gsid_per_patch.begin());
     const uint tile_num = grid.x * grid.y;
     torch::Tensor patch_range_per_tile = torch::full({tile_num, 2}, 0, int_opts);
 
-    getRange<<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE>>>(
-        patch_num,
-        thrust::raw_pointer_cast(patch_keys.data()),
-        patch_range_per_tile.contiguous().data_ptr<int>());
-    cudaDeviceSynchronize();
+    if (patch_num > 0)
+    {
+        getRanges <<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE >>> (
+            patch_num,
+            thrust::raw_pointer_cast(patch_keys.data()),
+            patch_range_per_tile.contiguous().data_ptr<int>());
+    }
 
-    draw<<<grid, block>>>(
+    draw<<< grid, block >>> (
         width,
         height,
         patch_range_per_tile.contiguous().data_ptr<int>(),
-        thrust::raw_pointer_cast(gs_id_per_patch.data()),
+        thrust::raw_pointer_cast(gsid_per_patch.data()),
         us.contiguous().data_ptr<float>(),
         cinv2ds.contiguous().data_ptr<float>(),
         alphas.contiguous().data_ptr<float>(),
@@ -93,12 +101,11 @@ std::vector<torch::Tensor> splat(
         image.contiguous().data_ptr<float>(),
         contrib.contiguous().data_ptr<int>(),
         final_tau.contiguous().data_ptr<float>());
-    cudaDeviceSynchronize();
 
-    torch::Tensor gsid_per_patch_torch = torch::from_blob(thrust::raw_pointer_cast(gs_id_per_patch.data()), 
-        {static_cast<long>(gs_id_per_patch.size())}, torch::TensorOptions().dtype(torch::kInt32)).to(torch::kCUDA);
+    torch::Tensor gsid_per_patch_tensor = torch::from_blob(thrust::raw_pointer_cast(gsid_per_patch.data()), 
+        {static_cast<long>(gsid_per_patch.size())}, torch::TensorOptions().dtype(torch::kInt32)).to(torch::kCUDA);
 
-    return {image, contrib, final_tau, patch_range_per_tile, gsid_per_patch_torch};
+    return {image, contrib, final_tau, patch_range_per_tile, gsid_per_patch_tensor};
 }
 
 std::vector<torch::Tensor> splatB(
@@ -112,7 +119,7 @@ std::vector<torch::Tensor> splatB(
     const torch::Tensor contrib,
     const torch::Tensor final_tau, 
     const torch::Tensor patch_range_per_tile, 
-    const torch::Tensor gs_id_per_patch,
+    const torch::Tensor gsid_per_patch,
     const torch::Tensor dloss_dgammas)
 {
     // backward version of splat.
@@ -132,19 +139,18 @@ std::vector<torch::Tensor> splatB(
         width,
         height,
         patch_range_per_tile.contiguous().data_ptr<int>(),
-        gs_id_per_patch.contiguous().data_ptr<int>(),
+        gsid_per_patch.contiguous().data_ptr<int>(),
         us.contiguous().data_ptr<float>(),
         cinv2ds.contiguous().data_ptr<float>(),
         alphas.contiguous().data_ptr<float>(),
         colors.contiguous().data_ptr<float>(),
-        contrib.contiguous().data_ptr<int>(),
         final_tau.contiguous().data_ptr<float>(),
+        contrib.contiguous().data_ptr<int>(),
         dloss_dgammas.contiguous().data_ptr<float>(),
-        dloss_dus.contiguous().data_ptr<float>(),
-        dloss_dcinv2ds.contiguous().data_ptr<float>(),
+        (float2*)dloss_dus.contiguous().data_ptr<float>(),
+        (float3*)dloss_dcinv2ds.contiguous().data_ptr<float>(),
         dloss_dalphas.contiguous().data_ptr<float>(),
         dloss_dcolors.contiguous().data_ptr<float>());
-    cudaDeviceSynchronize();
     
    return {dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors};
 }
@@ -152,6 +158,7 @@ std::vector<torch::Tensor> splatB(
 
 std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
                                         const torch::Tensor scales,
+                                        const torch::Tensor depths,
                                         const bool calc_J)
 {
     auto float_opts = rots.options().dtype(torch::kFloat32);
@@ -172,10 +179,10 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
         gs_num,
         rots.contiguous().data_ptr<float>(),
         scales.contiguous().data_ptr<float>(),
+        depths.contiguous().data_ptr<float>(),
         cov3ds.contiguous().data_ptr<float>(),
         calc_J ? dcov3d_drots.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcov3d_dscales.contiguous().data_ptr<float>() : nullptr);
-    cudaDeviceSynchronize();
 
     if (calc_J)
     {
@@ -190,8 +197,11 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
 std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
                                         const torch::Tensor pcs,
                                         const torch::Tensor Rcw,
+                                        const torch::Tensor depths,
                                         const float focal_x,
                                         const float focal_y,
+                                        const float width,
+                                        const float height,
                                         const bool calc_J)
 {
     auto float_opts = pcs.options().dtype(torch::kFloat32);
@@ -208,17 +218,22 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
         dcov2d_dpcs = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     }
 
+    const float tan_fovx = width / (2 * focal_x);
+    const float tan_fovy = height / (2 * focal_y);
+
     computeCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         cov3ds.contiguous().data_ptr<float>(),
         pcs.contiguous().data_ptr<float>(),
         Rcw.contiguous().data_ptr<float>(),
+        depths.contiguous().data_ptr<float>(),
         focal_x,
         focal_y,
+        tan_fovx,
+        tan_fovy,
         cov2ds.contiguous().data_ptr<float>(),
         calc_J ? dcov2d_dcov3ds.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcov2d_dpcs.contiguous().data_ptr<float>(): nullptr);
-    cudaDeviceSynchronize();
 
     if (calc_J)
     {
@@ -228,7 +243,6 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
     {
         return {cov2ds};
     }
-
 }
 
 std::vector<torch::Tensor> project(const torch::Tensor pws,
@@ -245,6 +259,7 @@ std::vector<torch::Tensor> project(const torch::Tensor pws,
     int gs_num = pws.sizes()[0]; 
     torch::Tensor us = torch::full({gs_num, 2}, 0.0, float_opts);
     torch::Tensor pcs = torch::full({gs_num, 3}, 0.0, float_opts);
+    torch::Tensor depths = torch::full({gs_num}, 0.0, float_opts);
     torch::Tensor du_dpcs;
     if (calc_J)
     {
@@ -261,16 +276,16 @@ std::vector<torch::Tensor> project(const torch::Tensor pws,
         center_y,
         us.contiguous().data_ptr<float>(),
         pcs.contiguous().data_ptr<float>(),
+        depths.contiguous().data_ptr<float>(),
         calc_J ? du_dpcs.contiguous().data_ptr<float>() : nullptr);
-    cudaDeviceSynchronize();
 
     if (calc_J)
     {
-        return {us, pcs, du_dpcs};
+        return {us, pcs, depths, du_dpcs};
     }
     else
     {
-        return {us, pcs};
+        return {us, pcs, depths};
     }
 }
 
@@ -286,12 +301,14 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
     torch::Tensor dcolor_dshs;
     torch::Tensor dcolor_dpws;
 
+    //TODO(liu): change max_level by sh_dim
+
     if (calc_J)
     {
-        dcolor_dshs = torch::full({gs_num, 1, sh_dim/3}, 0.0, float_opts);
+        dcolor_dshs = torch::full({gs_num, 1, sh_dim / 3}, 0.0, float_opts);
         dcolor_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     }
-    
+
     sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         shs.contiguous().data_ptr<float>(),
@@ -301,7 +318,6 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
         colors.contiguous().data_ptr<float>(),
         calc_J ? dcolor_dshs.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcolor_dpws.contiguous().data_ptr<float>() : nullptr);
-    cudaDeviceSynchronize();
 
     if (calc_J)
     {
@@ -314,13 +330,14 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
 }
 
 std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
+                                        const torch::Tensor depths,
                                         const bool calc_J)
 {
     auto float_opts = cov2ds.options().dtype(torch::kFloat32);
     auto int_opts = cov2ds.options().dtype(torch::kInt32);
     int gs_num = cov2ds.sizes()[0];
     torch::Tensor cinv2ds = torch::full({gs_num, 3}, 0.0, float_opts);
-    torch::Tensor areas = torch::full({gs_num, 2}, 0.0, float_opts);
+    torch::Tensor areas = torch::full({gs_num, 2}, 0.0, int_opts);
     torch::Tensor dcinv2d_dcov2d;
 
     if (calc_J)
@@ -331,10 +348,10 @@ std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
     inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         cov2ds.contiguous().data_ptr<float>(),
+        depths.contiguous().data_ptr<float>(),
         cinv2ds.contiguous().data_ptr<float>(),
-        areas.contiguous().data_ptr<float>(),
+        areas.contiguous().data_ptr<int>(),
         calc_J ? dcinv2d_dcov2d.contiguous().data_ptr<float>() : nullptr);
-    cudaDeviceSynchronize();
 
     if (calc_J)
     {

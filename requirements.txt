@@ -4,3 +4,4 @@ pyqt5
 pyqtgraph
 pyopengl
 plyfile
+faiss-cpu
