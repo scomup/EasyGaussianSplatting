@@ -12,8 +12,17 @@ import gsplatcu as gsc
 
 
 if __name__ == "__main__":
-    path = '/home/liu/bag/gaussian-splatting/tandt/train'
-    gs_set = GSplatDataset(path)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--path", help="the path of dataset")
+    args = parser.parse_args()
+
+    if args.path:
+        print("Try to training %s ..." % ply_fn)
+        gs_set = GSplatDataset(path)
+    else:
+        print("not path of dataset.")
+        exit(0)
 
     gs = gs_set.gs
 
