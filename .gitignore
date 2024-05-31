@@ -3,5 +3,4 @@
 *.so
 */build/*
 .vscode/settings.json
-data
-*.npy
+data/*.npy
