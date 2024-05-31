@@ -53,16 +53,13 @@ if __name__ == "__main__":
     width = int(979)  # 1957  # 979
     height = int(546)  # 1091  # 546
 
-    focal_x = 581.6273640151177
-    focal_y = 578.140202494143
-    center_x = width / 2
-    center_y = height / 2
+    fx = 581.6273640151177
+    fy = 578.140202494143
+    cx = width / 2
+    cy = height / 2
 
     twc = np.linalg.inv(Rcw) @ (-tcw)
 
-    K = np.array([[focal_x, 0, center_x],
-                  [0, focal_y, center_y],
-                  [0, 0, 1.]])
 
     fig, ax = plt.subplots()
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)
@@ -72,7 +69,7 @@ if __name__ == "__main__":
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = project(pws, Rcw, tcw, K)
+    us, pcs = project(pws, Rcw, tcw, fx, fy, cx, cy)
 
     depths = pcs[:, 2]
 
@@ -80,7 +77,7 @@ if __name__ == "__main__":
     cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2ds = compute_cov_2d(pcs, K, cov3ds, Rcw)
+    cov2ds = compute_cov_2d(pcs, fx, fy, width, height, cov3ds, Rcw)
 
     # step4. get color info
     colors = sh2color(gs['sh'], pws, twc)
@@ -95,5 +92,5 @@ if __name__ == "__main__":
     # pil_img = Image.fromarray((np.clip(image, 0, 1)*255).astype(np.uint8))
     # print(pil_img.mode)
     # pil_img.save('test.png')
-
+    #  plt.imshow(image)
     plt.show()

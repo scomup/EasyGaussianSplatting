@@ -14,11 +14,11 @@ from gsnet import GS2DNet
 from gsplat.gausplat_dataset import *
 
 
-def create_guassian2d_data(gs, Rcw, tcw, K):
+def create_guassian2d_data(gs, Rcw, tcw, fx, fy, cx, cy, width, height):
     pws = gs['pw']
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = project(pws, Rcw, tcw, K)
+    us, pcs = project(pws, Rcw, tcw, fx, fy, cx, cy)
 
     depths = pcs[:, 2]
 
@@ -26,9 +26,11 @@ def create_guassian2d_data(gs, Rcw, tcw, K):
     cov3ds = compute_cov_3d(gs['scale'], gs['rot'])
 
     # step3. Project the 3D Gaussian to 2d image as a 2d Gaussian.
-    cov2ds = compute_cov_2d(pcs, K, cov3ds, Rcw)
+    cov2ds = compute_cov_2d(pcs, fx, fy, width, height, cov3ds, Rcw)
 
     cinv2ds, areas = inverse_cov2d(cov2ds)
+
+    areas[np.where(depths < 0.2)[0], :] = 0
 
     # step4. get color info
     colors = sh2color(gs['sh'], pws, twc=np.linalg.inv(Rcw) @ (-tcw))
@@ -53,7 +55,7 @@ if __name__ == "__main__":
     height, width = cam0.height, cam0.width
 
     us, cinv2ds, alphas, colors, depths, areas = create_guassian2d_data(
-        gs, Rcw, tcw, K)
+        gs, Rcw, tcw, cam0.fx, cam0.fy, cam0.cx, cam0.cy, height, width)
     us = torch.from_numpy(us).type(torch.float32).to("cuda").requires_grad_()
     cinv2ds = torch.from_numpy(cinv2ds).type(
         torch.float32).to("cuda").requires_grad_()
@@ -62,8 +64,8 @@ if __name__ == "__main__":
     depths = torch.from_numpy(depths).type(torch.float32).to("cuda")
     colors = torch.from_numpy(colors).type(
         torch.float32).to("cuda").requires_grad_()
-    areas = torch.from_numpy(areas).type(torch.float32).to("cuda")
-    image, contrib, final_tau, patch_offset_per_tile, gs_id_per_patch =\
+    areas = torch.from_numpy(areas).type(torch.int32).to("cuda")
+    image, contrib, final_tau, patch_range_per_tile, gsid_per_patch =\
         gsc.splat(height, width, us,
                   cinv2ds, alphas, depths, colors, areas)
 
@@ -73,7 +75,7 @@ if __name__ == "__main__":
     image_gt = torchvision.transforms.functional.resize(
         image_gt, [height, width]) / 255.
 
-    optimizer = optim.Adam([us, cinv2ds, alphas, colors], lr=0.005, eps=1e-15)
+    optimizer = optim.Adam([us, cinv2ds, alphas, colors], lr=0.001, eps=1e-15)
 
     fig, ax = plt.subplots()
     array = np.zeros(shape=(height, width, 3), dtype=np.uint8)

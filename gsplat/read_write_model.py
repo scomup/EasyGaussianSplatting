@@ -218,7 +218,7 @@ def read_points_bin_as_gau(path_to_model_file):
         index = faiss.IndexFlatL2(D)
         index.add(pws)
         distances, indices = index.search(pws, 2)
-        distances = np.clip(distances[:, 1], 0.1, 3)
+        distances = np.clip(distances[:, 1], 0.01, 3)
         scales = distances[:, np.newaxis].repeat(3, 1)
 
         dtypes = [('pw', '<f4', (3,)),

@@ -105,14 +105,17 @@ if __name__ == "__main__":
     tcw_gpu = torch.from_numpy(tcw).type(torch.float32).to('cuda')
     twc_gpu = torch.from_numpy(twc).type(torch.float32).to('cuda')
 
-    us_gpu, pcs_gpu, du_dpcs_gpu = gsc.project(
+    us_gpu, pcs_gpu, _, du_dpcs_gpu = gsc.project(
         pws_gpu, Rcw_gpu, tcw_gpu, fx, fy, cx, cy, True)
     print("%s test us_gpu" % check(us_gpu.cpu().numpy(), us))
     print("%s test pcs_gpu" % check(pcs_gpu.cpu().numpy(), pcs))
     print("%s test du_dpcs_gpu" % check(du_dpcs_gpu.cpu().numpy(), du_dpcs))
 
+    depths_gpu = torch.from_numpy(
+        np.array([1, 2, 3, 4])).type(torch.float32).to('cuda')
+
     cov3ds_gpu, dcov3d_drots_gpu, dcov3d_dscales_gpu = gsc.computeCov3D(
-        rots_gpu, scales_gpu, True)
+        rots_gpu, scales_gpu, depths_gpu, True)
     print("%s test cov3ds_gpu" % check(cov3ds_gpu.cpu().numpy(), cov3ds))
     print("%s test dcov3d_drots_gpu" %
           check(dcov3d_drots_gpu.cpu().numpy(), dcov3d_drots))
@@ -120,7 +123,7 @@ if __name__ == "__main__":
           check(dcov3d_dscales_gpu.cpu().numpy(), dcov3d_dscales))
 
     cov2ds_gpu, dcov2d_dcov3ds_gpu, dcov2d_dpcs_gpu = gsc.computeCov2D(
-        cov3ds_gpu, pcs_gpu, Rcw_gpu, fx, fy, True)
+        cov3ds_gpu, pcs_gpu, Rcw_gpu, depths_gpu, fx, fy, width, height, True)
     print("%s test cov2ds_gpu" % check(cov2ds_gpu.cpu().numpy(), cov2ds))
     print("%s test dcov2d_dcov3ds_gpu" %
           check(dcov2d_dcov3ds_gpu.cpu().numpy(), dcov2d_dcov3ds))
@@ -132,22 +135,26 @@ if __name__ == "__main__":
     print("%s test colors_gpu" % check(colors_gpu.cpu().numpy(), colors))
     print("%s test dcolor_dshs_gpu" %
           check(dcolor_dshs_gpu.cpu().numpy(), dcolor_dshs))
-    print("%s test dcolor_dshs_gpu" %
+    print("%s test dcolor_dpws_gpu" %
           check(dcolor_dpws_gpu.cpu().numpy(), dcolor_dpws))
 
     cinv2ds_gpu, areas_gpu, dcinv2d_dcov2ds_gpu = gsc.inverseCov2D(
-        cov2ds_gpu, True)
+        cov2ds_gpu, depths_gpu, True)
     print("%s test cinv2d_gpu" % check(cinv2ds_gpu.cpu().numpy(), cinv2ds))
     print("%s test dcinv2d_dcov2ds_gpu" %
           check(dcinv2d_dcov2ds_gpu.cpu().numpy(), dcinv2d_dcov2ds))
 
-    depths_gpu = torch.from_numpy(
-        np.array([1, 2, 3, 4])).type(torch.float32).to('cuda')
     image_gpu, contrib_gpu, final_tau_gpu, patch_range_per_tile_gpu, gsid_per_patch_gpu =\
         gsc.splat(height, width, us_gpu, cinv2ds_gpu,
                   alphas_gpu, depths_gpu, colors_gpu, areas_gpu)
     print("%s test image_gpu" %
-          check(image_gpu.cpu().numpy(), image.transpose([2, 0, 1])))
+          check(image_gpu.cpu().numpy().transpose([1, 2, 0]), image))
+
+    # f, axarr = plt.subplots(1,2)
+    # axarr[0].imshow(image)
+    # axarr[1].imshow(image_gpu.cpu().numpy().transpose([1, 2, 0]))
+    # plt.show()
+    # exit()
 
     _, dloss_dgammas = get_loss(image, image_gt)
     dloss_dgammas_gpu = torch.from_numpy(

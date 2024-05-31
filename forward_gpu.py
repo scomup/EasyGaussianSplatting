@@ -74,20 +74,19 @@ if __name__ == "__main__":
 
     # step1. Transform pw to camera frame,
     # and project it to iamge.
-    us, pcs = gsc.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
-    depths = pcs[:, 2]
+    us, pcs, depths = gsc.project(pws, Rcw, tcw, focal_x, focal_y, center_x, center_y, False)
 
     # step2. Calcuate the 3d Gaussian.
-    cov3ds = gsc.computeCov3D(rots, scales, False)[0]
+    cov3ds = gsc.computeCov3D(rots, scales, depths, False)[0]
 
     # step3. Calcuate the 2d Gaussian.
-    cov2ds = gsc.computeCov2D(cov3ds, pcs, Rcw, focal_x, focal_y, False)[0]
+    cov2ds = gsc.computeCov2D(cov3ds, pcs, depths, Rcw, focal_x, focal_y, height, width, False)[0]
 
     # step4. get color info
     colors = gsc.sh2Color(shs, pws, twc, False)[0]
 
     # step5. Blend the 2d Gaussian to image
-    cinv2ds, areas = gsc.inverseCov2D(cov2ds, False)
+    cinv2ds, areas = gsc.inverseCov2D(cov2ds, depths, False)
     image = gsc.splat(height, width, us, cinv2ds, alphas, depths, colors, areas)[0]
     image = image.to('cpu').numpy()
 
