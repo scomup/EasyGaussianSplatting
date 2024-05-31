@@ -18,8 +18,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.path:
-        print("Try to training %s ..." % ply_fn)
-        gs_set = GSplatDataset(path)
+        print("Try to training %s ..." % args.path)
+        gs_set = GSplatDataset(args.path)
     else:
         print("not path of dataset.")
         exit(0)

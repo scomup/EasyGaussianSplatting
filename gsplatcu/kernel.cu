@@ -410,49 +410,18 @@ __global__ void computeCov3D(
         Matrix<6, 4> dcov3d_drot = dcov3d_dm * dm_rot;
         // backward.pdf (B.2b)
         Matrix<6, 3> dcov3d_dscale = dcov3d_dm * dm_scale;
-        dcov3d_drots[i * 24 + 0] = dcov3d_drot(0, 0);
-        dcov3d_drots[i * 24 + 1] = dcov3d_drot(0, 1);
-        dcov3d_drots[i * 24 + 2] = dcov3d_drot(0, 2);
-        dcov3d_drots[i * 24 + 3] = dcov3d_drot(0, 3);
-        dcov3d_drots[i * 24 + 4] = dcov3d_drot(1, 0);
-        dcov3d_drots[i * 24 + 5] = dcov3d_drot(1, 1);
-        dcov3d_drots[i * 24 + 6] = dcov3d_drot(1, 2);
-        dcov3d_drots[i * 24 + 7] = dcov3d_drot(1, 3);
-        dcov3d_drots[i * 24 + 8] = dcov3d_drot(2, 0);
-        dcov3d_drots[i * 24 + 9] = dcov3d_drot(2, 1);
-        dcov3d_drots[i * 24 + 10] = dcov3d_drot(2, 2);
-        dcov3d_drots[i * 24 + 11] = dcov3d_drot(2, 3);
-        dcov3d_drots[i * 24 + 12] = dcov3d_drot(3, 0);
-        dcov3d_drots[i * 24 + 13] = dcov3d_drot(3, 1);
-        dcov3d_drots[i * 24 + 14] = dcov3d_drot(3, 2);
-        dcov3d_drots[i * 24 + 15] = dcov3d_drot(3, 3);
-        dcov3d_drots[i * 24 + 16] = dcov3d_drot(4, 0);
-        dcov3d_drots[i * 24 + 17] = dcov3d_drot(4, 1);
-        dcov3d_drots[i * 24 + 18] = dcov3d_drot(4, 2);
-        dcov3d_drots[i * 24 + 19] = dcov3d_drot(4, 3);
-        dcov3d_drots[i * 24 + 20] = dcov3d_drot(5, 0);
-        dcov3d_drots[i * 24 + 21] = dcov3d_drot(5, 1);
-        dcov3d_drots[i * 24 + 22] = dcov3d_drot(5, 2);
-        dcov3d_drots[i * 24 + 23] = dcov3d_drot(5, 3);
 
-        dcov3d_dscales[i * 18 + 0] = dcov3d_dscale(0, 0);
-        dcov3d_dscales[i * 18 + 1] = dcov3d_dscale(0, 1);
-        dcov3d_dscales[i * 18 + 2] = dcov3d_dscale(0, 2);
-        dcov3d_dscales[i * 18 + 3] = dcov3d_dscale(1, 0);
-        dcov3d_dscales[i * 18 + 4] = dcov3d_dscale(1, 1);
-        dcov3d_dscales[i * 18 + 5] = dcov3d_dscale(1, 2);
-        dcov3d_dscales[i * 18 + 6] = dcov3d_dscale(2, 0);
-        dcov3d_dscales[i * 18 + 7] = dcov3d_dscale(2, 1);
-        dcov3d_dscales[i * 18 + 8] = dcov3d_dscale(2, 2);
-        dcov3d_dscales[i * 18 + 9] = dcov3d_dscale(3, 0);
-        dcov3d_dscales[i * 18 + 10] = dcov3d_dscale(3, 1);
-        dcov3d_dscales[i * 18 + 11] = dcov3d_dscale(3, 2);
-        dcov3d_dscales[i * 18 + 12] = dcov3d_dscale(4, 0);
-        dcov3d_dscales[i * 18 + 13] = dcov3d_dscale(4, 1);
-        dcov3d_dscales[i * 18 + 14] = dcov3d_dscale(4, 2);
-        dcov3d_dscales[i * 18 + 15] = dcov3d_dscale(5, 0);
-        dcov3d_dscales[i * 18 + 16] = dcov3d_dscale(5, 1);
-        dcov3d_dscales[i * 18 + 17] = dcov3d_dscale(5, 2);
+        // copy to global memory
+        const int offset_dr = i * 24;
+        for (int j = 0; j < 24; j++)
+        {
+            dcov3d_drots[offset_dr + j] = dcov3d_drot(j);
+        }
+        const int offset_ds = i * 18;
+        for (int j = 0; j < 18; j++)
+        {
+            dcov3d_dscales[offset_ds + j] = dcov3d_dscale(j);
+        }
     }
 }
 
@@ -569,34 +538,17 @@ __global__ void computeCov2D(
         // backward.pdf (B.3b)
         Matrix<3, 3> dcov2d_dpc = dcov2d_dm * dm_dpc;
 
-        dcov2d_dpcs[i * 9 + 0] = dcov2d_dpc(0, 0);
-        dcov2d_dpcs[i * 9 + 1] = dcov2d_dpc(0, 1);
-        dcov2d_dpcs[i * 9 + 2] = dcov2d_dpc(0, 2);
-        dcov2d_dpcs[i * 9 + 3] = dcov2d_dpc(1, 0);
-        dcov2d_dpcs[i * 9 + 4] = dcov2d_dpc(1, 1);
-        dcov2d_dpcs[i * 9 + 5] = dcov2d_dpc(1, 2);
-        dcov2d_dpcs[i * 9 + 6] = dcov2d_dpc(2, 0);
-        dcov2d_dpcs[i * 9 + 7] = dcov2d_dpc(2, 1);
-        dcov2d_dpcs[i * 9 + 8] = dcov2d_dpc(2, 2);
-
-        dcov2d_dcov3ds[i * 18 + 0] = dcov2d_dcov3d(0, 0);
-        dcov2d_dcov3ds[i * 18 + 1] = dcov2d_dcov3d(0, 1);
-        dcov2d_dcov3ds[i * 18 + 2] = dcov2d_dcov3d(0, 2);
-        dcov2d_dcov3ds[i * 18 + 3] = dcov2d_dcov3d(0, 3);
-        dcov2d_dcov3ds[i * 18 + 4] = dcov2d_dcov3d(0, 4);
-        dcov2d_dcov3ds[i * 18 + 5] = dcov2d_dcov3d(0, 5);
-        dcov2d_dcov3ds[i * 18 + 6] = dcov2d_dcov3d(1, 0);
-        dcov2d_dcov3ds[i * 18 + 7] = dcov2d_dcov3d(1, 1);
-        dcov2d_dcov3ds[i * 18 + 8] = dcov2d_dcov3d(1, 2);
-        dcov2d_dcov3ds[i * 18 + 9] = dcov2d_dcov3d(1, 3);
-        dcov2d_dcov3ds[i * 18 + 10] = dcov2d_dcov3d(1, 4);
-        dcov2d_dcov3ds[i * 18 + 11] = dcov2d_dcov3d(1, 5);
-        dcov2d_dcov3ds[i * 18 + 12] = dcov2d_dcov3d(2, 0);
-        dcov2d_dcov3ds[i * 18 + 13] = dcov2d_dcov3d(2, 1);
-        dcov2d_dcov3ds[i * 18 + 14] = dcov2d_dcov3d(2, 2);
-        dcov2d_dcov3ds[i * 18 + 15] = dcov2d_dcov3d(2, 3);
-        dcov2d_dcov3ds[i * 18 + 16] = dcov2d_dcov3d(2, 4);
-        dcov2d_dcov3ds[i * 18 + 17] = dcov2d_dcov3d(2, 5);
+        // copy to global memory
+        const int offset_dpc = i * 9;
+        for (int j = 0; j < 9; j++)
+        {
+            dcov2d_dpcs[offset_dpc + j] = dcov2d_dpc(j);
+        }
+        const int offset_dcov3d = i * 18;
+        for (int j = 0; j < 18; j++)
+        {
+            dcov2d_dcov3ds[offset_dcov3d + j] = dcov2d_dcov3d(j);
+        }
     }
 }
 
@@ -765,6 +717,9 @@ __global__ void sh2Color(
             }
         }
     }
+    colors[3 * i + 0] = color.x;
+    colors[3 * i + 1] = color.y;
+    colors[3 * i + 2] = color.z;
 
     // calc the jacobians
     if (dcolor_dshs != nullptr && dcolor_dpws != nullptr)
@@ -842,19 +797,12 @@ __global__ void sh2Color(
                               dc_dr0.y, dc_dr1.y, dc_dr2.y,
                               dc_dr0.z, dc_dr1.z, dc_dr2.z};
         Matrix<3, 3> dcolor_dpw = dc_dr * dr_dpw;
-        dcolor_dpws[9 * i + 0] = dcolor_dpw(0, 0);
-        dcolor_dpws[9 * i + 1] = dcolor_dpw(0, 1);
-        dcolor_dpws[9 * i + 2] = dcolor_dpw(0, 2);
-        dcolor_dpws[9 * i + 3] = dcolor_dpw(1, 0);
-        dcolor_dpws[9 * i + 4] = dcolor_dpw(1, 1);
-        dcolor_dpws[9 * i + 5] = dcolor_dpw(1, 2);
-        dcolor_dpws[9 * i + 6] = dcolor_dpw(2, 0);
-        dcolor_dpws[9 * i + 7] = dcolor_dpw(2, 1);
-        dcolor_dpws[9 * i + 8] = dcolor_dpw(2, 2);
+        const int offset_dpw = i * 9;
+        for (int j = 0; j < 9; j++)
+        {
+            dcolor_dpws[offset_dpw + j] = dcolor_dpw(j);
+        }
     }
-    colors[3 * i + 0] = color.x;
-    colors[3 * i + 1] = color.y;
-    colors[3 * i + 2] = color.z;
 }
 
 __global__ void __launch_bounds__(BLOCK *BLOCK)
