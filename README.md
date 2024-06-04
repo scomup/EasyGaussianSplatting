@@ -1,4 +1,4 @@
-# Simple Gaussian Splatting
+# Easy Gaussian Splatting
 
 ## What is this? 
 
