@@ -6,6 +6,11 @@ For learning purposes, we offer an unofficial implementation of [3D Gaussian Spl
 for Real-Time Radiance Field Rendering](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/). Additionally, we provide a set of tools and documentation to facilitate the study of 3D Gaussian Splatting.
 
 
+## Why this name?
+
+We want our implementation to be easy to use, the code to be easy to read, and the documentation to be easy to understand. Therefore, we named our project "EasyGaussianSplatting".
+
+
 ## Overview 
 
 * Detailed documentation to demonstrate the mathematical principles of 3D Gaussian Splatting
