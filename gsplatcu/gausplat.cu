@@ -59,6 +59,7 @@ std::vector<torch::Tensor> splat(
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
         thrust::raw_pointer_cast(patch_num_per_gs.data()));
+    CHECK_CUDA(DEBUG);
 
     thrust::inclusive_scan(patch_num_per_gs.begin(), patch_num_per_gs.end(), patch_offset_per_gs.begin());
 
@@ -76,6 +77,7 @@ std::vector<torch::Tensor> splat(
         grid,
         thrust::raw_pointer_cast(patch_keys.data()),
         thrust::raw_pointer_cast(gsid_per_patch.data()));
+    CHECK_CUDA(DEBUG);
 
     thrust::sort_by_key(patch_keys.begin(), patch_keys.end(), gsid_per_patch.begin());
     const uint tile_num = grid.x * grid.y;
@@ -101,6 +103,7 @@ std::vector<torch::Tensor> splat(
         image.contiguous().data_ptr<float>(),
         contrib.contiguous().data_ptr<int>(),
         final_tau.contiguous().data_ptr<float>());
+    CHECK_CUDA(DEBUG);
 
     torch::Tensor gsid_per_patch_tensor = torch::from_blob(thrust::raw_pointer_cast(gsid_per_patch.data()), 
         {static_cast<long>(gsid_per_patch.size())}, torch::TensorOptions().dtype(torch::kInt32)).to(torch::kCUDA);
@@ -151,7 +154,7 @@ std::vector<torch::Tensor> splatB(
         (float3*)dloss_dcinv2ds.contiguous().data_ptr<float>(),
         dloss_dalphas.contiguous().data_ptr<float>(),
         dloss_dcolors.contiguous().data_ptr<float>());
-    
+    CHECK_CUDA(DEBUG);
    return {dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors};
 }
 
@@ -183,6 +186,7 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
         cov3ds.contiguous().data_ptr<float>(),
         calc_J ? dcov3d_drots.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcov3d_dscales.contiguous().data_ptr<float>() : nullptr);
+    CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
@@ -234,6 +238,7 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
         cov2ds.contiguous().data_ptr<float>(),
         calc_J ? dcov2d_dcov3ds.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcov2d_dpcs.contiguous().data_ptr<float>(): nullptr);
+    CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
@@ -278,6 +283,7 @@ std::vector<torch::Tensor> project(const torch::Tensor pws,
         pcs.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
         calc_J ? du_dpcs.contiguous().data_ptr<float>() : nullptr);
+    CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
@@ -318,6 +324,7 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
         colors.contiguous().data_ptr<float>(),
         calc_J ? dcolor_dshs.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcolor_dpws.contiguous().data_ptr<float>() : nullptr);
+    CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
@@ -352,6 +359,7 @@ std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
         cinv2ds.contiguous().data_ptr<float>(),
         areas.contiguous().data_ptr<int>(),
         calc_J ? dcinv2d_dcov2d.contiguous().data_ptr<float>() : nullptr);
+    CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {

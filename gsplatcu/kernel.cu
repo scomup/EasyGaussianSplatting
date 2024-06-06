@@ -851,17 +851,22 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
     __shared__ float3 shared_color[BLOCK_SIZE];
     __shared__ int shared_gsid[BLOCK_SIZE];
 
-
     float3 gamma_cur2last = {0, 0, 0};
 
-    float3 dloss_dgamma = {dloss_dgammas[0 * height * width + pix_idx],
-                           dloss_dgammas[1 * height * width + pix_idx],
-                           dloss_dgammas[2 * height * width + pix_idx]};
+    float3 dloss_dgamma = {0, 0, 0};
+
+    float tau = 0;
+    int cont = 0;
+    if (inside)
+    {
+        dloss_dgamma = {dloss_dgammas[0 * height * width + pix_idx],
+                        dloss_dgammas[1 * height * width + pix_idx],
+                        dloss_dgammas[2 * height * width + pix_idx]};
+        tau = final_tau[pix_idx];
+        cont = contrib[pix_idx];
+    }
 
     float3 last_color = {0, 0, 0};
-
-    float tau = inside ? final_tau[pix_idx] : 0;
-    int cont = contrib[pix_idx];
 
     for (int i = 0; i < gs_num; i++)
     {

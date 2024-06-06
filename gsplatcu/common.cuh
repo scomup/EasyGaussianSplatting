@@ -14,6 +14,17 @@
 #define BLOCK_SIZE (BLOCK * BLOCK)
 #define DIV_ROUND_UP(X, Y) ((X) + (Y) - 1) / (Y)
 
+#define DEBUG 0
+
+#define CHECK_CUDA(debug) \
+if(debug) { \
+cudaError_t err = cudaDeviceSynchronize(); \
+if (err != cudaSuccess) { \
+std::cerr << "\n[CUDA ERROR] in " << __FILE__ << "\nLine " << __LINE__ << ": " << cudaGetErrorString(err) << std::endl; \
+} \
+}
+
+
 // Spherical harmonics coefficients
 #define SH_C0_0 (0.28209479177387814)
 #define SH_C1_0 (-0.4886025119029199)
