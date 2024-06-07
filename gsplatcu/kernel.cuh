@@ -90,38 +90,38 @@ __global__ void computeCov3D(
 __global__ void computeCov2D(
     int32_t gs_num,
     const float *__restrict__ cov3ds,
-    const float *__restrict__ pcs,
+    const float3 *__restrict__ pcs,
     const float *__restrict__ Rcw,
     const float *__restrict__ depths,
     const float focal_x,
     const float focal_y,
     const float tan_fovx,
     const float tan_fovy,
-    float *__restrict__ cov2ds,
+    float3 *__restrict__ cov2ds,
     float *__restrict__ dcov2d_dcov3ds = nullptr,
     float *__restrict__ dcov2d_dpcs = nullptr);
 
 __global__ void project(
     int32_t gs_num,
-    const float *__restrict__ pws,
+    const float3 *__restrict__ pws,
     const float *__restrict__ Rcw,
-    const float *__restrict__ tcw,
+    const float3 *__restrict__ tcw,
     const float focal_x,
     const float focal_y,
     const float center_x,
     const float center_y,
-    float *__restrict__ us,
-    float *__restrict__ pcs,
+    float2 *__restrict__ us,
+    float3 *__restrict__ pcs,
     float *__restrict__ depths,
     float *__restrict__ du_dpcs = nullptr);
 
 __global__ void sh2Color(
     int32_t gs_num,
-    const float *__restrict__ shs,
-    const float *__restrict__ pws,
-    const float *__restrict__ twc,
-    const int sh_dim,
-    float *__restrict__ colors,
+    const float3 *__restrict__ shs,
+    const float3 *__restrict__ pws,
+    const float3 *__restrict__ twc,
+    const int sh_dim3,
+    float3 *__restrict__ colors,
     float *__restrict__ dcolor_dshs = nullptr,
     float *__restrict__ dcolor_dpws = nullptr);
 

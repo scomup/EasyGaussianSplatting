@@ -428,14 +428,14 @@ __global__ void computeCov3D(
 __global__ void computeCov2D(
     int32_t gs_num,
     const float *__restrict__ cov3ds,
-    const float *__restrict__ pcs,
+    const float3 *__restrict__ pcs,
     const float *__restrict__ Rcw,
     const float *__restrict__ depths,
     const float focal_x,
     const float focal_y,
     const float tan_fovx,
     const float tan_fovy,
-    float *__restrict__ cov2ds,
+    float3 *__restrict__ cov2ds,
     float *__restrict__ dcov2d_dcov3ds,
     float *__restrict__ dcov2d_dpcs)
 {
@@ -447,9 +447,10 @@ __global__ void computeCov2D(
     if(depths[i] < 0.2)
         return;
 
-    float x = pcs[i * 3 + 0];
-    float y = pcs[i * 3 + 1];
-    const float z = pcs[i * 3 + 2];
+    float3 pc = pcs[i];
+    float x = pc.x;
+    float y = pc.y;
+    const float z = pc.z;
     const float a = cov3ds[i * 6 + 0];
     const float b = cov3ds[i * 6 + 1];
     const float c = cov3ds[i * 6 + 2];
@@ -485,9 +486,9 @@ __global__ void computeCov2D(
     Matrix<2, 2> Sigma_prime = M * Sigma * M.transpose();
 
     // make sure the cov2d is not too small.
-    cov2ds[i * 3 + 0] = Sigma_prime(0, 0) + 0.3;
-    cov2ds[i * 3 + 1] = Sigma_prime(0, 1);
-    cov2ds[i * 3 + 2] = Sigma_prime(1, 1) + 0.3;
+    cov2ds[i] = {Sigma_prime(0, 0) + 0.3f,
+                 Sigma_prime(0, 1),
+                 Sigma_prime(1, 1) + 0.3f};
 
     if (dcov2d_dcov3ds != nullptr && dcov2d_dpcs != nullptr)
     {
@@ -554,15 +555,15 @@ __global__ void computeCov2D(
 
 __global__ void project(
     int32_t gs_num,
-    const float *__restrict__ pws,
+    const float3 *__restrict__ pws,
     const float *__restrict__ Rcw,
-    const float *__restrict__ tcw,
+    const float3 *__restrict__ tcw,
     const float focal_x,
     const float focal_y,
     const float center_x,
     const float center_y,
-    float *__restrict__ us,
-    float *__restrict__ pcs,
+    float2 *__restrict__ us,
+    float3 *__restrict__ pcs,
     float *__restrict__ depths,
     float *__restrict__ du_dpcs)
 {
@@ -571,9 +572,9 @@ __global__ void project(
     if (i >= gs_num)
         return;
 
-    Matrix<3, 1> pw = {pws[i * 3 + 0], pws[i * 3 + 1], pws[i * 3 + 2]};
+    Matrix<3, 1> pw = {pws[i].x, pws[i].y, pws[i].z};
 
-    Matrix<3, 1> t = {tcw[0], tcw[1], tcw[2]};
+    Matrix<3, 1> t = {tcw[0].x, tcw[0].y, tcw[0].z};
 
     Matrix<3, 3> R = {
         Rcw[0], Rcw[1], Rcw[2],
@@ -597,11 +598,8 @@ __global__ void project(
     const float u1 = y_focal_y * z_inv + center_y;
 
     // make sure the cov2d is not too small.
-    us[i * 2 + 0] = u0;
-    us[i * 2 + 1] = u1;
-    pcs[i * 3 + 0] = x;
-    pcs[i * 3 + 1] = y;
-    pcs[i * 3 + 2] = z;
+    us[i] = {u0, u1};
+    pcs[i] = {x, y, z};
     depths[i] = z;
 
     if (du_dpcs != nullptr)
@@ -616,11 +614,11 @@ __global__ void project(
 
 __global__ void sh2Color(
     int32_t gs_num,
-    const float *__restrict__ shs,
-    const float *__restrict__ pws,
-    const float *__restrict__ twc,
-    const int sh_dim,
-    float *__restrict__ colors,
+    const float3 *__restrict__ shs,
+    const float3 *__restrict__ pws,
+    const float3 *__restrict__ twc,
+    const int sh_dim3,
+    float3 *__restrict__ colors,
     float *__restrict__ dcolor_dshs,
     float *__restrict__ dcolor_dpws)
 {
@@ -640,29 +638,32 @@ __global__ void sh2Color(
     float3 sh10, sh11, sh12;
     float3 sh13, sh14, sh15;
 
-    float d0, d1, d2, normd;
+    float d0, d1, d2;
+    float normd_inv;
     float x, y, z;
     float xx, yy, zz, xy, xz, yz;
 
     // level0
-    float3 sh0 = {shs[i * sh_dim + 0], shs[i * sh_dim + 1], shs[i * sh_dim + 2]};
+    float3 sh0 = shs[i * sh_dim3 + 0];
     float3 color = {0.5f, 0.5f, 0.5f};
     color += SH_C0_0 * sh0;
 
-    if (sh_dim > 3)
+    if (sh_dim3 > 1)
     {
         // level1
-        d0 = pws[3 * i + 0] - twc[0];
-        d1 = pws[3 * i + 1] - twc[1];
-        d2 = pws[3 * i + 2] - twc[2];
-        normd = sqrt(d0 * d0 + d1 * d1 + d2 * d2);
-        x = d0 / normd;
-        y = d1 / normd;
-        z = d2 / normd;
+        float3 d = pws[i] - twc[0];
+        d0 = d.x;
+        d1 = d.y;
+        d2 = d.z;
+        normd_inv = 1. / sqrt(d0 * d0 + d1 * d1 + d2 * d2);
+        float3 dir = d * normd_inv;
+        x = dir.x;
+        y = dir.y;
+        z = dir.z;
 
-        sh1 = {shs[i * sh_dim + 3], shs[i * sh_dim + 4], shs[i * sh_dim + 5]};
-        sh2 = {shs[i * sh_dim + 6], shs[i * sh_dim + 7], shs[i * sh_dim + 8]};
-        sh3 = {shs[i * sh_dim + 9], shs[i * sh_dim + 10], shs[i * sh_dim + 11]};
+        sh1 = shs[i * sh_dim3 + 1];
+        sh2 = shs[i * sh_dim3 + 2];
+        sh3 = shs[i * sh_dim3 + 3];
 
         dc_dsh1 = SH_C1_0 * y;
         dc_dsh2 = SH_C1_1 * z;
@@ -670,7 +671,7 @@ __global__ void sh2Color(
 
         color += dc_dsh1 * sh1 + dc_dsh2 * sh2 + dc_dsh3 * sh3;
 
-        if (sh_dim > 12)
+        if (sh_dim3 > 4)
         {
             // level2
             xx = x * x;
@@ -679,11 +680,11 @@ __global__ void sh2Color(
             xy = x * y;
             yz = y * z;
             xz = x * z;
-            sh4 = {shs[i * sh_dim + 12], shs[i * sh_dim + 13], shs[i * sh_dim + 14]};
-            sh5 = {shs[i * sh_dim + 15], shs[i * sh_dim + 16], shs[i * sh_dim + 17]};
-            sh6 = {shs[i * sh_dim + 18], shs[i * sh_dim + 19], shs[i * sh_dim + 20]};
-            sh7 = {shs[i * sh_dim + 21], shs[i * sh_dim + 22], shs[i * sh_dim + 23]};
-            sh8 = {shs[i * sh_dim + 24], shs[i * sh_dim + 25], shs[i * sh_dim + 26]};
+            sh4 = shs[i * sh_dim3 + 4];
+            sh5 = shs[i * sh_dim3 + 5];
+            sh6 = shs[i * sh_dim3 + 6];
+            sh7 = shs[i * sh_dim3 + 7];
+            sh8 = shs[i * sh_dim3 + 8];
 
             dc_dsh4 = SH_C2_0 * xy;
             dc_dsh5 = SH_C2_1 * yz;
@@ -693,16 +694,16 @@ __global__ void sh2Color(
 
             color += dc_dsh4 * sh4 + dc_dsh5 * sh5 + dc_dsh6 * sh6 + dc_dsh7 * sh7 + dc_dsh8 * sh8;
 
-            if (sh_dim > 27)
+            if (sh_dim3 > 9)
             {
                 // level3
-                sh9 = {shs[i * sh_dim + 27], shs[i * sh_dim + 28], shs[i * sh_dim + 29]};
-                sh10 = {shs[i * sh_dim + 30], shs[i * sh_dim + 31], shs[i * sh_dim + 32]};
-                sh11 = {shs[i * sh_dim + 33], shs[i * sh_dim + 34], shs[i * sh_dim + 35]};
-                sh12 = {shs[i * sh_dim + 36], shs[i * sh_dim + 37], shs[i * sh_dim + 38]};
-                sh13 = {shs[i * sh_dim + 39], shs[i * sh_dim + 40], shs[i * sh_dim + 41]};
-                sh14 = {shs[i * sh_dim + 42], shs[i * sh_dim + 43], shs[i * sh_dim + 44]};
-                sh15 = {shs[i * sh_dim + 45], shs[i * sh_dim + 46], shs[i * sh_dim + 47]};
+                sh9 = shs[i * sh_dim3 + 9];
+                sh10 = shs[i * sh_dim3 + 10];
+                sh11 = shs[i * sh_dim3 + 11];
+                sh12 = shs[i * sh_dim3 + 12];
+                sh13 = shs[i * sh_dim3 + 13];
+                sh14 = shs[i * sh_dim3 + 14];
+                sh15 = shs[i * sh_dim3 + 15];
 
                 dc_dsh9 = SH_C3_0 * y * (3.0f * xx - yy);
                 dc_dsh10 = SH_C3_1 * xy * z;
@@ -717,9 +718,7 @@ __global__ void sh2Color(
             }
         }
     }
-    colors[3 * i + 0] = color.x;
-    colors[3 * i + 1] = color.y;
-    colors[3 * i + 2] = color.z;
+    colors[i] = color;
 
     // calc the jacobians
     if (dcolor_dshs != nullptr && dcolor_dpws != nullptr)
@@ -729,12 +728,10 @@ __global__ void sh2Color(
         float3 dc_dr2 = {0, 0, 0};
         Matrix<3, 3> dr_dpw = {0, 0, 0, 0, 0, 0, 0, 0, 0};
 
-        const int sh_dim_div3 = sh_dim / 3;
-        dcolor_dshs[sh_dim_div3 * i + 0] = SH_C0_0;
-        if (sh_dim > 3)
+        dcolor_dshs[sh_dim3 * i + 0] = SH_C0_0;
+        if (sh_dim3 > 1)
         {
-            const float normd3_inv = 1.f / (normd * normd * normd);
-            const float normd_inv = 1.f / normd;
+            const float normd3_inv = normd_inv * normd_inv * normd_inv;
             const float dr_dpw00 = -d0 * d0 * normd3_inv + normd_inv;
             const float dr_dpw11 = -d1 * d1 * normd3_inv + normd_inv;
             const float dr_dpw22 = -d2 * d2 * normd3_inv + normd_inv;
@@ -743,34 +740,34 @@ __global__ void sh2Color(
             const float dr_dpw12 = -d1 * d2 * normd3_inv;
             dr_dpw = {dr_dpw00, dr_dpw01, dr_dpw02, dr_dpw01, dr_dpw11, dr_dpw12, dr_dpw02, dr_dpw12, dr_dpw22};
 
-            dcolor_dshs[sh_dim_div3 * i + 1] = dc_dsh1;
-            dcolor_dshs[sh_dim_div3 * i + 2] = dc_dsh2;
-            dcolor_dshs[sh_dim_div3 * i + 3] = dc_dsh3;
+            dcolor_dshs[sh_dim3 * i + 1] = dc_dsh1;
+            dcolor_dshs[sh_dim3 * i + 2] = dc_dsh2;
+            dcolor_dshs[sh_dim3 * i + 3] = dc_dsh3;
 
             dc_dr0 += SH_C1_2 * sh3;
             dc_dr1 += SH_C1_0 * sh1;
             dc_dr2 += SH_C1_1 * sh2;
-            if (sh_dim > 12)
+            if (sh_dim3 > 4)
             {
-                dcolor_dshs[sh_dim_div3 * i + 4] = dc_dsh4;
-                dcolor_dshs[sh_dim_div3 * i + 5] = dc_dsh5;
-                dcolor_dshs[sh_dim_div3 * i + 6] = dc_dsh6;
-                dcolor_dshs[sh_dim_div3 * i + 7] = dc_dsh7;
-                dcolor_dshs[sh_dim_div3 * i + 8] = dc_dsh8;
+                dcolor_dshs[sh_dim3 * i + 4] = dc_dsh4;
+                dcolor_dshs[sh_dim3 * i + 5] = dc_dsh5;
+                dcolor_dshs[sh_dim3 * i + 6] = dc_dsh6;
+                dcolor_dshs[sh_dim3 * i + 7] = dc_dsh7;
+                dcolor_dshs[sh_dim3 * i + 8] = dc_dsh8;
 
                 dc_dr0 += SH_C2_0 * y * sh4 - SH_C2_2 * 2 * x * sh6 + SH_C2_3 * z * sh7 + SH_C2_4 * 2 * x * sh8;
                 dc_dr1 += SH_C2_0 * x * sh4 + SH_C2_1 * z * sh5 - SH_C2_2 * 2.0 * y * sh6 - SH_C2_4 * 2 * y * sh8;
                 dc_dr2 += SH_C2_1 * y * sh5 + SH_C2_2 * (4.0 * z) * sh6 + SH_C2_3 * x * sh7;
 
-                if (sh_dim > 27)
+                if (sh_dim3 > 9)
                 {
-                    dcolor_dshs[sh_dim_div3 * i + 9] = dc_dsh9;
-                    dcolor_dshs[sh_dim_div3 * i + 10] = dc_dsh10;
-                    dcolor_dshs[sh_dim_div3 * i + 11] = dc_dsh11;
-                    dcolor_dshs[sh_dim_div3 * i + 12] = dc_dsh12;
-                    dcolor_dshs[sh_dim_div3 * i + 13] = dc_dsh13;
-                    dcolor_dshs[sh_dim_div3 * i + 14] = dc_dsh14;
-                    dcolor_dshs[sh_dim_div3 * i + 15] = dc_dsh15;
+                    dcolor_dshs[sh_dim3 * i + 9 ] = dc_dsh9;
+                    dcolor_dshs[sh_dim3 * i + 10] = dc_dsh10;
+                    dcolor_dshs[sh_dim3 * i + 11] = dc_dsh11;
+                    dcolor_dshs[sh_dim3 * i + 12] = dc_dsh12;
+                    dcolor_dshs[sh_dim3 * i + 13] = dc_dsh13;
+                    dcolor_dshs[sh_dim3 * i + 14] = dc_dsh14;
+                    dcolor_dshs[sh_dim3 * i + 15] = dc_dsh15;
 
                     dc_dr0 += 6.0 * SH_C3_0 * sh9 * x * y +
                               SH_C3_1 * sh10 * yz -

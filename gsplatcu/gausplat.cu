@@ -228,14 +228,14 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
     computeCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
         cov3ds.contiguous().data_ptr<float>(),
-        pcs.contiguous().data_ptr<float>(),
+        (float3*)pcs.contiguous().data_ptr<float>(),
         Rcw.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
         focal_x,
         focal_y,
         tan_fovx,
         tan_fovy,
-        cov2ds.contiguous().data_ptr<float>(),
+        (float3*)cov2ds.contiguous().data_ptr<float>(),
         calc_J ? dcov2d_dcov3ds.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcov2d_dpcs.contiguous().data_ptr<float>(): nullptr);
     CHECK_CUDA(DEBUG);
@@ -272,15 +272,15 @@ std::vector<torch::Tensor> project(const torch::Tensor pws,
     }
     project<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        pws.contiguous().data_ptr<float>(),
+        (float3*)pws.contiguous().data_ptr<float>(),
         Rcw.contiguous().data_ptr<float>(),
-        tcw.contiguous().data_ptr<float>(),
+        (float3*)tcw.contiguous().data_ptr<float>(),
         focal_x,
         focal_y,
         center_x,
         center_y,
-        us.contiguous().data_ptr<float>(),
-        pcs.contiguous().data_ptr<float>(),
+        (float2*)us.contiguous().data_ptr<float>(),
+        (float3*)pcs.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
         calc_J ? du_dpcs.contiguous().data_ptr<float>() : nullptr);
     CHECK_CUDA(DEBUG);
@@ -302,7 +302,8 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
 {
     auto float_opts = pws.options().dtype(torch::kFloat32);
     int gs_num = pws.sizes()[0]; 
-    int sh_dim = shs.sizes()[1]; 
+    int sh_dim = shs.sizes()[1];
+    int sh_dim3 = shs.sizes()[1] / 3; 
     torch::Tensor colors = torch::full({gs_num, 3}, 0.0, float_opts);
     torch::Tensor dcolor_dshs;
     torch::Tensor dcolor_dpws;
@@ -311,17 +312,17 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
 
     if (calc_J)
     {
-        dcolor_dshs = torch::full({gs_num, 1, sh_dim / 3}, 0.0, float_opts);
+        dcolor_dshs = torch::full({gs_num, 1, sh_dim3}, 0.0, float_opts);
         dcolor_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     }
 
     sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        shs.contiguous().data_ptr<float>(),
-        pws.contiguous().data_ptr<float>(),
-        twc.contiguous().data_ptr<float>(),
-        sh_dim,
-        colors.contiguous().data_ptr<float>(),
+        (float3*)shs.contiguous().data_ptr<float>(),
+        (float3*)pws.contiguous().data_ptr<float>(),
+        (float3*)twc.contiguous().data_ptr<float>(),
+        sh_dim3,
+        (float3*)colors.contiguous().data_ptr<float>(),
         calc_J ? dcolor_dshs.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcolor_dpws.contiguous().data_ptr<float>() : nullptr);
     CHECK_CUDA(DEBUG);
