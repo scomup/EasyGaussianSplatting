@@ -41,7 +41,7 @@ __global__ void getRects(
 __global__ void getRanges(
     const int patch_num,
     const uint64_t *__restrict__ patch_keys,
-    int *__restrict__ patch_range_per_tile);
+    int2 *__restrict__ patch_range_per_tile);
 
 __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     const int width,
@@ -58,16 +58,16 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
 
 __global__ void inverseCov2D(
     int gs_num,
-    const float *__restrict__ cov2d,
+    const float3 *__restrict__ cov2d,
     float *__restrict__ depths,
-    float *__restrict__ cinv2d,
-    int *__restrict__ areas,
+    float3 *__restrict__ cinv2d,
+    int2 *__restrict__ areas,
     float *__restrict__ dcinv2d_dcov2ds = nullptr);
 
 __global__ void computeCov3D(
     int32_t gs_num,
-    const float *__restrict__ rots,
-    const float *__restrict__ scales,
+    const float4 *__restrict__ rots,
+    const float3 *__restrict__ scales,
     const float *__restrict__ depths,
     float *__restrict__ cov3ds,
     float *__restrict__ dcov3d_drots = nullptr,
@@ -115,7 +115,7 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
     drawB(
         const int width, 
         const int height,
-        const int2 *__restrict__ ranges,
+        const int2 *__restrict__ patch_range_per_tile,
         const int *__restrict__ gsid_per_patch,
         const float2 *__restrict__ us,
         const float3 *__restrict__ cinv2ds,

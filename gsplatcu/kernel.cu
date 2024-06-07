@@ -121,7 +121,7 @@ __global__ void getRects(
 __global__ void getRanges(
     const int patch_num,
     const uint64_t *__restrict__ patch_keys,
-    int *__restrict__ patch_range_per_tile)
+    int2 *__restrict__ patch_range_per_tile)
 {
     const int cur_patch = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -134,14 +134,14 @@ __global__ void getRanges(
     uint32_t prv_tile = patch_keys[prv_patch] >> 32;
 
     if (cur_patch == 0)
-        patch_range_per_tile[2 * cur_tile] = 0;
+        patch_range_per_tile[cur_tile].x = 0;
     else if (cur_patch == patch_num - 1)
-        patch_range_per_tile[2 * cur_tile + 1] = patch_num;
+        patch_range_per_tile[cur_tile].y = patch_num;
 
     if (prv_tile != cur_tile)
     {
-        patch_range_per_tile[2 * prv_tile + 1] = cur_patch;
-        patch_range_per_tile[2 * cur_tile] = cur_patch;
+        patch_range_per_tile[prv_tile].y = cur_patch;
+        patch_range_per_tile[cur_tile].x = cur_patch;
     }
 }
 
@@ -269,10 +269,10 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
 
 __global__ void inverseCov2D(
     int gs_num,
-    const float *__restrict__ cov2ds,
+    const float3 *__restrict__ cov2ds,
     float *__restrict__ depths,
-    float *__restrict__ cinv2ds,
-    int *__restrict__ areas,
+    float3 *__restrict__ cinv2ds,
+    int2 *__restrict__ areas,
     float *__restrict__ dcinv2d_dcov2ds)
 {
     // compute inverse of cov2d
@@ -287,9 +287,10 @@ __global__ void inverseCov2D(
         return;
 
     // forward.pdf (F.5.3)
-    const float a = cov2ds[i * 3];
-    const float b = cov2ds[i * 3 + 1];
-    const float c = cov2ds[i * 3 + 2];
+    const float3 cov2d = cov2ds[i];
+    const float a = cov2d.x;
+    const float b = cov2d.y;
+    const float c = cov2d.z;
 
     const float det = a * c - b * b;
     if (det == 0.0f)
@@ -299,11 +300,8 @@ __global__ void inverseCov2D(
     }
     // forward.pdf (F.5.3)
     const float det_inv = 1.f / det;
-    cinv2ds[i * 3 + 0] = det_inv * c;
-    cinv2ds[i * 3 + 1] = -det_inv * b;
-    cinv2ds[i * 3 + 2] = det_inv * a;
-    areas[i * 2 + 0] = int(ceil(3 * sqrt(abs(a))));
-    areas[i * 2 + 1] = int(ceil(3 * sqrt(abs(c))));
+    cinv2ds[i] = {det_inv * c, -det_inv * b, det_inv * a};
+    areas[i] = {(int)ceil(3 * sqrt(abs(a))), (int)ceil(3 * sqrt(abs(c)))};
 
     if (dcinv2d_dcov2ds != nullptr)
     {
@@ -323,8 +321,8 @@ __global__ void inverseCov2D(
 
 __global__ void computeCov3D(
     int32_t gs_num,
-    const float *__restrict__ rots,
-    const float *__restrict__ scales,
+    const float4 *__restrict__ rots,
+    const float3 *__restrict__ scales,
     const float *__restrict__ depths,
     float *__restrict__ cov3ds,
     float *__restrict__ dcov3d_drots,
@@ -337,23 +335,24 @@ __global__ void computeCov3D(
 
     if (depths[i] < 0.2)
         return;
-
-    float w = rots[i * 4 + 0];
-    float x = rots[i * 4 + 1];
-    float y = rots[i * 4 + 2];
-    float z = rots[i * 4 + 3];
-    float s0 = scales[i * 3 + 0];
-    float s1 = scales[i * 3 + 1];
-    float s2 = scales[i * 3 + 2];
-    float xx = x * x;
-    float yy = y * y;
-    float zz = z * z;
-    float xy = x * y;
-    float xz = x * z;
-    float yz = y * z;
-    float xw = x * w;
-    float yw = y * w;
-    float zw = z * w;
+    const float4 rot = rots[i];
+    const float3 s = scales[i];
+    const float w = rot.x;
+    const float x = rot.y;
+    const float y = rot.z;
+    const float z = rot.w;
+    const float s0 = s.x;
+    const float s1 = s.y;
+    const float s2 = s.z;
+    const float xx = x * x;
+    const float yy = y * y;
+    const float zz = z * z;
+    const float xy = x * y;
+    const float xz = x * z;
+    const float yz = y * z;
+    const float xw = x * w;
+    const float yw = y * w;
+    const float zw = z * w;
 
     Matrix<3, 3> R = {
         1.f - 2.f * (yy + zz), 2.f * (xy - zw), 2.f * (xz + yw),
@@ -855,8 +854,6 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
         tau = final_tau[pix_idx];
         cont = contrib[pix_idx];
     }
-
-    float3 last_color = {0, 0, 0};
 
     for (int i = 0; i < gs_num; i++)
     {

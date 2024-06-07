@@ -88,7 +88,7 @@ std::vector<torch::Tensor> splat(
         getRanges <<<DIV_ROUND_UP(patch_num, BLOCK_SIZE), BLOCK_SIZE >>> (
             patch_num,
             thrust::raw_pointer_cast(patch_keys.data()),
-            patch_range_per_tile.contiguous().data_ptr<int>());
+            (int2*)patch_range_per_tile.contiguous().data_ptr<int>());
     }
 
     draw<<< grid, block >>> (
@@ -180,8 +180,8 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
 
     computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        rots.contiguous().data_ptr<float>(),
-        scales.contiguous().data_ptr<float>(),
+        (float4*)rots.contiguous().data_ptr<float>(),
+        (float3*)scales.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
         cov3ds.contiguous().data_ptr<float>(),
         calc_J ? dcov3d_drots.contiguous().data_ptr<float>() : nullptr,
@@ -355,10 +355,10 @@ std::vector<torch::Tensor> inverseCov2D(const torch::Tensor cov2ds,
 
     inverseCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        cov2ds.contiguous().data_ptr<float>(),
+        (float3*)cov2ds.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
-        cinv2ds.contiguous().data_ptr<float>(),
-        areas.contiguous().data_ptr<int>(),
+        (float3*)cinv2ds.contiguous().data_ptr<float>(),
+        (int2*)areas.contiguous().data_ptr<int>(),
         calc_J ? dcinv2d_dcov2d.contiguous().data_ptr<float>() : nullptr);
     CHECK_CUDA(DEBUG);
 
