@@ -57,7 +57,7 @@ if __name__ == "__main__":
 
     n_epochs = 100
     n = len(gs_set)
-    # n = 1
+    n = 1
     for epoch in range(n_epochs):
         idxs = np.arange(n)
         np.random.shuffle(idxs)

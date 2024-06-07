@@ -14,7 +14,7 @@
 #define BLOCK_SIZE (BLOCK * BLOCK)
 #define DIV_ROUND_UP(X, Y) ((X) + (Y) - 1) / (Y)
 
-#define DEBUG 0
+#define DEBUG 1
 
 #define CHECK_CUDA(debug) \
 if(debug) { \

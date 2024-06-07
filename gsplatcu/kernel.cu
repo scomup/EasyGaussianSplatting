@@ -12,10 +12,10 @@ inline __device__ void fetch2shared(
     const bool is_backward,
     const int2 range,
     const int *__restrict__ gsid_per_patch,
-    const float *__restrict__ us,
-    const float *__restrict__ cinv2ds,
+    const float2 *__restrict__ us,
+    const float3 *__restrict__ cinv2ds,
     const float *__restrict__ alphas,
-    const float *__restrict__ colors,
+    const float3 *__restrict__ colors,
     float2 *shared_pos2d,
     float3 *shared_cinv2d,
     float *shared_alpha,
@@ -33,15 +33,10 @@ inline __device__ void fetch2shared(
     {
         int gs_id = gsid_per_patch[j];
         shared_gsid[i] = gs_id;
-        shared_pos2d[i].x = us[gs_id * 2];
-        shared_pos2d[i].y = us[gs_id * 2 + 1];
-        shared_cinv2d[i].x = cinv2ds[gs_id * 3];
-        shared_cinv2d[i].y = cinv2ds[gs_id * 3 + 1];
-        shared_cinv2d[i].z = cinv2ds[gs_id * 3 + 2];
+        shared_pos2d[i] = us[gs_id];
+        shared_cinv2d[i] = cinv2ds[gs_id];
         shared_alpha[i] = alphas[gs_id];
-        shared_color[i].x = colors[gs_id * 3];
-        shared_color[i].y = colors[gs_id * 3 + 1];
-        shared_color[i].z = colors[gs_id * 3 + 2];
+        shared_color[i] = colors[gs_id];
     }
 }
 
@@ -153,12 +148,12 @@ __global__ void getRanges(
 __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     const int width,
     const int height,
-    const int *__restrict__ patch_range_per_tile,
+    const int2 *__restrict__ patch_range_per_tile,
     const int *__restrict__ gsid_per_patch,
-    const float *__restrict__ us,
-    const float *__restrict__ cinv2ds,
+    const float2 *__restrict__ us,
+    const float3 *__restrict__ cinv2ds,
     const float *__restrict__ alphas,
-    const float *__restrict__ colors,
+    const float3 *__restrict__ colors,
     float *__restrict__ image,
     int *__restrict__ contrib,
     float *__restrict__ final_tau)
@@ -175,8 +170,7 @@ __global__ void draw __launch_bounds__(BLOCK *BLOCK)(
     const uint32_t pix_idx = width * pix.y + pix.x;
 
     const bool inside = pix.x < width && pix.y < height;
-    const int2 range = {patch_range_per_tile[2 * tile_idx],
-                        patch_range_per_tile[2 * tile_idx + 1]};
+    const int2 range = patch_range_per_tile[tile_idx];
 
     const int gs_num = range.y - range.x;
 
@@ -806,12 +800,12 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
     drawB(
         const int width, 
         const int height,
-        const int *__restrict__ patch_range_per_tile,
+        const int2 *__restrict__ patch_range_per_tile,
         const int *__restrict__ gsid_per_patch,
-        const float *__restrict__ us,
-        const float *__restrict__ cinv2ds,
+        const float2 *__restrict__ us,
+        const float3 *__restrict__ cinv2ds,
         const float *__restrict__ alphas,
-        const float *__restrict__ colors,
+        const float3 *__restrict__ colors,
         const float *__restrict__ final_tau,
         const int *__restrict__ contrib,
         const float *__restrict__ dloss_dgammas,
@@ -831,8 +825,7 @@ __global__ void __launch_bounds__(BLOCK *BLOCK)
     const uint32_t pix_idx = width * pix.y + pix.x;
 
     const bool inside = pix.x < width && pix.y < height;
-    const int2 range = {patch_range_per_tile[2 * tile_idx],
-                        patch_range_per_tile[2 * tile_idx + 1]};
+    const int2 range = patch_range_per_tile[tile_idx];
 
     const int gs_num = range.y - range.x;
 
