@@ -167,7 +167,7 @@ The Jacobian of $\mathrm{u}$ is given by:
 
 $$
 J = \begin{bmatrix}
-\frac{f_x}{x} & 0 & -\frac{f_x  x}{z^2} \\
+\frac{f_x}{z} & 0 & -\frac{f_x  x}{z^2} \\
 0 & \frac{f_y}{z} & -\frac{f_y  y}{z^2}
 \end{bmatrix}
 \tag{F.3.6}

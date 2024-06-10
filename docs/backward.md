@@ -252,8 +252,8 @@ Here, $M_{ri}$, and $\Sigma_{ri}$  represent the i-th row of $M$ and $\Sigma$.
 $$
 \diff{M}{p_c} =
 \begin{bmatrix} 
--f_x R_{c0}/x^2 - f_x R_{c2}/z^2 & 0_{3\times1} & 2 f_x R_{c2} x/z^3 \\
-0_{3\times1} & -f_y R_{c2}/z^2 & (-f_y z R_{c1} + 2 f_y R_{c2} y)/z^3 \\
+-f_x R_{c2}/z^2 & 0_{3\times1} & -f_x R_{c0}/z^2 + 2 f_x R_{c2} x/z^3 \\
+0_{3\times1} & -f_y R_{c2}/z^2 & -f_y z R_{c1}/z^2 + 2 f_y R_{c2} y/z^3 \\
 \end{bmatrix} 
 $$
 
