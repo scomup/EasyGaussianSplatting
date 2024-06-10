@@ -17,12 +17,14 @@ if __name__ == "__main__":
     parser.add_argument("--path", help="the path of dataset")
     args = parser.parse_args()
 
-    if args.path:
-        print("Try to training %s ..." % args.path)
-        gs_set = GSplatDataset(args.path)
-    else:
-        print("not path of dataset.")
-        exit(0)
+    # if args.path:
+    #     print("Try to training %s ..." % args.path)
+    #     gs_set = GSplatDataset(args.path)
+    # else:
+    #     print("not path of dataset.")
+    #     exit(0)
+    path = "/home/liu/bag/colmap"
+    gs_set = GSplatDataset(path, resize_rate=1)
 
     gs = gs_set.gs
 
@@ -55,7 +57,7 @@ if __name__ == "__main__":
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    n_epochs = 100
+    n_epochs = 1000
     n = len(gs_set)
     # n = 1
     for epoch in range(n_epochs):
