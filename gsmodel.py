@@ -9,7 +9,7 @@ def logit(x):
     return torch.log(x/(1-x))
 
 
-class GSModel(torch.autograd.Function):
+class GSFunction(torch.autograd.Function):
     @staticmethod
     def forward(
         ctx,
@@ -18,6 +18,7 @@ class GSModel(torch.autograd.Function):
         alphas,
         scales,
         rots,
+        us,
         cam,
     ):
         # more detail view forward.pdf
@@ -52,10 +53,10 @@ class GSModel(torch.autograd.Function):
                               dcinv2d_dcov2ds, dcov2d_dcov3ds,
                               dcov3d_drots, dcov3d_dscales, dcolor_dshs,
                               du_dpcs, dcov2d_dpcs, dcolor_dpws)
-        return image
+        return image, areas
 
     @staticmethod
-    def backward(ctx, dloss_dgammas):
+    def backward(ctx, dloss_dgammas, _):
         # Retrieve the saved tensors and static parameters
         cam = ctx.cam
         us, cinv2ds, alphas, \
@@ -86,10 +87,52 @@ class GSModel(torch.autograd.Function):
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
-
+        print("max dloss_dus")
+        print(torch.max(dloss_dus))
         return dloss_dpws.squeeze(),\
             dloss_dshs.squeeze(),\
             dloss_dalphas.squeeze().unsqueeze(1),\
             dloss_dscales.squeeze(),\
             dloss_drots.squeeze(),\
+            dloss_dus.squeeze(),\
             None
+
+
+class GSModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.cunt = None
+        self.grad_accum = None
+
+    def forward(
+            self,
+            pws,
+            shs,
+            alphas_raw,
+            scales_raw,
+            rots_raw,
+            us,
+            cam):
+        # Limit the value of alphas: 0 < alphas < 1
+        alphas = torch.sigmoid(alphas_raw)
+        # Limit the value of scales > 0
+        scales = torch.exp(scales_raw)
+        # Limit the value of rot, normal of rots is 1
+        rots = torch.nn.functional.normalize(rots_raw)
+
+        # apply GSfunction (forward)
+        image, areas = GSFunction.apply(pws, shs, alphas, scales, rots, us, cam)
+
+        return image, areas
+
+    def update_density_info(self, dloss_dus, areas):
+        with torch.no_grad():
+            visible = areas[:, 0] * areas[:, 1] > 0
+            grad = torch.norm(dloss_dus, dim=-1, keepdim=True)
+            if self.cunt is None:
+                self.grad_accum = grad
+                self.cunt = visible.to(torch.int32)
+            else:
+                self.cunt += visible
+                self.grad_accum += grad
+            pass

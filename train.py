@@ -11,6 +11,43 @@ import time
 import gsplatcu as gsc
 
 
+def rainbow(scalars, scalar_min=0, scalar_max=255):
+    range = scalar_max - scalar_min
+    values = 1.0 - (scalars - scalar_min) / range
+    # values = (scalars - scalar_min) / range  # using inverted color
+    colors = torch.zeros([scalars.shape[0], 3], dtype=torch.float32, device='cuda')
+    values = torch.clip(values, 0, 1)
+
+    h = values * 5.0 + 1.0
+    i = torch.floor(h).to(torch.int32)
+    f = h - i
+    f[torch.logical_not(i % 2)] = 1 - f[torch.logical_not(i % 2)]
+    n = 1 - f
+
+    # idx = i <= 1
+    colors[i <= 1, 0] = n[i <= 1]
+    colors[i <= 1, 1] = 0
+    colors[i <= 1, 2] = 1
+
+    colors[i == 2, 0] = 0
+    colors[i == 2, 1] = n[i == 2]
+    colors[i == 2, 2] = 1
+
+    colors[i == 3, 0] = 0
+    colors[i == 3, 1] = 1
+    colors[i == 3, 2] = n[i == 3]
+
+    colors[i == 4, 0] = n[i == 4]
+    colors[i == 4, 1] = 1
+    colors[i == 4, 2] = 0
+
+    colors[i >= 5, 0] = 1
+    colors[i >= 5, 1] = n[i >= 5]
+    colors[i >= 5, 2] = 0
+    shs = (colors - 0.5) / 0.28209479177387814
+    return shs
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -24,6 +61,7 @@ if __name__ == "__main__":
     #     print("not path of dataset.")
     #     exit(0)
     path = "/home/liu/bag/colmap"
+    # path = "/home/liu/bag/gaussian-splatting/tandt/train"
     gs_set = GSplatDataset(path, resize_rate=1)
 
     gs = gs_set.gs
@@ -52,6 +90,8 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(l, lr=0.000, eps=1e-15)
 
+    model = GSModel()
+
     cam0, _ = gs_set[0]
     fig, ax = plt.subplots()
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
@@ -66,24 +106,23 @@ if __name__ == "__main__":
         avg_loss = 0
         for i in idxs:
             cam, image_gt = gs_set[i]
-            # Limit the value of alphas: 0 < alphas < 1
-            alphas = torch.sigmoid(alphas_raw)
-            # Limit the value of scales > 0
-            scales = torch.exp(scales_raw)
-            # Limit the value of rot, normal of rots is 1
-            rots = torch.nn.functional.normalize(rots_raw)
+            # us is not involved in the forward,
+            # but in order to obtain the dloss_dus, we need to pass it to GSModel.
+            us = torch.zeros([pws.shape[0], 2],
+                             dtype=torch.float32, device='cuda', requires_grad=True)
 
-            image = GSModel.apply(
+            image, areas = model(
                 pws,
                 shs,
-                alphas,
-                scales,
-                rots,
-                cam,
-            )
+                alphas_raw,
+                scales_raw,
+                rots_raw,
+                us,
+                cam)
 
             loss = gau_loss(image, image_gt)
             loss.backward()
+            model.update_density_info(us.grad, areas)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             avg_loss += loss.item()
@@ -97,7 +136,12 @@ if __name__ == "__main__":
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
-        if (epoch % 10 == 0):
+        if (epoch % 10 == 5):
             fn = "data/epoch%04d.npy" % epoch
             print("trained data is saved to %s" % fn)
-            save_torch_params(fn, rots, scales, shs, alphas, pws)
+            # shs = torch.zeros_like(shs)
+            with torch.no_grad():
+                grad = torch.norm(model.dloss_dus_accum) / model.cunt
+                shs = rainbow(grad, 0, 0.0002 / 1000)
+            save_torch_params(fn, rots_raw, scales_raw, shs, grad, pws)
+            exit()

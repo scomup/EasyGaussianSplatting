@@ -137,7 +137,14 @@ def save_gs(fn, gs):
     np.save(fn, gs)
 
 
-def save_torch_params(fn, rots, scales, shs, alphas, pws):
+def save_torch_params(fn, rots_raw, scales_raw, shs, alphas_raw, pws):
+    # Limit the value of alphas: 0 < alphas < 1
+    alphas = torch.sigmoid(alphas_raw)
+    # Limit the value of scales > 0
+    scales = torch.exp(scales_raw)
+    # Limit the value of rot, normal of rots is 1
+    rots = torch.nn.functional.normalize(rots_raw)
+
     rots = rots.detach().cpu().numpy()
     scales = scales.detach().cpu().numpy()
     shs = shs.detach().cpu().numpy()

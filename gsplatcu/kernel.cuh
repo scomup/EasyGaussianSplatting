@@ -32,7 +32,7 @@ __global__ void createKeys(
 __global__ void getRects(
     const int gs_num,
     const float* __restrict__ us,
-    const int* __restrict__ areas,
+    int2* __restrict__ areas,
     float* __restrict__ depths,
     const dim3 grid,
     uint4 *__restrict__ gs_rects,

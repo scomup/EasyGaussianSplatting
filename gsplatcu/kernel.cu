@@ -79,7 +79,7 @@ __global__ void createKeys(
 __global__ void getRects(
     const int gs_num,
     const float* __restrict__ us,
-    const int* __restrict__ areas,
+    int2* __restrict__ areas,
     float* __restrict__ depths,
     const dim3 grid,
     uint4 *__restrict__ gs_rects,
@@ -96,8 +96,8 @@ __global__ void getRects(
 
     float2 u = { us[2 * idx], us[2 * idx + 1]};
 
-    float xs = areas[idx * 2];
-    float ys = areas[idx * 2 + 1];
+    float xs = areas[idx].x;
+    float ys = areas[idx].y;
 
     uint4 rect = {
         min(grid.x, max((int)0, (int)((u.x - xs) / BLOCK))),            // min_x
@@ -111,6 +111,7 @@ __global__ void getRects(
     if (n == 0)
     {
         depths[idx] = -1.f;
+        areas[idx] = {0, 0};
         return;
     }
     gs_rects[idx] = rect;
