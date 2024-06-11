@@ -1,12 +1,45 @@
 import torch
 import gsplatcu as gsc
+import collections
+import numpy as np
+from gsplat.utils import *
 
 
-def logit(x):
-    """
-    inverse of sigmoid
-    """
-    return torch.log(x/(1-x))
+def update_params(optimizer, gs_params, gs_params_new):
+    for group in optimizer.param_groups:
+        param_new = gs_params_new[group["name"]]
+        state = optimizer.state.get(group['params'][0], None)
+        if state is not None:
+            state["exp_avg"] = torch.cat(
+                (state["exp_avg"], torch.zeros_like(param_new)), dim=0)
+            state["exp_avg_sq"] = torch.cat(
+                (state["exp_avg_sq"], torch.zeros_like(param_new)), dim=0)
+            del optimizer.state[group['params'][0]]
+            group["params"][0] = torch.nn.Parameter(
+                torch.cat((group["params"][0], param_new), dim=0).requires_grad_(True))
+            optimizer.state[group['params'][0]] = state
+            gs_params[group["name"]] = group["params"][0]
+        else:
+            group["params"][0] = torch.nn.Parameter(
+                torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+            gs_params[group["name"]] = group["params"][0]
+
+
+def prune_params(optimizer, gs_params, mask):
+    for group in optimizer.param_groups:
+        state = optimizer.state.get(group['params'][0], None)
+        if state is not None:
+            state["exp_avg"] = state["exp_avg"][mask]
+            state["exp_avg_sq"] = state["exp_avg_sq"][mask]
+            del optimizer.state[group['params'][0]]
+            group["params"][0] = torch.nn.Parameter(
+                (group["params"][0][mask].requires_grad_(True)))
+            optimizer.state[group['params'][0]] = state
+            gs_params[group["name"]] = group["params"][0]
+        else:
+            group["params"][0] = torch.nn.Parameter(
+                group["params"][0][mask].requires_grad_(True))
+            gs_params[group["name"]] = group["params"][0]
 
 
 class GSFunction(torch.autograd.Function):
@@ -87,8 +120,6 @@ class GSFunction(torch.autograd.Function):
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
-        print("max dloss_dus")
-        print(torch.max(dloss_dus))
         return dloss_dpws.squeeze(),\
             dloss_dshs.squeeze(),\
             dloss_dalphas.squeeze().unsqueeze(1),\
@@ -103,6 +134,11 @@ class GSModel(torch.nn.Module):
         super().__init__()
         self.cunt = None
         self.grad_accum = None
+        self.cam = None
+        self.grad_threshold = 0.00002
+        self.scale_threshold = 0.01 * 5.6
+        self.alpha_threshold = 0.005
+        self.big_threshold = 0.1 * 5.6
 
     def forward(
             self,
@@ -113,10 +149,11 @@ class GSModel(torch.nn.Module):
             rots_raw,
             us,
             cam):
+        self.cam = cam
         # Limit the value of alphas: 0 < alphas < 1
-        alphas = torch.sigmoid(alphas_raw)
+        alphas = get_alphas(alphas_raw)
         # Limit the value of scales > 0
-        scales = torch.exp(scales_raw)
+        scales = get_scales(scales_raw)
         # Limit the value of rot, normal of rots is 1
         rots = torch.nn.functional.normalize(rots_raw)
 
@@ -127,12 +164,75 @@ class GSModel(torch.nn.Module):
 
     def update_density_info(self, dloss_dus, areas):
         with torch.no_grad():
-            visible = areas[:, 0] * areas[:, 1] > 0
+            visible = areas[:, 0] > 0
+            dloss_dus[:, 0] = dloss_dus[:, 0]
+            dloss_dus[:, 0] = dloss_dus[:, 1]
             grad = torch.norm(dloss_dus, dim=-1, keepdim=True)
+
             if self.cunt is None:
                 self.grad_accum = grad
                 self.cunt = visible.to(torch.int32)
             else:
                 self.cunt += visible
-                self.grad_accum += grad
+                self.grad_accum[visible] += grad[visible]
             pass
+
+    def update_gaussian_density(self, gs_params, optimizer):
+        # prune too small or too big gaussian
+        selected_by_small_alpha = gs_params["alphas_raw"].squeeze() < get_alphas_raw(self.alpha_threshold)
+        selected_by_big_scale = torch.max(gs_params["scales_raw"], axis=1)[0] > get_scales_raw(self.big_threshold)
+        selected_for_prune = torch.logical_or(selected_by_small_alpha, selected_by_big_scale)
+        selected_for_remain = torch.logical_not(selected_for_prune)
+        prune_params(optimizer, gs_params, selected_for_remain)
+
+        grads = self.grad_accum.squeeze()[selected_for_remain] / self.cunt[selected_for_remain]
+        grads[grads.isnan()] = 0.0
+
+        pws = gs_params["pws"]
+        shs = gs_params["shs"]
+        alphas = get_alphas(gs_params["alphas_raw"])
+        scales = get_scales(gs_params["scales_raw"])
+        rots = get_rots(gs_params["rots_raw"])
+
+        selected_by_grad = grads >= self.grad_threshold
+        selected_by_scale = torch.max(scales, axis=1)[0] <= self.scale_threshold
+
+        selected_for_clone = torch.logical_and(selected_by_grad, selected_by_scale)
+        selected_for_split = torch.logical_and(selected_by_grad, torch.logical_not(selected_by_scale))
+
+        # clone gaussians
+        pws_cloned = pws[selected_for_clone]
+        shs_cloned = shs[selected_for_clone]
+        alphas_cloned = alphas[selected_for_clone]
+        scales_cloned = scales[selected_for_clone]
+        rots_cloned = rots[selected_for_clone]
+
+        # split gaussians
+        # Cov3d = compute_cov_3d(
+        #     scales[selected_for_split], rots[selected_for_split])
+        # multi_normal = torch.distributions.MultivariateNormal(
+        #     loc=pws[selected_for_split], covariance_matrix=Cov3d)
+        # pws_splited = multi_normal.sample()  # sampling new pw for splited gaussian
+        rots_splited = rots[selected_for_split]
+        means = torch.zeros((rots_splited.size(0), 3), device="cuda")
+        samples = torch.normal(mean=means, std=scales[selected_for_split])
+        # sampling new pw for splited gaussian
+        pws_splited = pws[selected_for_split] + \
+            rotate_vector_by_quaternion(rots_splited, samples)
+        alphas_splited = alphas[selected_for_split]
+        scales[selected_for_split] = scales[selected_for_split] * 0.6  # splited gaussian will go smaller
+        scales_splited = scales[selected_for_split]
+        shs_splited = shs[selected_for_split]
+
+        gs_params_new = {"pws": torch.cat([pws_cloned, pws_splited]),
+                         "shs": torch.cat([shs_cloned, shs_splited]),
+                         "alphas_raw": torch.log(torch.cat([alphas_cloned, alphas_splited])),
+                         "scales_raw": get_alphas_raw(torch.cat([scales_cloned, scales_splited])),
+                         "rots_raw": torch.cat([rots_cloned, rots_splited])}
+
+        # split gaussians (N is the split size)
+        update_params(optimizer, gs_params, gs_params_new)
+
+        self.grad_accum = None
+        self.cunt = None
+        pass

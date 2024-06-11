@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from gsplat.pytorch_ssim import gau_loss
 from gsplat.gau_io import *
 from gsplat.gausplat_dataset import *
-from gsmodel import GSModel, logit
+from gsmodel import *
 from random import randint
 import time
 import gsplatcu as gsc
@@ -71,22 +71,25 @@ if __name__ == "__main__":
     rots_raw = torch.from_numpy(gs['rot']).type(
         # the unactivated scales
         torch.float32).to('cuda').requires_grad_()
-    scales_raw = torch.log(torch.from_numpy(gs['scale']).type(
+    scales_raw = get_scales_raw(torch.from_numpy(gs['scale']).type(
         torch.float32).to('cuda')).requires_grad_()
     # the unactivated alphas
-    alphas_raw = logit(torch.from_numpy(gs['alpha'][:, np.newaxis]).type(
+    alphas_raw = get_alphas_raw(torch.from_numpy(gs['alpha'][:, np.newaxis]).type(
         torch.float32).to('cuda')).requires_grad_()
 
     shs = torch.from_numpy(gs['sh']).type(
         torch.float32).to('cuda').requires_grad_()
 
     l = [
-        {'params': [rots_raw], 'lr': 0.001, "name": "rot"},
-        {'params': [scales_raw], 'lr': 0.005, "name": "scale"},
-        {'params': [shs], 'lr': 0.001, "name": "sh"},
-        {'params': [alphas_raw], 'lr': 0.05, "name": "alpha"},
-        {'params': [pws], 'lr': 0.001, "name": "pw"}
+        {'params': [pws], 'lr': 0.001, "name": "pws"},
+        {'params': [shs], 'lr': 0.001, "name": "shs"},
+        {'params': [alphas_raw], 'lr': 0.05, "name": "alphas_raw"},
+        {'params': [scales_raw], 'lr': 0.005, "name": "scales_raw"},
+        {'params': [rots_raw], 'lr': 0.001, "name": "rots_raw"},
     ]
+
+    gs_params = {"pws": pws, "shs": shs, "alphas_raw": alphas_raw,
+                 "scales_raw": scales_raw, "rots_raw": rots_raw}
 
     optimizer = optim.Adam(l, lr=0.000, eps=1e-15)
 
@@ -104,22 +107,14 @@ if __name__ == "__main__":
         idxs = np.arange(n)
         np.random.shuffle(idxs)
         avg_loss = 0
+        # us is not involved in the forward,
+        # but in order to obtain the dloss_dus, we need to pass it to GSModel.
+        us = torch.zeros([gs_params['pws'].shape[0], 2], dtype=torch.float32,
+                         device='cuda', requires_grad=True)
+
         for i in idxs:
             cam, image_gt = gs_set[i]
-            # us is not involved in the forward,
-            # but in order to obtain the dloss_dus, we need to pass it to GSModel.
-            us = torch.zeros([pws.shape[0], 2],
-                             dtype=torch.float32, device='cuda', requires_grad=True)
-
-            image, areas = model(
-                pws,
-                shs,
-                alphas_raw,
-                scales_raw,
-                rots_raw,
-                us,
-                cam)
-
+            image, areas = model(*gs_params.values(), us, cam)
             loss = gau_loss(image, image_gt)
             loss.backward()
             model.update_density_info(us.grad, areas)
@@ -136,12 +131,16 @@ if __name__ == "__main__":
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
-        if (epoch % 10 == 5):
+        if (epoch >= 10 and epoch % 10 == 0):
             fn = "data/epoch%04d.npy" % epoch
             print("trained data is saved to %s" % fn)
             # shs = torch.zeros_like(shs)
             with torch.no_grad():
-                grad = torch.norm(model.dloss_dus_accum) / model.cunt
-                shs = rainbow(grad, 0, 0.0002 / 1000)
-            save_torch_params(fn, rots_raw, scales_raw, shs, grad, pws)
-            exit()
+                model.update_gaussian_density(gs_params, optimizer)
+                save_gs_params(fn, gs_params)
+                # grads = model.grad_accum.squeeze() / model.cunt
+                # torch.sum(grads > model.grad_threshold)
+                # print(torch.sum(grads > model.grad_threshold))
+                # grad_shs = rainbow(grads, 0, model.grad_threshold)
+                # save_gs_params("/home/liu/grad.npy", rots_raw, scales_raw, grad_shs, grads, pws)
+                # exit()
