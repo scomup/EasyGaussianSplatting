@@ -1,7 +1,5 @@
 import torch
 import gsplatcu as gsc
-import collections
-import numpy as np
 from gsplat.utils import *
 
 
@@ -209,17 +207,23 @@ class GSModel(torch.nn.Module):
         rots_cloned = rots[selected_for_clone]
 
         # split gaussians
-        # Cov3d = compute_cov_3d(
-        #     scales[selected_for_split], rots[selected_for_split])
-        # multi_normal = torch.distributions.MultivariateNormal(
-        #     loc=pws[selected_for_split], covariance_matrix=Cov3d)
-        # pws_splited = multi_normal.sample()  # sampling new pw for splited gaussian
+        try:
+            Cov3d = compute_cov_3d(
+                scales[selected_for_split], rots[selected_for_split])
+            multi_normal = torch.distributions.MultivariateNormal(
+                loc=pws[selected_for_split], covariance_matrix=Cov3d)
+            pws_splited = multi_normal.sample()  # sampling new pw for splited gaussian
+        except Exception as e:
+            print(e)
+
+            pass
         rots_splited = rots[selected_for_split]
-        means = torch.zeros((rots_splited.size(0), 3), device="cuda")
-        samples = torch.normal(mean=means, std=scales[selected_for_split])
+        # means = torch.zeros((rots_splited.size(0), 3), device="cuda")
+        # scales[selected_for_split]
+        # samples = torch.normal(mean=means, std=scales[selected_for_split])
         # sampling new pw for splited gaussian
-        pws_splited = pws[selected_for_split] + \
-            rotate_vector_by_quaternion(rots_splited, samples)
+        # pws_splited = pws[selected_for_split] + \
+        #     rotate_vector_by_quaternion(rots_splited, samples)
         alphas_splited = alphas[selected_for_split]
         scales[selected_for_split] = scales[selected_for_split] * 0.6  # splited gaussian will go smaller
         scales_splited = scales[selected_for_split]
@@ -233,6 +237,15 @@ class GSModel(torch.nn.Module):
 
         # split gaussians (N is the split size)
         update_params(optimizer, gs_params, gs_params_new)
+
+        print("gaussian density update report")
+        prune_n = int(torch.sum(selected_for_prune))
+        clone_n = int(torch.sum(selected_for_clone))
+        split_n = int(torch.sum(selected_for_split))
+        print("pruned num: ", prune_n)
+        print("cloned num: ", clone_n)
+        print("splited num: ", split_n)
+        print("gaussian num change: ", clone_n + split_n - prune_n)
 
         self.grad_accum = None
         self.cunt = None

@@ -11,7 +11,7 @@ def rotate_vector_by_quaternion(q, v):
     v = v[:, :,  np.newaxis]
     v_prime = 2.0 * u * (u.permute(0, 2, 1) @ v) +\
         v * (s*s - (u.permute(0, 2, 1) @ u)) +\
-        2.0 * torch.cross(u, v) * s
+        2.0 * torch.linalg.cross(u, v, dim=1) * s
     return v_prime.squeeze()
 
 
@@ -21,9 +21,8 @@ def compute_cov_3d(scale, q):
     S[:, 0, 0] = scale[:, 0]
     S[:, 1, 1] = scale[:, 1]
     S[:, 2, 2] = scale[:, 2]
-
     # Normalize quaternion to get valid rotation
-    # q = torch.nn.functional.normalize(rot)
+    q = torch.nn.functional.normalize(q)
     w = q[:, 0]
     x = q[:, 1]
     y = q[:, 2]

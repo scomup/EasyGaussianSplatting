@@ -60,8 +60,8 @@ if __name__ == "__main__":
     # else:
     #     print("not path of dataset.")
     #     exit(0)
-    path = "/home/liu/bag/colmap"
-    # path = "/home/liu/bag/gaussian-splatting/tandt/train"
+    # path = "/home/liu/bag/colmap"
+    path = "/home/liu/bag/gaussian-splatting/tandt/train"
     gs_set = GSplatDataset(path, resize_rate=1)
 
     gs = gs_set.gs
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    n_epochs = 1000
+    n_epochs = 300
     n = len(gs_set)
     # n = 1
     for epoch in range(1, n_epochs):
