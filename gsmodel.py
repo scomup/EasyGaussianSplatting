@@ -139,6 +139,7 @@ class GSModel(torch.nn.Module):
         self.scale_threshold = 0.01 * 5.6
         self.alpha_threshold = 0.005
         self.big_threshold = 0.1 * 5.6
+        self.reset_alpha_val = 0.01
 
     def forward(
             self,
@@ -235,4 +236,16 @@ class GSModel(torch.nn.Module):
 
         self.grad_accum = None
         self.cunt = None
-        pass
+
+    def reset_alpha(self, gs_params, optimizer):
+        reset_alpha_raw_val = get_alphas_raw(self.reset_alpha_val)
+        rest_mask = gs_params['alphas_raw'] > reset_alpha_raw_val
+        gs_params['alphas_raw'][rest_mask] = torch.ones_like(gs_params['alphas_raw'])[rest_mask] * reset_alpha_raw_val
+
+        alpha_param = list(filter(lambda x: x["name"] == "alphas_raw", optimizer.param_groups))[0]
+
+        state = optimizer.state.get(alpha_param['params'][0], None)
+        state["exp_avg"] = torch.zeros_like(gs_params['alphas_raw'])
+        state["exp_avg_sq"] = torch.zeros_like(gs_params['alphas_raw'])
+        del optimizer.state[alpha_param['params'][0]]
+        optimizer.state[alpha_param['params'][0]] = state

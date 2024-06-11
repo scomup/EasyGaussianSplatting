@@ -103,7 +103,7 @@ if __name__ == "__main__":
     n_epochs = 1000
     n = len(gs_set)
     # n = 1
-    for epoch in range(n_epochs):
+    for epoch in range(1, n_epochs):
         idxs = np.arange(n)
         np.random.shuffle(idxs)
         avg_loss = 0
@@ -131,16 +131,13 @@ if __name__ == "__main__":
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
-        if (epoch >= 10 and epoch % 10 == 0):
-            fn = "data/epoch%04d.npy" % epoch
-            print("trained data is saved to %s" % fn)
-            # shs = torch.zeros_like(shs)
-            with torch.no_grad():
+        with torch.no_grad():
+            if (epoch % 10 == 0):
+                fn = "data/epoch%04d.npy" % epoch
+                # print("trained data is saved to %s" % fn)
                 model.update_gaussian_density(gs_params, optimizer)
+                print("update gaussian density; num: %d" % gs_params["pws"].shape[0])
                 save_gs_params(fn, gs_params)
-                # grads = model.grad_accum.squeeze() / model.cunt
-                # torch.sum(grads > model.grad_threshold)
-                # print(torch.sum(grads > model.grad_threshold))
-                # grad_shs = rainbow(grads, 0, model.grad_threshold)
-                # save_gs_params("/home/liu/grad.npy", rots_raw, scales_raw, grad_shs, grads, pws)
-                # exit()
+            if (epoch % 50 == 0):
+                print("reset aplha")
+                model.reset_alpha(gs_params, optimizer)
