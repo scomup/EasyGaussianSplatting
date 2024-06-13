@@ -15,7 +15,7 @@ def rotate_vector_by_quaternion(q, v):
     return v_prime.squeeze()
 
 
-def compute_cov_3d(scale, q):
+def compute_cov_3d_torch(scale, q):
     # Create scaling matrix
     S = torch.zeros([scale.shape[0], 3, 3], device='cuda')
     S[:, 0, 0] = scale[:, 0]

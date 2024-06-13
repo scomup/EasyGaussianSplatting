@@ -121,21 +121,27 @@ if __name__ == "__main__":
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             avg_loss += loss.item()
-            if (i == 0):
-                im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
-                im_cpu = np.clip(im_cpu, 0, 1)
-                im.set_data(im_cpu)
-                fig.canvas.flush_events()
-                plt.pause(0.1)
-                # plt.show()
+            #if (i == 0):
+            #    im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
+            #    im_cpu = np.clip(im_cpu, 0, 1)
+            #    im.set_data(im_cpu)
+            #    fig.canvas.flush_events()
+            #    plt.pause(0.1)
+            #    # plt.show()
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
         with torch.no_grad():
-            if (epoch % 10 == 0):
+            if (epoch % 1 == 0):
                 fn = "data/epoch%04d.npy" % epoch
                 # print("trained data is saved to %s" % fn)
-                model.update_gaussian_density(gs_params, optimizer)
+                debug_gs = model.update_gaussian_density(gs_params, optimizer)
+                cam0, _ = gs_set[0]
+                image0 = render(*debug_gs.values(), cam0)
+                im_cpu0 = image0.to('cpu').detach().permute(1, 2, 0).numpy()
+                im.set_data(im_cpu)
+                fig.canvas.flush_events()
+                plt.show()
                 print("update gaussian density; num: %d" % gs_params["pws"].shape[0])
                 save_gs_params(fn, gs_params)
             if (epoch % 50 == 0):

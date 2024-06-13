@@ -40,6 +40,34 @@ def prune_params(optimizer, gs_params, mask):
             gs_params[group["name"]] = group["params"][0]
 
 
+def render(pws, shs, alphas, scales, rots, cam):
+    # more detail view forward.pdf
+    # step1. Transform pw to camera frame,
+    # and project it to iamge.
+    us, pcs, depths = gsc.project(
+        pws, cam.Rcw, cam.tcw, cam.fx, cam.fy, cam.cx, cam.cy, False)
+
+    # step2. Calcuate the 3d Gaussian.
+    cov3ds = gsc.computeCov3D(
+        rots, scales, depths, False)[0]
+
+    # step3. Calcuate the 2d Gaussian.
+    cov2ds = gsc.computeCov2D(
+        cov3ds, pcs, cam.Rcw, depths, cam.fx, cam.fy, cam.width, cam.height, False)[0]
+
+    # step4. get color info
+    colors = gsc.sh2Color(
+        shs, pws, cam.twc, False)[0]
+
+    # step5. Blend the 2d Gaussian to image
+    cinv2ds, areas = gsc.inverseCov2D(
+        cov2ds, depths, False)
+    image, _, _, _, _ =\
+        gsc.splat(cam.height, cam.width,
+                  us, cinv2ds, alphas, depths, colors, areas)
+    return image
+
+
 class GSFunction(torch.autograd.Function):
     @staticmethod
     def forward(
@@ -52,6 +80,19 @@ class GSFunction(torch.autograd.Function):
         us,
         cam,
     ):
+        """
+        if (torch.isnan(pws).any()):
+            print("pws nan")
+        if (torch.isnan(alphas).any()):
+            print("alphas nan")
+        if (torch.isnan(scales).any()):
+            print("scales nan")
+        if (torch.isnan(rots).any()):
+            print("rots nan")
+        if (torch.isnan(shs).any()):
+            print("shs nan")
+        """
+
         # more detail view forward.pdf
         # step1. Transform pw to camera frame,
         # and project it to iamge.
@@ -118,6 +159,25 @@ class GSFunction(torch.autograd.Function):
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
+        """
+        if (torch.isnan(dloss_dpws).any()):
+            print("dloss_dpws nan")
+        if (torch.isnan(dloss_dus).any()):
+            print("dloss_dus nan")
+        if (torch.isnan(du_dpcs).any()):
+            print("du_dpcs nan")
+        if (torch.isnan(dpc_dpws).any()):
+            print("dpc_dpws nan")
+        if (torch.isnan(dloss_dcolors).any()):
+            print("dloss_dcolors nan")
+        if (torch.isnan(dcolor_dpws).any()):
+            print("dcolor_dpws nan")
+        if (torch.isnan(dloss_dcov2ds).any()):
+            print("dloss_dcov2ds nan")
+        if (torch.isnan(dcov2d_dpcs).any()):
+            print("dcov2d_dpcs nan")
+        """
+
         return dloss_dpws.squeeze(),\
             dloss_dshs.squeeze(),\
             dloss_dalphas.squeeze().unsqueeze(1),\
@@ -133,7 +193,7 @@ class GSModel(torch.nn.Module):
         self.cunt = None
         self.grad_accum = None
         self.cam = None
-        self.grad_threshold = 0.00002
+        self.grad_threshold = 0.0002 / 500
         self.scale_threshold = 0.01 * 5.6
         self.alpha_threshold = 0.005
         self.big_threshold = 0.1 * 5.6
@@ -207,23 +267,22 @@ class GSModel(torch.nn.Module):
         rots_cloned = rots[selected_for_clone]
 
         # split gaussians
-        try:
-            Cov3d = compute_cov_3d(
-                scales[selected_for_split], rots[selected_for_split])
-            multi_normal = torch.distributions.MultivariateNormal(
-                loc=pws[selected_for_split], covariance_matrix=Cov3d)
-            pws_splited = multi_normal.sample()  # sampling new pw for splited gaussian
-        except Exception as e:
-            print(e)
+        # try:
+        #     Cov3d = compute_cov_3d_torch(
+        #         scales[selected_for_split], rots[selected_for_split])
+        #     multi_normal = torch.distributions.MultivariateNormal(
+        #         loc=pws[selected_for_split], covariance_matrix=Cov3d)
+        #     pws_splited = multi_normal.sample()  # sampling new pw for splited gaussian
+        # except Exception as e:
+        #     print(e)
 
-            pass
         rots_splited = rots[selected_for_split]
-        # means = torch.zeros((rots_splited.size(0), 3), device="cuda")
-        # scales[selected_for_split]
-        # samples = torch.normal(mean=means, std=scales[selected_for_split])
+        means = torch.zeros((rots_splited.size(0), 3), device="cuda")
+        stds = scales[selected_for_split]
+        samples = torch.normal(mean=means, std=stds)
         # sampling new pw for splited gaussian
-        # pws_splited = pws[selected_for_split] + \
-        #     rotate_vector_by_quaternion(rots_splited, samples)
+        pws_splited = pws[selected_for_split] + \
+            rotate_vector_by_quaternion(rots_splited, samples)
         alphas_splited = alphas[selected_for_split]
         scales[selected_for_split] = scales[selected_for_split] * 0.6  # splited gaussian will go smaller
         scales_splited = scales[selected_for_split]
@@ -231,9 +290,22 @@ class GSModel(torch.nn.Module):
 
         gs_params_new = {"pws": torch.cat([pws_cloned, pws_splited]),
                          "shs": torch.cat([shs_cloned, shs_splited]),
-                         "alphas_raw": torch.log(torch.cat([alphas_cloned, alphas_splited])),
-                         "scales_raw": get_alphas_raw(torch.cat([scales_cloned, scales_splited])),
+                         "alphas_raw": get_alphas_raw(torch.cat([alphas_cloned, alphas_splited])),
+                         "scales_raw": get_scales_raw(torch.cat([scales_cloned, scales_splited])),
                          "rots_raw": torch.cat([rots_cloned, rots_splited])}
+
+        debug = True
+        if (debug):
+            rgb = torch.Tensor([1, 0, 0]).to(torch.float32).to('cuda')
+            flat_shs = (rgb - 0.5) / 0.28209479177387814
+            flat_shs = flat_shs.repeat(gs_params_new['pws'].shape[0], 1)
+            update_params(optimizer, gs_params, gs_params_new)
+            gs_params_new['shs'] = flat_shs
+            debug_gs = {"pws": torch.cat([gs_params["pws"], gs_params_new["pws"]]),
+                        "shs": torch.cat([gs_params["pws"], flat_shs]),
+                        "alphas_raw": torch.cat([gs_params["alphas_raw"], gs_params_new["alphas_raw"]]),
+                        "scales_raw": torch.cat([gs_params["scales_raw"], gs_params_new["scales_raw"]]),
+                        "rots_raw": torch.cat([gs_params["rots_raw"], gs_params_new["rots_raw"]])}
 
         # split gaussians (N is the split size)
         update_params(optimizer, gs_params, gs_params_new)
@@ -249,6 +321,10 @@ class GSModel(torch.nn.Module):
 
         self.grad_accum = None
         self.cunt = None
+
+        if (debug):
+            return debug_gs
+
 
     def reset_alpha(self, gs_params, optimizer):
         reset_alpha_raw_val = get_alphas_raw(self.reset_alpha_val)
