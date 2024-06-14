@@ -77,22 +77,22 @@ if __name__ == "__main__":
     alphas_raw = get_alphas_raw(torch.from_numpy(gs['alpha'][:, np.newaxis]).type(
         torch.float32).to('cuda')).requires_grad_()
 
-    shs = torch.from_numpy(gs['sh']).type(
-        torch.float32).to('cuda')
+    low_shs = torch.from_numpy(gs['sh']).type(
+        torch.float32).to('cuda').requires_grad_()
 
-    shs = shs.repeat(1, 16)
-    shs[:, 3:] = shs[:, 3:] * 0.01
-    shs = shs.requires_grad_()
+    high_shs = torch.ones_like(low_shs).repeat(1, 15) * 0.001
+    high_shs = high_shs.requires_grad_()
+
     l = [
         {'params': [pws], 'lr': 0.001, "name": "pws"},
-        {'params': [shs], 'lr': 0.001, "name": "shs"},
+        {'params': [low_shs], 'lr': 0.001, "name": "low_shs"},
+        {'params': [high_shs], 'lr': 0.001/20, "name": "high_shs"},
         {'params': [alphas_raw], 'lr': 0.05, "name": "alphas_raw"},
         {'params': [scales_raw], 'lr': 0.005, "name": "scales_raw"},
         {'params': [rots_raw], 'lr': 0.001, "name": "rots_raw"},
     ]
-
-    gs_params = {"pws": pws, "shs": shs, "alphas_raw": alphas_raw,
-                 "scales_raw": scales_raw, "rots_raw": rots_raw}
+    gs_params = {"pws": pws, "low_shs": low_shs, "high_shs": high_shs,
+                 "alphas_raw": alphas_raw, "scales_raw": scales_raw, "rots_raw": rots_raw}
 
     optimizer = optim.Adam(l, lr=0.000, eps=1e-15)
 

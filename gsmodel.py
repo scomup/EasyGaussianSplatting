@@ -204,7 +204,8 @@ class GSModel(torch.nn.Module):
     def forward(
             self,
             pws,
-            shs,
+            low_shs,
+            high_shs,
             alphas_raw,
             scales_raw,
             rots_raw,
@@ -217,6 +218,8 @@ class GSModel(torch.nn.Module):
         scales = get_scales(scales_raw)
         # Limit the value of rot, normal of rots is 1
         rots = torch.nn.functional.normalize(rots_raw)
+
+        shs = torch.cat((low_shs, high_shs), dim=1)
 
         # apply GSfunction (forward)
         image, areas = GSFunction.apply(pws, shs, alphas, scales, rots, us, cam)
@@ -250,7 +253,8 @@ class GSModel(torch.nn.Module):
         grads[grads.isnan()] = 0.0
 
         pws = gs_params["pws"]
-        shs = gs_params["shs"]
+        low_shs = gs_params["low_shs"]
+        high_shs = gs_params["high_shs"]
         alphas = get_alphas(gs_params["alphas_raw"])
         scales = get_scales(gs_params["scales_raw"])
         rots = get_rots(gs_params["rots_raw"])
@@ -263,7 +267,8 @@ class GSModel(torch.nn.Module):
 
         # clone gaussians
         pws_cloned = pws[selected_for_clone]
-        shs_cloned = shs[selected_for_clone]
+        low_shs_cloned = low_shs[selected_for_clone]
+        high_shs_cloned = high_shs[selected_for_clone]
         alphas_cloned = alphas[selected_for_clone]
         scales_cloned = scales[selected_for_clone]
         rots_cloned = rots[selected_for_clone]
@@ -288,10 +293,12 @@ class GSModel(torch.nn.Module):
         alphas_splited = alphas[selected_for_split]
         scales[selected_for_split] = scales[selected_for_split] * 0.6  # splited gaussian will go smaller
         scales_splited = scales[selected_for_split]
-        shs_splited = shs[selected_for_split]
+        low_shs_splited = low_shs[selected_for_split]
+        high_shs_splited = high_shs[selected_for_split]
 
         gs_params_new = {"pws": torch.cat([pws_cloned, pws_splited]),
-                         "shs": torch.cat([shs_cloned, shs_splited]),
+                         "low_shs": torch.cat([low_shs_cloned, low_shs_splited]),
+                         "high_shs": torch.cat([high_shs_cloned, high_shs_splited]),
                          "alphas_raw": get_alphas_raw(torch.cat([alphas_cloned, alphas_splited])),
                          "scales_raw": get_scales_raw(torch.cat([scales_cloned, scales_splited])),
                          "rots_raw": torch.cat([rots_cloned, rots_splited])}
