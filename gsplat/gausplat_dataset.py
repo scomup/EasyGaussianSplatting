@@ -10,6 +10,7 @@ from plyfile import PlyData
 import torchvision.transforms as transforms
 from PIL import Image
 
+
 class Camera:
     def __init__(self, id, width, height, fx, fy, cx, cy, Rcw, tcw):
         self.id = id

@@ -155,6 +155,8 @@ class GSFunction(torch.autograd.Function):
         # backward.pdf equation (5)
         dloss_dshs = (dloss_dcolors.permute(0, 2, 1) @
                       dcolor_dshs).permute(0, 2, 1).squeeze()
+
+        dloss_dshs = dloss_dshs.reshape(dloss_dshs.shape[0], -1)
         # backward.pdf equation (7)
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
@@ -179,7 +181,7 @@ class GSFunction(torch.autograd.Function):
         """
 
         return dloss_dpws.squeeze(),\
-            dloss_dshs.squeeze(),\
+            dloss_dshs,\
             dloss_dalphas.squeeze().unsqueeze(1),\
             dloss_dscales.squeeze(),\
             dloss_drots.squeeze(),\
@@ -294,21 +296,21 @@ class GSModel(torch.nn.Module):
                          "scales_raw": get_scales_raw(torch.cat([scales_cloned, scales_splited])),
                          "rots_raw": torch.cat([rots_cloned, rots_splited])}
 
-        debug = True
-        if (debug):
-            rgb = torch.Tensor([1, 0, 0]).to(torch.float32).to('cuda')
-            flat_shs = (rgb - 0.5) / 0.28209479177387814
-            flat_shs = flat_shs.repeat(gs_params_new['pws'].shape[0], 1)
-            gs_params_new['shs'] = flat_shs
-            debug_gs = {"pws": torch.cat([gs_params["pws"], gs_params_new["pws"]]),
-                        "shs": torch.cat([gs_params["shs"], gs_params_new["shs"]]),
-                        "alphas_raw": torch.cat([gs_params["alphas_raw"], gs_params_new["alphas_raw"]]),
-                        "scales_raw": torch.cat([gs_params["scales_raw"], gs_params_new["scales_raw"]]),
-                        "rots_raw": torch.cat([gs_params["rots_raw"], gs_params_new["rots_raw"]])}
+        # debug = True
+        # if (debug):
+        #     rgb = torch.Tensor([1, 0, 0]).to(torch.float32).to('cuda')
+        #     flat_shs = (rgb - 0.5) / 0.28209479177387814
+        #     flat_shs = flat_shs.repeat(gs_params_new['pws'].shape[0], 1)
+        #     gs_params_new['shs'] = flat_shs
+        #     debug_gs = {"pws": torch.cat([gs_params["pws"], gs_params_new["pws"]]),
+        #                 "shs": torch.cat([gs_params["shs"], gs_params_new["shs"]]),
+        #                 "alphas_raw": torch.cat([gs_params["alphas_raw"], gs_params_new["alphas_raw"]]),
+        #                 "scales_raw": torch.cat([gs_params["scales_raw"], gs_params_new["scales_raw"]]),
+        #                 "rots_raw": torch.cat([gs_params["rots_raw"], gs_params_new["rots_raw"]])}
 
         # split gaussians (N is the split size)
         update_params(optimizer, gs_params, gs_params_new)
-
+        print("---------------------")
         print("gaussian density update report")
         prune_n = int(torch.sum(selected_for_prune))
         clone_n = int(torch.sum(selected_for_clone))
@@ -316,13 +318,14 @@ class GSModel(torch.nn.Module):
         print("pruned num: ", prune_n)
         print("cloned num: ", clone_n)
         print("splited num: ", split_n)
-        print("gaussian num change: ", clone_n + split_n - prune_n)
+        print("total gaussian number: ", gs_params['pws'].shape[0])
+        print("---------------------")
 
         self.grad_accum = None
         self.cunt = None
 
-        if (debug):
-            return debug_gs
+        # if (debug):
+        #     return debug_gs
 
     def reset_alpha(self, gs_params, optimizer):
         reset_alpha_raw_val = get_alphas_raw(self.reset_alpha_val)

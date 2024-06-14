@@ -78,8 +78,11 @@ if __name__ == "__main__":
         torch.float32).to('cuda')).requires_grad_()
 
     shs = torch.from_numpy(gs['sh']).type(
-        torch.float32).to('cuda').requires_grad_()
+        torch.float32).to('cuda')
 
+    shs = shs.repeat(1, 16)
+    shs[:, 3:] = shs[:, 3:] * 0.01
+    shs = shs.requires_grad_()
     l = [
         {'params': [pws], 'lr': 0.001, "name": "pws"},
         {'params': [shs], 'lr': 0.001, "name": "shs"},
@@ -100,7 +103,7 @@ if __name__ == "__main__":
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    n_epochs = 300
+    n_epochs = 120
     n = len(gs_set)
     # n = 1
     for epoch in range(1, n_epochs):
@@ -132,21 +135,12 @@ if __name__ == "__main__":
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
         with torch.no_grad():
-            if (epoch % 5 == 0):
-                # fn = "data/epoch%04d.npy" % epoch
-                # print("trained data is saved to %s" % fn)
-                debug_gs = model.update_gaussian_density(gs_params, optimizer)
-                # cam0, _ = gs_set[0]
-                # image0 = render(*debug_gs.values(), cam0)
-                # im_cpu0 = image0.to('cpu').detach().permute(1, 2, 0).numpy()
-                # im.set_data(im_cpu)
-                # fig.canvas.flush_events()
-                # plt.show()
-                # print("update gaussian density; num: %d" % gs_params["pws"].shape[0])
-                print("debug save")
-                fn = "data/debug%04d.npy" % epoch
-                save_gs_params(fn, debug_gs)
-                exit(0)
-            if (epoch % 50 == 0):
-                print("reset aplha")
-                model.reset_alpha(gs_params, optimizer)
+            if (epoch <= 50):
+                if (epoch % 5 == 0):
+                    model.update_gaussian_density(gs_params, optimizer)
+                if (epoch % 15 == 0):
+                    print("reset aplha")
+                    model.reset_alpha(gs_params, optimizer)
+            if (epoch % 10 == 0):
+                fn = "data/epoch%04d.npy" % epoch
+                print("trained data is saved to %s" % fn)
