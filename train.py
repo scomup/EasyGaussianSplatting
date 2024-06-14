@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
     optimizer = optim.Adam(l, lr=0.000, eps=1e-15)
 
-    model = GSModel()
+    model = GSModel(gs_set.sence_size)
 
     cam0, _ = gs_set[0]
     fig, ax = plt.subplots()
@@ -121,29 +121,32 @@ if __name__ == "__main__":
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             avg_loss += loss.item()
-            #if (i == 0):
-            #    im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
-            #    im_cpu = np.clip(im_cpu, 0, 1)
-            #    im.set_data(im_cpu)
-            #    fig.canvas.flush_events()
-            #    plt.pause(0.1)
-            #    # plt.show()
+            if (i == 0):
+                im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
+                im_cpu = np.clip(im_cpu, 0, 1)
+                im.set_data(im_cpu)
+                fig.canvas.flush_events()
+                plt.pause(0.1)
+                # plt.show()
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
         with torch.no_grad():
-            if (epoch % 1 == 0):
-                fn = "data/epoch%04d.npy" % epoch
+            if (epoch % 5 == 0):
+                # fn = "data/epoch%04d.npy" % epoch
                 # print("trained data is saved to %s" % fn)
                 debug_gs = model.update_gaussian_density(gs_params, optimizer)
-                cam0, _ = gs_set[0]
-                image0 = render(*debug_gs.values(), cam0)
-                im_cpu0 = image0.to('cpu').detach().permute(1, 2, 0).numpy()
-                im.set_data(im_cpu)
-                fig.canvas.flush_events()
-                plt.show()
-                print("update gaussian density; num: %d" % gs_params["pws"].shape[0])
-                save_gs_params(fn, gs_params)
+                # cam0, _ = gs_set[0]
+                # image0 = render(*debug_gs.values(), cam0)
+                # im_cpu0 = image0.to('cpu').detach().permute(1, 2, 0).numpy()
+                # im.set_data(im_cpu)
+                # fig.canvas.flush_events()
+                # plt.show()
+                # print("update gaussian density; num: %d" % gs_params["pws"].shape[0])
+                print("debug save")
+                fn = "data/debug%04d.npy" % epoch
+                save_gs_params(fn, debug_gs)
+                exit(0)
             if (epoch % 50 == 0):
                 print("reset aplha")
                 model.reset_alpha(gs_params, optimizer)

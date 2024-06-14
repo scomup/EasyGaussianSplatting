@@ -61,8 +61,7 @@ class GSplatDataset(Dataset):
 
         twcs = torch.stack([x.twc for x in self.cameras])
         cam_dist = torch.linalg.norm(twcs - torch.mean(twcs, axis=0), axis=1)
-        self.sence_radius = float(torch.max(cam_dist)) * 1.1
-
+        self.sence_size = float(torch.max(cam_dist)) * 1.1
 
     def __getitem__(self, index: int):
         return self.cameras[index], self.images[index]

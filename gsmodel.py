@@ -188,15 +188,15 @@ class GSFunction(torch.autograd.Function):
 
 
 class GSModel(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, sense_size):
         super().__init__()
         self.cunt = None
         self.grad_accum = None
         self.cam = None
-        self.grad_threshold = 0.0002 / 500
-        self.scale_threshold = 0.01 * 5.6
+        self.grad_threshold = 0.0002 / 50
+        self.scale_threshold = 0.01 * sense_size
         self.alpha_threshold = 0.005
-        self.big_threshold = 0.1 * 5.6
+        self.big_threshold = 0.1 * sense_size
         self.reset_alpha_val = 0.01
 
     def forward(
@@ -299,10 +299,9 @@ class GSModel(torch.nn.Module):
             rgb = torch.Tensor([1, 0, 0]).to(torch.float32).to('cuda')
             flat_shs = (rgb - 0.5) / 0.28209479177387814
             flat_shs = flat_shs.repeat(gs_params_new['pws'].shape[0], 1)
-            update_params(optimizer, gs_params, gs_params_new)
             gs_params_new['shs'] = flat_shs
             debug_gs = {"pws": torch.cat([gs_params["pws"], gs_params_new["pws"]]),
-                        "shs": torch.cat([gs_params["pws"], flat_shs]),
+                        "shs": torch.cat([gs_params["shs"], gs_params_new["shs"]]),
                         "alphas_raw": torch.cat([gs_params["alphas_raw"], gs_params_new["alphas_raw"]]),
                         "scales_raw": torch.cat([gs_params["scales_raw"], gs_params_new["scales_raw"]]),
                         "rots_raw": torch.cat([gs_params["rots_raw"], gs_params_new["rots_raw"]])}
@@ -324,7 +323,6 @@ class GSModel(torch.nn.Module):
 
         if (debug):
             return debug_gs
-
 
     def reset_alpha(self, gs_params, optimizer):
         reset_alpha_raw_val = get_alphas_raw(self.reset_alpha_val)
