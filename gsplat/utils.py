@@ -145,3 +145,7 @@ def get_scales(x):
 
 def get_rots(x):
     return torch.nn.functional.normalize(x)
+
+
+def get_shs(low_shs, high_shs):
+    return torch.cat((low_shs, high_shs), dim=1)

@@ -6,10 +6,6 @@ from gsplat.pytorch_ssim import gau_loss
 from gsplat.gau_io import *
 from gsplat.gausplat_dataset import *
 from gsmodel import *
-from random import randint
-import time
-import gsplatcu as gsc
-from gsplat.utils import get_expon_lr_func
 
 
 if __name__ == "__main__":
@@ -28,58 +24,33 @@ if __name__ == "__main__":
     path = "/home/liu/bag/gaussian-splatting/tandt/train"
     gs_set = GSplatDataset(path, resize_rate=1)
 
-    gs = gs_set.gs
+    gs_set = GSplatDataset(path, resize_rate=1)
 
-    pws = torch.from_numpy(gs['pw']).type(
-        torch.float32).to('cuda').requires_grad_()
-    rots_raw = torch.from_numpy(gs['rot']).type(
-        # the unactivated scales
-        torch.float32).to('cuda').requires_grad_()
-    scales_raw = get_scales_raw(torch.from_numpy(gs['scale']).type(
-        torch.float32).to('cuda')).requires_grad_()
-    # the unactivated alphas
-    alphas_raw = get_alphas_raw(torch.from_numpy(gs['alpha'][:, np.newaxis]).type(
-        torch.float32).to('cuda')).requires_grad_()
-
-    low_shs = torch.from_numpy(gs['sh']).type(
-        torch.float32).to('cuda').requires_grad_()
-
-    high_shs = torch.ones_like(low_shs).repeat(1, 15) * 0.001
-    high_shs = high_shs.requires_grad_()
+    gs_params = get_gs_params(gs_set.gs)
 
     l = [
-        {'params': [pws], 'lr': 0.001, "name": "pws"},
-        {'params': [low_shs], 'lr': 0.001, "name": "low_shs"},
-        {'params': [high_shs], 'lr': 0.001/20, "name": "high_shs"},
-        {'params': [alphas_raw], 'lr': 0.05, "name": "alphas_raw"},
-        {'params': [scales_raw], 'lr': 0.005, "name": "scales_raw"},
-        {'params': [rots_raw], 'lr': 0.001, "name": "rots_raw"},
+        {'params': [gs_params['pws']], 'lr': 0.001, "name": "pws"},
+        {'params': [gs_params['low_shs']], 'lr': 0.001, "name": "low_shs"},
+        {'params': [gs_params['high_shs']], 'lr': 0.001/20, "name": "high_shs"},
+        {'params': [gs_params['alphas_raw']], 'lr': 0.05, "name": "alphas_raw"},
+        {'params': [gs_params['scales_raw']], 'lr': 0.005, "name": "scales_raw"},
+        {'params': [gs_params['rots_raw']], 'lr': 0.001, "name": "rots_raw"},
     ]
-
-
-    gs_params = {"pws": pws, "low_shs": low_shs, "high_shs": high_shs,
-                 "alphas_raw": alphas_raw, "scales_raw": scales_raw, "rots_raw": rots_raw}
 
     optimizer = optim.Adam(l, lr=0.000, eps=1e-15)
 
-    model = GSModel(gs_set.sence_size)
 
     cam0, _ = gs_set[0]
     fig, ax = plt.subplots()
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    n_epochs = 100
+    epochs = 100
     n = len(gs_set)
-    iteration = 0
-
-    pws_lr_scheduler = get_expon_lr_func(lr_init=1e-4 * gs_set.sence_size,
-                                        lr_final=1e-6 * gs_set.sence_size,
-                                        lr_delay_mult=0.01,
-                                        max_steps=n_epochs * n)
+    model = GSModel(gs_set.sence_size, len(gs_set) * epochs)
 
 
-    for epoch in range(1, n_epochs):
+    for epoch in range(1, epochs):
         idxs = np.arange(n)
         np.random.shuffle(idxs)
         avg_loss = 0
@@ -96,19 +67,14 @@ if __name__ == "__main__":
             model.update_density_info(us.grad, areas)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            pws_lr = pws_lr_scheduler(iteration)
-            iteration += 1
-            pws_param = list(filter(lambda x: x["name"] == "pws", optimizer.param_groups))[0]
-            pws_param['lr'] = pws_lr
+            model.update_pws_lr(optimizer)
 
             avg_loss += loss.item()
+    
             if (i == 0):
-                im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
-                im_cpu = np.clip(im_cpu, 0, 1)
-                im.set_data(im_cpu)
-                fig.canvas.flush_events()
+                im.set_data(np.clip(image.detach().permute(1, 2, 0).to('cpu').numpy(), 0, 1))
                 plt.pause(0.1)
-                # plt.show()
+
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         # save data.
@@ -123,3 +89,6 @@ if __name__ == "__main__":
                 fn = "data/epoch%04d.npy" % epoch
                 save_gs_params(fn, gs_params)
                 print("trained data is saved to %s" % fn)
+    
+    save_gs_params('data/final.npy', gs_params)
+    print("Training is finished.")

@@ -3,71 +3,6 @@ import gsplatcu as gsc
 from gsplat.utils import *
 
 
-def update_params(optimizer, gs_params, gs_params_new):
-    for group in optimizer.param_groups:
-        param_new = gs_params_new[group["name"]]
-        state = optimizer.state.get(group['params'][0], None)
-        if state is not None:
-            state["exp_avg"] = torch.cat(
-                (state["exp_avg"], torch.zeros_like(param_new)), dim=0)
-            state["exp_avg_sq"] = torch.cat(
-                (state["exp_avg_sq"], torch.zeros_like(param_new)), dim=0)
-            del optimizer.state[group['params'][0]]
-            group["params"][0] = torch.nn.Parameter(
-                torch.cat((group["params"][0], param_new), dim=0).requires_grad_(True))
-            optimizer.state[group['params'][0]] = state
-            gs_params[group["name"]] = group["params"][0]
-        else:
-            group["params"][0] = torch.nn.Parameter(
-                torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
-            gs_params[group["name"]] = group["params"][0]
-
-
-def prune_params(optimizer, gs_params, mask):
-    for group in optimizer.param_groups:
-        state = optimizer.state.get(group['params'][0], None)
-        if state is not None:
-            state["exp_avg"] = state["exp_avg"][mask]
-            state["exp_avg_sq"] = state["exp_avg_sq"][mask]
-            del optimizer.state[group['params'][0]]
-            group["params"][0] = torch.nn.Parameter(
-                (group["params"][0][mask].requires_grad_(True)))
-            optimizer.state[group['params'][0]] = state
-            gs_params[group["name"]] = group["params"][0]
-        else:
-            group["params"][0] = torch.nn.Parameter(
-                group["params"][0][mask].requires_grad_(True))
-            gs_params[group["name"]] = group["params"][0]
-
-
-def render(pws, shs, alphas, scales, rots, cam):
-    # more detail view forward.pdf
-    # step1. Transform pw to camera frame,
-    # and project it to iamge.
-    us, pcs, depths = gsc.project(
-        pws, cam.Rcw, cam.tcw, cam.fx, cam.fy, cam.cx, cam.cy, False)
-
-    # step2. Calcuate the 3d Gaussian.
-    cov3ds = gsc.computeCov3D(
-        rots, scales, depths, False)[0]
-
-    # step3. Calcuate the 2d Gaussian.
-    cov2ds = gsc.computeCov2D(
-        cov3ds, pcs, cam.Rcw, depths, cam.fx, cam.fy, cam.width, cam.height, False)[0]
-
-    # step4. get color info
-    colors = gsc.sh2Color(
-        shs, pws, cam.twc, False)[0]
-
-    # step5. Blend the 2d Gaussian to image
-    cinv2ds, areas = gsc.inverseCov2D(
-        cov2ds, depths, False)
-    image, _, _, _, _ =\
-        gsc.splat(cam.height, cam.width,
-                  us, cinv2ds, alphas, depths, colors, areas)
-    return image
-
-
 class GSFunction(torch.autograd.Function):
     @staticmethod
     def forward(
@@ -80,19 +15,6 @@ class GSFunction(torch.autograd.Function):
         us,
         cam,
     ):
-        """
-        if (torch.isnan(pws).any()):
-            print("pws nan")
-        if (torch.isnan(alphas).any()):
-            print("alphas nan")
-        if (torch.isnan(scales).any()):
-            print("scales nan")
-        if (torch.isnan(rots).any()):
-            print("rots nan")
-        if (torch.isnan(shs).any()):
-            print("shs nan")
-        """
-
         # more detail view forward.pdf
         # step1. Transform pw to camera frame,
         # and project it to iamge.
@@ -161,24 +83,6 @@ class GSFunction(torch.autograd.Function):
         dloss_dpws = dloss_dus @ du_dpcs @ dpc_dpws + \
             dloss_dcolors @ dcolor_dpws + \
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
-        """
-        if (torch.isnan(dloss_dpws).any()):
-            print("dloss_dpws nan")
-        if (torch.isnan(dloss_dus).any()):
-            print("dloss_dus nan")
-        if (torch.isnan(du_dpcs).any()):
-            print("du_dpcs nan")
-        if (torch.isnan(dpc_dpws).any()):
-            print("dpc_dpws nan")
-        if (torch.isnan(dloss_dcolors).any()):
-            print("dloss_dcolors nan")
-        if (torch.isnan(dcolor_dpws).any()):
-            print("dcolor_dpws nan")
-        if (torch.isnan(dloss_dcov2ds).any()):
-            print("dloss_dcov2ds nan")
-        if (torch.isnan(dcov2d_dpcs).any()):
-            print("dcov2d_dpcs nan")
-        """
 
         return dloss_dpws.squeeze(),\
             dloss_dshs,\
@@ -189,8 +93,68 @@ class GSFunction(torch.autograd.Function):
             None
 
 
+def get_gs_params(gs):
+    pws = torch.from_numpy(gs['pw']).type(
+        torch.float32).to('cuda').requires_grad_()
+    rots_raw = torch.from_numpy(gs['rot']).type(
+        # the unactivated scales
+        torch.float32).to('cuda').requires_grad_()
+    scales_raw = get_scales_raw(torch.from_numpy(gs['scale']).type(
+        torch.float32).to('cuda')).requires_grad_()
+    # the unactivated alphas
+    alphas_raw = get_alphas_raw(torch.from_numpy(gs['alpha'][:, np.newaxis]).type(
+        torch.float32).to('cuda')).requires_grad_()
+    shs = torch.from_numpy(gs['sh']).type(
+        torch.float32).to('cuda')
+    low_shs = shs[:, :3]
+    high_shs = torch.ones_like(low_shs).repeat(1, 15) * 0.001
+    high_shs[:, :shs[:, 3:].shape[1]] = shs[:, 3:]
+    low_shs = low_shs.requires_grad_()
+    high_shs = high_shs.requires_grad_()
+    gs_params = {"pws": pws, "low_shs": low_shs, "high_shs": high_shs,
+                 "alphas_raw": alphas_raw, "scales_raw": scales_raw, "rots_raw": rots_raw}
+    return gs_params
+
+
+def update_params(optimizer, gs_params, gs_params_new):
+    for group in optimizer.param_groups:
+        param_new = gs_params_new[group["name"]]
+        state = optimizer.state.get(group['params'][0], None)
+        if state is not None:
+            state["exp_avg"] = torch.cat(
+                (state["exp_avg"], torch.zeros_like(param_new)), dim=0)
+            state["exp_avg_sq"] = torch.cat(
+                (state["exp_avg_sq"], torch.zeros_like(param_new)), dim=0)
+            del optimizer.state[group['params'][0]]
+            group["params"][0] = torch.nn.Parameter(
+                torch.cat((group["params"][0], param_new), dim=0).requires_grad_(True))
+            optimizer.state[group['params'][0]] = state
+            gs_params[group["name"]] = group["params"][0]
+        else:
+            group["params"][0] = torch.nn.Parameter(
+                torch.cat((group["params"][0], param_new), dim=0).requires_grad_(True))
+            gs_params[group["name"]] = group["params"][0]
+
+
+def prune_params(optimizer, gs_params, mask):
+    for group in optimizer.param_groups:
+        state = optimizer.state.get(group['params'][0], None)
+        if state is not None:
+            state["exp_avg"] = state["exp_avg"][mask]
+            state["exp_avg_sq"] = state["exp_avg_sq"][mask]
+            del optimizer.state[group['params'][0]]
+            group["params"][0] = torch.nn.Parameter(
+                (group["params"][0][mask].requires_grad_(True)))
+            optimizer.state[group['params'][0]] = state
+            gs_params[group["name"]] = group["params"][0]
+        else:
+            group["params"][0] = torch.nn.Parameter(
+                group["params"][0][mask].requires_grad_(True))
+            gs_params[group["name"]] = group["params"][0]
+
+
 class GSModel(torch.nn.Module):
-    def __init__(self, sense_size):
+    def __init__(self, sense_size, max_steps):
         super().__init__()
         self.cunt = None
         self.grad_accum = None
@@ -200,6 +164,11 @@ class GSModel(torch.nn.Module):
         self.alpha_threshold = 0.005
         self.big_threshold = 0.1 * sense_size
         self.reset_alpha_val = 0.01
+        self.iteration = 0
+        self.pws_lr_scheduler = get_expon_lr_func(lr_init=1e-4 * sense_size,
+                                                lr_final=1e-6 * sense_size,
+                                                lr_delay_mult=0.01,
+                                                max_steps=max_steps)
 
     def forward(
             self,
@@ -217,9 +186,9 @@ class GSModel(torch.nn.Module):
         # Limit the value of scales > 0
         scales = get_scales(scales_raw)
         # Limit the value of rot, normal of rots is 1
-        rots = torch.nn.functional.normalize(rots_raw)
+        rots = get_rots(rots_raw)
 
-        shs = torch.cat((low_shs, high_shs), dim=1)
+        shs = get_shs(low_shs, high_shs)
 
         # apply GSfunction (forward)
         image, areas = GSFunction.apply(pws, shs, alphas, scales, rots, us, cam)
@@ -346,3 +315,9 @@ class GSModel(torch.nn.Module):
         state["exp_avg_sq"] = torch.zeros_like(gs_params['alphas_raw'])
         del optimizer.state[alpha_param['params'][0]]
         optimizer.state[alpha_param['params'][0]] = state
+
+    def update_pws_lr(self, optimizer):
+        pws_lr = self.pws_lr_scheduler(self.iteration)
+        pws_param = list(filter(lambda x: x["name"] == "pws", optimizer.param_groups))[0]
+        pws_param['lr'] = pws_lr
+        self.iteration += 1
