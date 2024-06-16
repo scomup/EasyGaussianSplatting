@@ -159,7 +159,7 @@ class GSModel(torch.nn.Module):
         self.cunt = None
         self.grad_accum = None
         self.cam = None
-        self.grad_threshold = 0.0002 / 50
+        self.grad_threshold = 4e-7
         self.scale_threshold = 0.01 * sense_size
         self.alpha_threshold = 0.005
         self.big_threshold = 0.1 * sense_size
@@ -178,9 +178,12 @@ class GSModel(torch.nn.Module):
             alphas_raw,
             scales_raw,
             rots_raw,
-            us,
             cam):
         self.cam = cam
+        # us is not involved in the forward,
+        # but in order to obtain the dloss_dus, we need to pass it to GSModel.
+        self.us = torch.zeros([pws.shape[0], 2], dtype=torch.float32,
+                 device='cuda', requires_grad=True)
         # Limit the value of alphas: 0 < alphas < 1
         alphas = get_alphas(alphas_raw)
         # Limit the value of scales > 0
@@ -191,21 +194,21 @@ class GSModel(torch.nn.Module):
         shs = get_shs(low_shs, high_shs)
 
         # apply GSfunction (forward)
-        image, mask = GSFunction.apply(pws, shs, alphas, scales, rots, us, cam)
+        image, self.mask = GSFunction.apply(pws, shs, alphas, scales, rots, self.us, cam)
 
-        return image, mask
+        return image
 
-    def update_density_info(self, dloss_dus, mask):
+    def update_density_info(self):
+        dloss_dus = self.us.grad
         with torch.no_grad():
             grad = torch.norm(dloss_dus, dim=-1, keepdim=True)
 
             if self.cunt is None:
                 self.grad_accum = grad
-                self.cunt = mask.to(torch.int32)
+                self.cunt = self.mask.to(torch.int32)
             else:
-                self.cunt += mask
-                self.grad_accum[mask] += grad[mask]
-            pass
+                self.cunt += self.mask
+                self.grad_accum[self.mask] += grad[self.mask]
 
     def update_gaussian_density(self, gs_params, optimizer):
         # prune too small or too big gaussian
@@ -293,20 +296,14 @@ class GSModel(torch.nn.Module):
         print("splited num: ", split_n)
         print("total gaussian number: ", gs_params['pws'].shape[0])
         print("---------------------")
-
         self.grad_accum = None
         self.cunt = None
-
-        # if (debug):
-        #     return debug_gs
 
     def reset_alpha(self, gs_params, optimizer):
         reset_alpha_raw_val = get_alphas_raw(self.reset_alpha_val)
         rest_mask = gs_params['alphas_raw'] > reset_alpha_raw_val
         gs_params['alphas_raw'][rest_mask] = torch.ones_like(gs_params['alphas_raw'])[rest_mask] * reset_alpha_raw_val
-
         alpha_param = list(filter(lambda x: x["name"] == "alphas_raw", optimizer.param_groups))[0]
-
         state = optimizer.state.get(alpha_param['params'][0], None)
         state["exp_avg"] = torch.zeros_like(gs_params['alphas_raw'])
         state["exp_avg_sq"] = torch.zeros_like(gs_params['alphas_raw'])
