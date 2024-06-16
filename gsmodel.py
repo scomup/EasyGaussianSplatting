@@ -47,7 +47,7 @@ class GSFunction(torch.autograd.Function):
                               dcinv2d_dcov2ds, dcov2d_dcov3ds,
                               dcov3d_drots, dcov3d_dscales, dcolor_dshs,
                               du_dpcs, dcov2d_dpcs, dcolor_dpws)
-        return image, areas
+        return image, depths > 0.2
 
     @staticmethod
     def backward(ctx, dloss_dgammas, _):
@@ -191,23 +191,20 @@ class GSModel(torch.nn.Module):
         shs = get_shs(low_shs, high_shs)
 
         # apply GSfunction (forward)
-        image, areas = GSFunction.apply(pws, shs, alphas, scales, rots, us, cam)
+        image, mask = GSFunction.apply(pws, shs, alphas, scales, rots, us, cam)
 
-        return image, areas
+        return image, mask
 
-    def update_density_info(self, dloss_dus, areas):
+    def update_density_info(self, dloss_dus, mask):
         with torch.no_grad():
-            visible = areas[:, 0] > 0
-            dloss_dus[:, 0] = dloss_dus[:, 0]
-            dloss_dus[:, 0] = dloss_dus[:, 1]
             grad = torch.norm(dloss_dus, dim=-1, keepdim=True)
 
             if self.cunt is None:
                 self.grad_accum = grad
-                self.cunt = visible.to(torch.int32)
+                self.cunt = mask.to(torch.int32)
             else:
-                self.cunt += visible
-                self.grad_accum[visible] += grad[visible]
+                self.cunt += mask
+                self.grad_accum[mask] += grad[mask]
             pass
 
     def update_gaussian_density(self, gs_params, optimizer):

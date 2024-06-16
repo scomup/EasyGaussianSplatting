@@ -61,10 +61,10 @@ if __name__ == "__main__":
 
         for i in idxs:
             cam, image_gt = gs_set[i]
-            image, areas = model(*gs_params.values(), us, cam)
+            image, mask = model(*gs_params.values(), us, cam)
             loss = gau_loss(image, image_gt)
             loss.backward()
-            model.update_density_info(us.grad, areas)
+            model.update_density_info(us.grad, mask)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             model.update_pws_lr(optimizer)
