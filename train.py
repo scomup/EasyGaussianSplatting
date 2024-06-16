@@ -9,43 +9,7 @@ from gsmodel import *
 from random import randint
 import time
 import gsplatcu as gsc
-
-
-def rainbow(scalars, scalar_min=0, scalar_max=255):
-    range = scalar_max - scalar_min
-    values = 1.0 - (scalars - scalar_min) / range
-    # values = (scalars - scalar_min) / range  # using inverted color
-    colors = torch.zeros([scalars.shape[0], 3], dtype=torch.float32, device='cuda')
-    values = torch.clip(values, 0, 1)
-
-    h = values * 5.0 + 1.0
-    i = torch.floor(h).to(torch.int32)
-    f = h - i
-    f[torch.logical_not(i % 2)] = 1 - f[torch.logical_not(i % 2)]
-    n = 1 - f
-
-    # idx = i <= 1
-    colors[i <= 1, 0] = n[i <= 1]
-    colors[i <= 1, 1] = 0
-    colors[i <= 1, 2] = 1
-
-    colors[i == 2, 0] = 0
-    colors[i == 2, 1] = n[i == 2]
-    colors[i == 2, 2] = 1
-
-    colors[i == 3, 0] = 0
-    colors[i == 3, 1] = 1
-    colors[i == 3, 2] = n[i == 3]
-
-    colors[i == 4, 0] = n[i == 4]
-    colors[i == 4, 1] = 1
-    colors[i == 4, 2] = 0
-
-    colors[i >= 5, 0] = 1
-    colors[i >= 5, 1] = n[i >= 5]
-    colors[i >= 5, 2] = 0
-    shs = (colors - 0.5) / 0.28209479177387814
-    return shs
+from gsplat.utils import get_expon_lr_func
 
 
 if __name__ == "__main__":
@@ -91,6 +55,8 @@ if __name__ == "__main__":
         {'params': [scales_raw], 'lr': 0.005, "name": "scales_raw"},
         {'params': [rots_raw], 'lr': 0.001, "name": "rots_raw"},
     ]
+
+
     gs_params = {"pws": pws, "low_shs": low_shs, "high_shs": high_shs,
                  "alphas_raw": alphas_raw, "scales_raw": scales_raw, "rots_raw": rots_raw}
 
@@ -103,9 +69,16 @@ if __name__ == "__main__":
     array = np.zeros(shape=(cam0.height, cam0.width, 3), dtype=np.uint8)
     im = ax.imshow(array)
 
-    n_epochs = 120
+    n_epochs = 100
     n = len(gs_set)
-    # n = 1
+    iteration = 0
+
+    pws_lr_scheduler = get_expon_lr_func(lr_init=1e-4 * gs_set.sence_size,
+                                        lr_final=1e-6 * gs_set.sence_size,
+                                        lr_delay_mult=0.01,
+                                        max_steps=n_epochs * n)
+
+
     for epoch in range(1, n_epochs):
         idxs = np.arange(n)
         np.random.shuffle(idxs)
@@ -123,6 +96,11 @@ if __name__ == "__main__":
             model.update_density_info(us.grad, areas)
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
+            pws_lr = pws_lr_scheduler(iteration)
+            iteration += 1
+            pws_param = list(filter(lambda x: x["name"] == "pws", optimizer.param_groups))[0]
+            pws_param['lr'] = pws_lr
+
             avg_loss += loss.item()
             if (i == 0):
                 im_cpu = image.to('cpu').detach().permute(1, 2, 0).numpy()
@@ -143,4 +121,5 @@ if __name__ == "__main__":
                     model.reset_alpha(gs_params, optimizer)
             if (epoch % 10 == 0):
                 fn = "data/epoch%04d.npy" % epoch
+                save_gs_params(fn, gs_params)
                 print("trained data is saved to %s" % fn)

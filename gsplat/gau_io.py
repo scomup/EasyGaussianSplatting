@@ -140,7 +140,7 @@ def save_gs(fn, gs):
 
 def save_gs_params(fn, gs_params):
     pws = gs_params["pws"]
-    shs = gs_params["shs"]
+    shs = torch.cat((gs_params["low_shs"], gs_params["high_shs"]), dim=1)
     alphas = get_alphas(gs_params["alphas_raw"])
     scales = get_scales(gs_params["scales_raw"])
     rots = get_rots(gs_params["rots_raw"])
