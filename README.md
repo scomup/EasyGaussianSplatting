@@ -62,20 +62,28 @@ Download the T&T+DB COLMAP datasets.
 [T&T+DB COLMAP (650MB)](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip) 
 
 ```bash
-python3 train.py --path='THE_PATH_OF_UNZIPPED_DATASET'
+python3 train.py --path='THE_PATH_OF_DATASET'
 ```
-(The Adaptive Density Control has not been implemented yet.)
 
 ## 3D Gaussian Viewer 
 
 A efficient 3D Gaussian splatting viewer for showing 3D Gaussian data. 
 
+Press the keyboard key [M] to open the settings window. You will find more fun functions there.
+
 ```bash
-python3 gaussian_viewer.py --gs='THE_PATH_OF_YOUR_TRAINED_PLY_OR_NPY_FILE'
+python3 gaussian_viewer.py --gs='THE_PATH_OF_YOUR_TRAINED_FILE'
 ```
 
 <img src="imgs/viewer.gif" width="640px">
 
+Our viewer supports checking your dataset.
+
+```bash
+python3 gaussian_viewer.py --path='THE_PATH_OF_DATASET'
+```
+
+<img src="imgs/dataset.png" width="640px">
 
 
 ## Spherical harmonics demo

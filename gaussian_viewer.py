@@ -16,6 +16,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--gs", help="the trained gs data")
     parser.add_argument("--path", help="the path of dataset")
+    parser.add_argument("--skip", help="skip", default=5)
     args = parser.parse_args()
     cam_2_world = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
     gs_set = []
@@ -24,7 +25,7 @@ if __name__ == '__main__':
         print("Try to training %s ..." % args.path)
         gs_set = GSplatDataset(args.path)
         gs = gs_set.gs
-        cam_size = gs_set.sence_size * 0.1
+        cam_size = gs_set.sence_size * 0.05
         rotate_gaussian(cam_2_world, gs)
     if args.gs:
         print("Try to load %s ..." % args.gs)
@@ -43,7 +44,7 @@ if __name__ == '__main__':
     items = [("grid", grid_item), ("gs", gs_item)]
 
     for i in range(len(gs_set)):
-        if (i % 30 != 0):
+        if (i % args.skip != 0):
             continue
         cam, _ = gs_set[i]
         T = np.eye(4)
