@@ -12,7 +12,7 @@ from PIL import Image
 
 
 class Camera:
-    def __init__(self, id, width, height, fx, fy, cx, cy, Rcw, tcw):
+    def __init__(self, id, width, height, fx, fy, cx, cy, Rcw, tcw, path):
         self.id = id
         self.width = width
         self.height = height
@@ -23,6 +23,8 @@ class Camera:
         self.Rcw = Rcw
         self.tcw = tcw
         self.twc = -torch.linalg.inv(Rcw) @ tcw
+        self.path = path
+
 
 
 class GSplatDataset(Dataset):
@@ -37,7 +39,8 @@ class GSplatDataset(Dataset):
         for image_param in image_params.values():
             i = image_param.camera_id
             camera_param = camera_params[i]
-            image = Image.open(Path(path, "images", image_param.name))
+            im_path = str(Path(path, "images", image_param.name))
+            image = Image.open(im_path)
             if (resize_rate != 1):
                 image = image.resize((image.width * self.resize_rate, image.height * self.resize_rate))
 
@@ -49,7 +52,7 @@ class GSplatDataset(Dataset):
             cy = camera_param.params[3] * h_scale
             Rcw = torch.from_numpy(image_param.qvec2rotmat()).to(self.device).to(torch.float32)
             tcw = torch.from_numpy(image_param.tvec).to(self.device).to(torch.float32)
-            camera = Camera(image_param.id, image.width, image.height, fx, fy, cx, cy, Rcw, tcw)
+            camera = Camera(image_param.id, image.width, image.height, fx, fy, cx, cy, Rcw, tcw, im_path)
             image = torchvision.transforms.functional.to_tensor(image).to(self.device).to(torch.float32)
 
             self.cameras.append(camera)
