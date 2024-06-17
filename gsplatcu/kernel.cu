@@ -7,6 +7,9 @@
 #include "kernel.cuh"
 #include "matrix.cuh"
 
+#define MIN_DEPTH (0.2)
+#define BAD_MARKER (-1.f)
+
 inline __device__ void fetch2shared(
     int32_t n,
     const bool is_backward,
@@ -55,7 +58,7 @@ __global__ void createKeys(
         return;
 
     const float depth = depths[i];
-    if (depth < 0.2)
+    if (depth < MIN_DEPTH)
         return;
 
     uint32_t off = (i == 0) ? 0 : patch_offset_per_gs[i - 1];
@@ -79,7 +82,7 @@ __global__ void createKeys(
 __global__ void getRects(
     const int gs_num,
     const float* __restrict__ us,
-    const int* __restrict__ areas,
+    int2* __restrict__ areas,
     float* __restrict__ depths,
     const dim3 grid,
     uint4 *__restrict__ gs_rects,
@@ -91,13 +94,13 @@ __global__ void getRects(
 
     patch_num_per_gs[idx] = 0;
 
-    if (depths[idx] < 0.2)
+    if (depths[idx] < MIN_DEPTH)
         return;
 
     float2 u = { us[2 * idx], us[2 * idx + 1]};
 
-    float xs = areas[idx * 2];
-    float ys = areas[idx * 2 + 1];
+    float xs = areas[idx].x;
+    float ys = areas[idx].y;
 
     uint4 rect = {
         min(grid.x, max((int)0, (int)((u.x - xs) / BLOCK))),            // min_x
@@ -110,7 +113,8 @@ __global__ void getRects(
 
     if (n == 0)
     {
-        depths[idx] = -1.f;
+        depths[idx] = BAD_MARKER;
+        areas[idx] = {0, 0};
         return;
     }
     gs_rects[idx] = rect;
@@ -283,7 +287,7 @@ __global__ void inverseCov2D(
     if (i >= gs_num)
         return;
 
-    if (depths[i] < 0.2)
+    if (depths[i] < MIN_DEPTH)
         return;
 
     // forward.pdf (F.5.3)
@@ -292,21 +296,21 @@ __global__ void inverseCov2D(
     const float b = cov2d.y;
     const float c = cov2d.z;
 
-    const float det = a * c - b * b;
-    if (det == 0.0f)
+    // forward.pdf (F.5.3)
+    const float det_inv = 1.f / (a * c - b * b);
+    if (isnan(det_inv))
     {
-        depths[i] = -1.f;
+        depths[i] = BAD_MARKER;
         return;
     }
-    // forward.pdf (F.5.3)
-    const float det_inv = 1.f / det;
+
     cinv2ds[i] = {det_inv * c, -det_inv * b, det_inv * a};
     areas[i] = {(int)ceil(3 * sqrt(abs(a))), (int)ceil(3 * sqrt(abs(c)))};
 
     if (dcinv2d_dcov2ds != nullptr)
     {
         // backward.pdf (B.5.3)
-        const float det2_inv = det_inv / det;
+        const float det2_inv = det_inv * det_inv;
         dcinv2d_dcov2ds[i * 9 + 0] = -c * c * det2_inv;
         dcinv2d_dcov2ds[i * 9 + 1] = 2 * b * c * det2_inv;
         dcinv2d_dcov2ds[i * 9 + 2] = -a * c * det2_inv + det_inv;
@@ -333,7 +337,7 @@ __global__ void computeCov3D(
     if (i >= gs_num)
         return;
 
-    if (depths[i] < 0.2)
+    if (depths[i] < MIN_DEPTH)
         return;
     const float4 rot = rots[i];
     const float3 s = scales[i];
@@ -437,7 +441,7 @@ __global__ void computeCov2D(
     if (i >= gs_num)
         return;
 
-    if(depths[i] < 0.2)
+    if(depths[i] < MIN_DEPTH)
         return;
 
     float3 pc = pcs[i];
@@ -580,8 +584,15 @@ __global__ void project(
     const float x = pc(0);
     const float y = pc(1);
     const float z = pc(2);
+
+    if (z < MIN_DEPTH)
+    {
+        depths[i] = BAD_MARKER;
+        return;
+    }
+
     const float z_inv = 1.f / z;
-    const float z2_inv = z_inv / z;
+    const float z2_inv = z_inv * z_inv;
 
     const float x_focal_x = x * focal_x;
     const float y_focal_y = y * focal_y;

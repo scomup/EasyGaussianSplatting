@@ -1,6 +1,7 @@
 import numpy as np
 from plyfile import PlyData
 import torch
+from gsplat.utils import *
 
 
 def gsdata_type(sh_dim):
@@ -137,7 +138,13 @@ def save_gs(fn, gs):
     np.save(fn, gs)
 
 
-def save_torch_params(fn, rots, scales, shs, alphas, pws):
+def save_training_params(fn, training_params):
+    pws = training_params["pws"]
+    shs = get_shs(training_params["low_shs"], training_params["high_shs"])
+    alphas = get_alphas(training_params["alphas_raw"])
+    scales = get_scales(training_params["scales_raw"])
+    rots = get_rots(training_params["rots_raw"])
+
     rots = rots.detach().cpu().numpy()
     scales = scales.detach().cpu().numpy()
     shs = shs.detach().cpu().numpy()

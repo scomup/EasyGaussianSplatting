@@ -54,7 +54,7 @@ std::vector<torch::Tensor> splat(
     getRects<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE >>>(
         gs_num,
         us.contiguous().data_ptr<float>(),
-        areas.contiguous().data_ptr<int>(),
+        (int2*)areas.contiguous().data_ptr<int>(),
         depths.contiguous().data_ptr<float>(),
         grid,
         thrust::raw_pointer_cast(gs_rects.data()),
