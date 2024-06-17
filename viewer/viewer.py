@@ -127,7 +127,7 @@ class Viewer(QMainWindow):
         super(Viewer, self).__init__()
         self.setGeometry(0, 0, 1080, 720)
         self.initUI()
-        self.setWindowTitle("Fast Viewer")
+        self.setWindowTitle("Easy Gaussian Viewer")
 
     def open_setting_window(self):
         self.setting_window = SettingWindow()
