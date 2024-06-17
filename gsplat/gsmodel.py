@@ -93,7 +93,7 @@ class GSFunction(torch.autograd.Function):
             None
 
 
-def get_gs_params(gs):
+def get_training_params(gs):
     pws = torch.from_numpy(gs['pw']).type(
         torch.float32).to('cuda').requires_grad_()
     rots_raw = torch.from_numpy(gs['rot']).type(
@@ -111,14 +111,27 @@ def get_gs_params(gs):
     high_shs[:, :shs[:, 3:].shape[1]] = shs[:, 3:]
     low_shs = low_shs.requires_grad_()
     high_shs = high_shs.requires_grad_()
-    gs_params = {"pws": pws, "low_shs": low_shs, "high_shs": high_shs,
-                 "alphas_raw": alphas_raw, "scales_raw": scales_raw, "rots_raw": rots_raw}
-    return gs_params
+    params = {"pws": pws, "low_shs": low_shs, "high_shs": high_shs,
+              "alphas_raw": alphas_raw, "scales_raw": scales_raw, "rots_raw": rots_raw}
+
+    adam_params = [
+        {'params': [params['pws']], 'lr': 0.001, "name": "pws"},
+        {'params': [params['low_shs']],
+            'lr': 0.001, "name": "low_shs"},
+        {'params': [params['high_shs']],
+         'lr': 0.001/20, "name": "high_shs"},
+        {'params': [params['alphas_raw']],
+         'lr': 0.05, "name": "alphas_raw"},
+        {'params': [params['scales_raw']],
+         'lr': 0.005, "name": "scales_raw"},
+        {'params': [params['rots_raw']], 'lr': 0.001, "name": "rots_raw"}]
+
+    return params, adam_params
 
 
-def update_params(optimizer, gs_params, gs_params_new):
+def update_params(optimizer, params, new_params):
     for group in optimizer.param_groups:
-        param_new = gs_params_new[group["name"]]
+        param_new = new_params[group["name"]]
         state = optimizer.state.get(group['params'][0], None)
         if state is not None:
             state["exp_avg"] = torch.cat(
@@ -129,14 +142,14 @@ def update_params(optimizer, gs_params, gs_params_new):
             group["params"][0] = torch.nn.Parameter(
                 torch.cat((group["params"][0], param_new), dim=0).requires_grad_(True))
             optimizer.state[group['params'][0]] = state
-            gs_params[group["name"]] = group["params"][0]
+            params[group["name"]] = group["params"][0]
         else:
             group["params"][0] = torch.nn.Parameter(
                 torch.cat((group["params"][0], param_new), dim=0).requires_grad_(True))
-            gs_params[group["name"]] = group["params"][0]
+            params[group["name"]] = group["params"][0]
 
 
-def prune_params(optimizer, gs_params, mask):
+def prune_params(optimizer, params, mask):
     for group in optimizer.param_groups:
         state = optimizer.state.get(group['params'][0], None)
         if state is not None:
@@ -146,11 +159,11 @@ def prune_params(optimizer, gs_params, mask):
             group["params"][0] = torch.nn.Parameter(
                 (group["params"][0][mask].requires_grad_(True)))
             optimizer.state[group['params'][0]] = state
-            gs_params[group["name"]] = group["params"][0]
+            params[group["name"]] = group["params"][0]
         else:
             group["params"][0] = torch.nn.Parameter(
                 group["params"][0][mask].requires_grad_(True))
-            gs_params[group["name"]] = group["params"][0]
+            params[group["name"]] = group["params"][0]
 
 
 class GSModel(torch.nn.Module):
@@ -166,9 +179,9 @@ class GSModel(torch.nn.Module):
         self.reset_alpha_val = 0.01
         self.iteration = 0
         self.pws_lr_scheduler = get_expon_lr_func(lr_init=1e-4 * sense_size,
-                                                lr_final=1e-6 * sense_size,
-                                                lr_delay_mult=0.01,
-                                                max_steps=max_steps)
+                                                  lr_final=1e-6 * sense_size,
+                                                  lr_delay_mult=0.01,
+                                                  max_steps=max_steps)
 
     def forward(
             self,
@@ -183,7 +196,7 @@ class GSModel(torch.nn.Module):
         # us is not involved in the forward,
         # but in order to obtain the dloss_dus, we need to pass it to GSModel.
         self.us = torch.zeros([pws.shape[0], 2], dtype=torch.float32,
-                 device='cuda', requires_grad=True)
+                              device='cuda', requires_grad=True)
         # Limit the value of alphas: 0 < alphas < 1
         alphas = get_alphas(alphas_raw)
         # Limit the value of scales > 0
@@ -199,6 +212,10 @@ class GSModel(torch.nn.Module):
         return image
 
     def update_density_info(self):
+        """
+        calculate average grad of image points.
+        # do it after backward
+        """
         dloss_dus = self.us.grad
         with torch.no_grad():
             grad = torch.norm(dloss_dus, dim=-1, keepdim=True)
@@ -209,24 +226,26 @@ class GSModel(torch.nn.Module):
             else:
                 self.cunt += self.mask
                 self.grad_accum[self.mask] += grad[self.mask]
+        del self.us.grad
+        del self.mask
 
-    def update_gaussian_density(self, gs_params, optimizer):
+    def update_gaussian_density(self, params, optimizer):
         # prune too small or too big gaussian
-        selected_by_small_alpha = gs_params["alphas_raw"].squeeze() < get_alphas_raw(self.alpha_threshold)
-        selected_by_big_scale = torch.max(gs_params["scales_raw"], axis=1)[0] > get_scales_raw(self.big_threshold)
+        selected_by_small_alpha = params["alphas_raw"].squeeze() < get_alphas_raw(self.alpha_threshold)
+        selected_by_big_scale = torch.max(params["scales_raw"], axis=1)[0] > get_scales_raw(self.big_threshold)
         selected_for_prune = torch.logical_or(selected_by_small_alpha, selected_by_big_scale)
         selected_for_remain = torch.logical_not(selected_for_prune)
-        prune_params(optimizer, gs_params, selected_for_remain)
+        prune_params(optimizer, params, selected_for_remain)
 
         grads = self.grad_accum.squeeze()[selected_for_remain] / self.cunt[selected_for_remain]
         grads[grads.isnan()] = 0.0
 
-        pws = gs_params["pws"]
-        low_shs = gs_params["low_shs"]
-        high_shs = gs_params["high_shs"]
-        alphas = get_alphas(gs_params["alphas_raw"])
-        scales = get_scales(gs_params["scales_raw"])
-        rots = get_rots(gs_params["rots_raw"])
+        pws = params["pws"]
+        low_shs = params["low_shs"]
+        high_shs = params["high_shs"]
+        alphas = get_alphas(params["alphas_raw"])
+        scales = get_scales(params["scales_raw"])
+        rots = get_rots(params["rots_raw"])
 
         selected_by_grad = grads >= self.grad_threshold
         selected_by_scale = torch.max(scales, axis=1)[0] <= self.scale_threshold
@@ -265,27 +284,26 @@ class GSModel(torch.nn.Module):
         low_shs_splited = low_shs[selected_for_split]
         high_shs_splited = high_shs[selected_for_split]
 
-        gs_params_new = {"pws": torch.cat([pws_cloned, pws_splited]),
-                         "low_shs": torch.cat([low_shs_cloned, low_shs_splited]),
-                         "high_shs": torch.cat([high_shs_cloned, high_shs_splited]),
-                         "alphas_raw": get_alphas_raw(torch.cat([alphas_cloned, alphas_splited])),
-                         "scales_raw": get_scales_raw(torch.cat([scales_cloned, scales_splited])),
-                         "rots_raw": torch.cat([rots_cloned, rots_splited])}
+        new_params = {"pws": torch.cat([pws_cloned, pws_splited]),
+                      "low_shs": torch.cat([low_shs_cloned, low_shs_splited]),
+                      "high_shs": torch.cat([high_shs_cloned, high_shs_splited]),
+                      "alphas_raw": get_alphas_raw(torch.cat([alphas_cloned, alphas_splited])),
+                      "scales_raw": get_scales_raw(torch.cat([scales_cloned, scales_splited])),
+                      "rots_raw": torch.cat([rots_cloned, rots_splited])}
 
         # debug = True
         # if (debug):
         #     rgb = torch.Tensor([1, 0, 0]).to(torch.float32).to('cuda')
         #     flat_shs = (rgb - 0.5) / 0.28209479177387814
-        #     flat_shs = flat_shs.repeat(gs_params_new['pws'].shape[0], 1)
-        #     gs_params_new['shs'] = flat_shs
-        #     debug_gs = {"pws": torch.cat([gs_params["pws"], gs_params_new["pws"]]),
-        #                 "shs": torch.cat([gs_params["shs"], gs_params_new["shs"]]),
-        #                 "alphas_raw": torch.cat([gs_params["alphas_raw"], gs_params_new["alphas_raw"]]),
-        #                 "scales_raw": torch.cat([gs_params["scales_raw"], gs_params_new["scales_raw"]]),
-        #                 "rots_raw": torch.cat([gs_params["rots_raw"], gs_params_new["rots_raw"]])}
+        #     flat_shs = flat_shs.repeat(new_params['pws'].shape[0], 1)
+        #     new_params['shs'] = flat_shs
+        #     debug_gs = {"pws": torch.cat([params["pws"], new_params["pws"]]),
+        #                 "shs": torch.cat([params["shs"], new_params["shs"]]),
+        #                 "alphas_raw": torch.cat([params["alphas_raw"], new_params["alphas_raw"]]),
+        #                 "scales_raw": torch.cat([params["scales_raw"], new_params["scales_raw"]]),
+        #                 "rots_raw": torch.cat([params["rots_raw"], new_params["rots_raw"]])}
 
-        # split gaussians (N is the split size)
-        update_params(optimizer, gs_params, gs_params_new)
+        update_params(optimizer, params, new_params)
         print("---------------------")
         print("gaussian density update report")
         prune_n = int(torch.sum(selected_for_prune))
@@ -294,24 +312,27 @@ class GSModel(torch.nn.Module):
         print("pruned num: ", prune_n)
         print("cloned num: ", clone_n)
         print("splited num: ", split_n)
-        print("total gaussian number: ", gs_params['pws'].shape[0])
+        print("total gaussian number: ", params['pws'].shape[0])
         print("---------------------")
         self.grad_accum = None
         self.cunt = None
 
-    def reset_alpha(self, gs_params, optimizer):
+    def reset_alpha(self, params, optimizer):
         reset_alpha_raw_val = get_alphas_raw(self.reset_alpha_val)
-        rest_mask = gs_params['alphas_raw'] > reset_alpha_raw_val
-        gs_params['alphas_raw'][rest_mask] = torch.ones_like(gs_params['alphas_raw'])[rest_mask] * reset_alpha_raw_val
-        alpha_param = list(filter(lambda x: x["name"] == "alphas_raw", optimizer.param_groups))[0]
+        rest_mask = params['alphas_raw'] > reset_alpha_raw_val
+        params['alphas_raw'][rest_mask] = torch.ones_like(
+            params['alphas_raw'])[rest_mask] * reset_alpha_raw_val
+        alpha_param = list(
+            filter(lambda x: x["name"] == "alphas_raw", optimizer.param_groups))[0]
         state = optimizer.state.get(alpha_param['params'][0], None)
-        state["exp_avg"] = torch.zeros_like(gs_params['alphas_raw'])
-        state["exp_avg_sq"] = torch.zeros_like(gs_params['alphas_raw'])
+        state["exp_avg"] = torch.zeros_like(params['alphas_raw'])
+        state["exp_avg_sq"] = torch.zeros_like(params['alphas_raw'])
         del optimizer.state[alpha_param['params'][0]]
         optimizer.state[alpha_param['params'][0]] = state
 
     def update_pws_lr(self, optimizer):
         pws_lr = self.pws_lr_scheduler(self.iteration)
-        pws_param = list(filter(lambda x: x["name"] == "pws", optimizer.param_groups))[0]
+        pws_param = list(
+            filter(lambda x: x["name"] == "pws", optimizer.param_groups))[0]
         pws_param['lr'] = pws_lr
         self.iteration += 1

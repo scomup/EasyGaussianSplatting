@@ -138,12 +138,12 @@ def save_gs(fn, gs):
     np.save(fn, gs)
 
 
-def save_gs_params(fn, gs_params):
-    pws = gs_params["pws"]
-    shs = torch.cat((gs_params["low_shs"], gs_params["high_shs"]), dim=1)
-    alphas = get_alphas(gs_params["alphas_raw"])
-    scales = get_scales(gs_params["scales_raw"])
-    rots = get_rots(gs_params["rots_raw"])
+def save_training_params(fn, training_params):
+    pws = training_params["pws"]
+    shs = get_shs(training_params["low_shs"], training_params["high_shs"])
+    alphas = get_alphas(training_params["alphas_raw"])
+    scales = get_scales(training_params["scales_raw"])
+    rots = get_rots(training_params["rots_raw"])
 
     rots = rots.detach().cpu().numpy()
     scales = scales.detach().cpu().numpy()
