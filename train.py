@@ -23,12 +23,11 @@ if __name__ == "__main__":
     else:
         print("not path of dataset.")
         exit(0)
-    # path = "/home/liu/bag/colmap"
     # path = "/home/liu/bag/gaussian-splatting/tandt/train"
     # gs_set = GSplatDataset(path, resize_rate=1)
+    # gs = np.load("data/final.npy")
 
-    gs = np.load("data/final.npy")
-    training_params, adam_params = get_training_params(gs)
+    training_params, adam_params = get_training_params(gs_set.gs)
 
     optimizer = optim.Adam(adam_params, lr=0.000, eps=1e-15)
 
