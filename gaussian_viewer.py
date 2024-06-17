@@ -31,7 +31,8 @@ if __name__ == '__main__':
         print("Try to load %s ..." % args.gs)
         gs = load_gs(args.gs)
         rotate_gaussian(cam_2_world, gs)
-    else:
+
+    if (not args.gs) and (not args.path):
         print("not gs file.")
         gs = get_example_gs()
 
