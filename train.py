@@ -25,7 +25,7 @@ if __name__ == "__main__":
         exit(0)
     # path = "/home/liu/bag/gaussian-splatting/tandt/train"
     # gs_set = GSplatDataset(path, resize_rate=1)
-    # gs = np.load("data/final.npy")
+    gs_set.gs = np.load("/home/liu/workspace/EasyGaussianSplatting/data/epoch0030.npy")
 
     training_params, adam_params = get_training_params(gs_set.gs)
 
@@ -68,6 +68,12 @@ if __name__ == "__main__":
         avg_loss = avg_loss / n
         print("epoch:%d avg_loss:%f" % (epoch, avg_loss))
         with torch.no_grad():
+            if (epoch % 10 == 0):
+                fn = "data/epoch%04d.npy" % epoch
+                save_training_params(fn, training_params)
+                # print("trained data is saved to %s" % fn)
+                # debug_params = model.get_debug_params(training_params)
+                # save_training_params("data/grad%04d.npy" % epoch, debug_params)
             if (epoch > 1 and epoch <= 50):
                 if (epoch % 5 == 0):
                     print("updating gaussian density...")
@@ -75,10 +81,6 @@ if __name__ == "__main__":
                 if (epoch % 15 == 0):
                     print("reseting gaussian aplha...")
                     model.reset_alpha(training_params, optimizer)
-            if (epoch % 10 == 0):
-                fn = "data/epoch%04d.npy" % epoch
-                save_training_params(fn, training_params)
-                print("trained data is saved to %s" % fn)
 
     save_training_params('data/final.npy', training_params)
     print("Training is finished.")

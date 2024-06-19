@@ -140,7 +140,10 @@ def save_gs(fn, gs):
 
 def save_training_params(fn, training_params):
     pws = training_params["pws"]
-    shs = get_shs(training_params["low_shs"], training_params["high_shs"])
+    try:
+        shs = get_shs(training_params["low_shs"], training_params["high_shs"])
+    except:
+        shs = training_params["shs"]
     alphas = get_alphas(training_params["alphas_raw"])
     scales = get_scales(training_params["scales_raw"])
     rots = get_rots(training_params["rots_raw"])

@@ -336,3 +336,19 @@ class GSModel(torch.nn.Module):
             filter(lambda x: x["name"] == "pws", optimizer.param_groups))[0]
         pws_param['lr'] = pws_lr
         self.iteration += 1
+
+    def get_debug_params(self, params):
+        grads = self.grad_accum.squeeze() / self.cunt
+        grads[grads.isnan()] = 0.0
+
+        pws = params["pws"]
+        alphas_raw = params["alphas_raw"]
+        scales_raw = params["scales_raw"]
+        rots_raw = params["rots_raw"]
+        shs = rainbow(grads, 0, self.grad_threshold * 5)
+        debug_params = {"pws": pws,
+                        "shs": shs,
+                        "alphas_raw": alphas_raw,
+                        "scales_raw": scales_raw,
+                        "rots_raw": rots_raw}
+        return debug_params
