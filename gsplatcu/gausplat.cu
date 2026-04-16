@@ -164,33 +164,33 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
                                         const torch::Tensor depths,
                                         const bool calc_J)
 {
-    auto float_opts = rots.options().dtype(torch::kFloat32);
-    auto int_opts = rots.options().dtype(torch::kInt32);
-    int gs_num = rots.sizes()[0];
+    auto float_opts = scales.options().dtype(torch::kFloat32);
+    int gs_num = scales.sizes()[0];
     torch::Tensor cov3ds = torch::full({gs_num, 6}, 0.0, float_opts);
 
-    torch::Tensor dcov3d_drots;
     torch::Tensor dcov3d_dscales;
 
     if (calc_J)
     {
-        dcov3d_drots = torch::full({gs_num, 6, 4}, 0.0, float_opts);
-        dcov3d_dscales = torch::full({gs_num, 6, 3}, 0.0, float_opts);
+        // Simplified: only need scale gradient, no rotation gradient
+        dcov3d_dscales = torch::full({gs_num, 6, 1}, 0.0, float_opts);
     }
 
+    // Simplified: pass identity quaternions (will be ignored in simplified kernel)
+    // Use nullptr for rots to indicate simplified mode
     computeCov3D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        (float4*)rots.contiguous().data_ptr<float>(),
-        (float3*)scales.contiguous().data_ptr<float>(),
+        nullptr,  // rots not needed for isotropic Gaussians
+        scales.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
         cov3ds.contiguous().data_ptr<float>(),
-        calc_J ? dcov3d_drots.contiguous().data_ptr<float>() : nullptr,
+        nullptr,  // dcov3d_drots not needed
         calc_J ? dcov3d_dscales.contiguous().data_ptr<float>() : nullptr);
     CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
-        return {cov3ds, dcov3d_drots, dcov3d_dscales};
+        return {cov3ds, dcov3d_dscales};
     }
     else
     {
@@ -198,7 +198,7 @@ std::vector<torch::Tensor> computeCov3D(const torch::Tensor rots,
     }
 }
 
-std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
+std::vector<torch::Tensor> computeCov2D(const torch::Tensor scales,
                                         const torch::Tensor pcs,
                                         const torch::Tensor Rcw,
                                         const torch::Tensor depths,
@@ -213,12 +213,12 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
     int gs_num = pcs.sizes()[0];
     torch::Tensor cov2ds = torch::full({gs_num, 3}, 0.0, float_opts);
 
-    torch::Tensor dcov2d_dcov3ds;
+    torch::Tensor dcov2d_dscales;
     torch::Tensor dcov2d_dpcs;
 
     if (calc_J)
     {
-        dcov2d_dcov3ds = torch::full({gs_num, 3, 6}, 0.0, float_opts);
+        dcov2d_dscales = torch::full({gs_num, 3, 1}, 0.0, float_opts);
         dcov2d_dpcs = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     }
 
@@ -227,7 +227,7 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
 
     computeCov2D<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
         gs_num,
-        cov3ds.contiguous().data_ptr<float>(),
+        scales.contiguous().data_ptr<float>(),
         (float3*)pcs.contiguous().data_ptr<float>(),
         Rcw.contiguous().data_ptr<float>(),
         depths.contiguous().data_ptr<float>(),
@@ -236,13 +236,13 @@ std::vector<torch::Tensor> computeCov2D(const torch::Tensor cov3ds,
         tan_fovx,
         tan_fovy,
         (float3*)cov2ds.contiguous().data_ptr<float>(),
-        calc_J ? dcov2d_dcov3ds.contiguous().data_ptr<float>() : nullptr,
+        calc_J ? dcov2d_dscales.contiguous().data_ptr<float>() : nullptr,
         calc_J ? dcov2d_dpcs.contiguous().data_ptr<float>(): nullptr);
     CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
-        return {cov2ds, dcov2d_dcov3ds, dcov2d_dpcs};
+        return {cov2ds, dcov2d_dscales, dcov2d_dpcs};
     }
     else
     {
@@ -306,14 +306,10 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
     int sh_dim3 = shs.sizes()[1] / 3; 
     torch::Tensor colors = torch::full({gs_num, 3}, 0.0, float_opts);
     torch::Tensor dcolor_dshs;
-    torch::Tensor dcolor_dpws;
-
-    //TODO(liu): change max_level by sh_dim
 
     if (calc_J)
     {
         dcolor_dshs = torch::full({gs_num, 1, sh_dim3}, 0.0, float_opts);
-        dcolor_dpws = torch::full({gs_num, 3, 3}, 0.0, float_opts);
     }
 
     sh2Color<<<DIV_ROUND_UP(gs_num, BLOCK_SIZE), BLOCK_SIZE>>>(
@@ -324,12 +320,12 @@ std::vector<torch::Tensor> sh2Color(const torch::Tensor shs,
         sh_dim3,
         (float3*)colors.contiguous().data_ptr<float>(),
         calc_J ? dcolor_dshs.contiguous().data_ptr<float>() : nullptr,
-        calc_J ? dcolor_dpws.contiguous().data_ptr<float>() : nullptr);
+        nullptr);  // dcolor_dpws not needed (position is fixed)
     CHECK_CUDA(DEBUG);
 
     if (calc_J)
     {
-        return {colors, dcolor_dshs, dcolor_dpws};
+        return {colors, dcolor_dshs};
     }
     else
     {

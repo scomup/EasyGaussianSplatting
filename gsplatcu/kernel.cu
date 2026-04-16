@@ -326,7 +326,7 @@ __global__ void inverseCov2D(
 __global__ void computeCov3D(
     int32_t gs_num,
     const float4 *__restrict__ rots,
-    const float3 *__restrict__ scales,
+    const float *__restrict__ scales,
     const float *__restrict__ depths,
     float *__restrict__ cov3ds,
     float *__restrict__ dcov3d_drots,
@@ -339,15 +339,41 @@ __global__ void computeCov3D(
 
     if (depths[i] < MIN_DEPTH)
         return;
+    
+    const float s = scales[i];
+    const float ss = s * s;
+    
+    // Simplified mode: isotropic Gaussian (identity rotation)
+    if (rots == nullptr)
+    {
+        // Sigma = s^2 * I (identity matrix scaled by s^2)
+        cov3ds[i * 6 + 0] = ss;
+        cov3ds[i * 6 + 1] = 0;
+        cov3ds[i * 6 + 2] = 0;
+        cov3ds[i * 6 + 3] = ss;
+        cov3ds[i * 6 + 4] = 0;
+        cov3ds[i * 6 + 5] = ss;
+        
+        if (dcov3d_dscales != nullptr)
+        {
+            // d(Sigma)/d(s) = 2s * I
+            const float ds = 2.0f * s;
+            dcov3d_dscales[i * 6 + 0] = ds;
+            dcov3d_dscales[i * 6 + 1] = 0;
+            dcov3d_dscales[i * 6 + 2] = 0;
+            dcov3d_dscales[i * 6 + 3] = ds;
+            dcov3d_dscales[i * 6 + 4] = 0;
+            dcov3d_dscales[i * 6 + 5] = ds;
+        }
+        return;
+    }
+    
+    // Original mode: anisotropic Gaussian with rotation
     const float4 rot = rots[i];
-    const float3 s = scales[i];
     const float w = rot.x;
     const float x = rot.y;
     const float y = rot.z;
     const float z = rot.w;
-    const float s0 = s.x;
-    const float s1 = s.y;
-    const float s2 = s.z;
     const float xx = x * x;
     const float yy = y * y;
     const float zz = z * z;
@@ -364,9 +390,9 @@ __global__ void computeCov3D(
         2.f * (xz - yw), 2.f * (yz + xw), 1.f - 2.f * (xx + yy)};
 
     Matrix<3, 3> M = {
-        R(0, 0) * s0, R(0, 1) * s1, R(0, 2) * s2,
-        R(1, 0) * s0, R(1, 1) * s1, R(1, 2) * s2,
-        R(2, 0) * s0, R(2, 1) * s1, R(2, 2) * s2};
+        R(0, 0) * s, R(0, 1) * s, R(0, 2) * s,
+        R(1, 0) * s, R(1, 1) * s, R(1, 2) * s,
+        R(2, 0) * s, R(2, 1) * s, R(2, 2) * s};
     // forward.pdf (F.2)
     Matrix<3, 3> Sigma = M * M.transpose();
 
@@ -385,28 +411,21 @@ __global__ void computeCov3D(
                                   0, 0, 0, 2 * M(1, 0), 2 * M(1, 1), 2 * M(1, 2), 0, 0, 0,
                                   0, 0, 0, M(2, 0), M(2, 1), M(2, 2), M(1, 0), M(1, 1), M(1, 2),
                                   0, 0, 0, 0, 0, 0, 2 * M(2, 0), 2 * M(2, 1), 2 * M(2, 2)};
-        Matrix<9, 4> dm_rot = {0, 0, -4 * s0 * y, -4 * s0 * z,
-                               -2 * s1 * z, 2 * s1 * y, 2 * s1 * x, -2 * s1 * w,
-                               2 * s2 * y, 2 * s2 * z, 2 * s2 * w, 2 * s2 * x,
-                               2 * s0 * z, 2 * s0 * y, 2 * s0 * x, 2 * s0 * w,
-                               0, -4 * s1 * x, 0, -4 * s1 * z,
-                               -2 * s2 * x, -2 * s2 * w, 2 * s2 * z, 2 * s2 * y,
-                               -2 * s0 * y, 2 * s0 * z, -2 * s0 * w, 2 * s0 * x,
-                               2 * s1 * x, 2 * s1 * w, 2 * s1 * z, 2 * s1 * y,
-                               0, -4 * s2 * x, -4 * s2 * y, 0};
-        Matrix<9, 3> dm_scale = {R(0, 0), 0, 0,
-                                 0, R(0, 1), 0,
-                                 0, 0, R(0, 2),
-                                 R(1, 0), 0, 0,
-                                 0, R(1, 1), 0,
-                                 0, 0, R(1, 2),
-                                 R(2, 0), 0, 0,
-                                 0, R(2, 1), 0,
-                                 0, 0, R(2, 2)};
+        Matrix<9, 4> dm_rot = {0, 0, -4 * s * y, -4 * s * z,
+                               -2 * s * z, 2 * s * y, 2 * s * x, -2 * s * w,
+                               2 * s * y, 2 * s* z, 2 * s * w, 2 * s * x,
+                               2 * s * z, 2 * s * y, 2 * s * x, 2 * s * w,
+                               0, -4 * s * x, 0, -4 * s * z,
+                               -2 * s * x, -2 * s * w, 2 * s * z, 2 * s * y,
+                               -2 * s * y, 2 * s * z, -2 * s * w, 2 * s * x,
+                               2 * s * x, 2 * s * w, 2 * s * z, 2 * s * y,
+                               0, -4 * s * x, -4 * s * y, 0};
+        Matrix<9, 1> dm_scale = {R(0, 0), R(0, 1), R(0, 2), R(1, 0), R(1, 1),
+                                 R(1, 2), R(2, 0), R(2, 1), R(2, 2)};
         // backward.pdf (B.2a)
         Matrix<6, 4> dcov3d_drot = dcov3d_dm * dm_rot;
         // backward.pdf (B.2b)
-        Matrix<6, 3> dcov3d_dscale = dcov3d_dm * dm_scale;
+        Matrix<6, 1> dcov3d_dscale = dcov3d_dm * dm_scale;
 
         // copy to global memory
         const int offset_dr = i * 24;
@@ -414,8 +433,8 @@ __global__ void computeCov3D(
         {
             dcov3d_drots[offset_dr + j] = dcov3d_drot(j);
         }
-        const int offset_ds = i * 18;
-        for (int j = 0; j < 18; j++)
+        const int offset_ds = i * 6;
+        for (int j = 0; j < 6; j++)
         {
             dcov3d_dscales[offset_ds + j] = dcov3d_dscale(j);
         }
@@ -424,7 +443,7 @@ __global__ void computeCov3D(
 
 __global__ void computeCov2D(
     int32_t gs_num,
-    const float *__restrict__ cov3ds,
+    const float *__restrict__ scales,
     const float3 *__restrict__ pcs,
     const float *__restrict__ Rcw,
     const float *__restrict__ depths,
@@ -433,7 +452,7 @@ __global__ void computeCov2D(
     const float tan_fovx,
     const float tan_fovy,
     float3 *__restrict__ cov2ds,
-    float *__restrict__ dcov2d_dcov3ds,
+    float *__restrict__ dcov2d_dscales,
     float *__restrict__ dcov2d_dpcs)
 {
     const int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -448,18 +467,13 @@ __global__ void computeCov2D(
     float x = pc.x;
     float y = pc.y;
     const float z = pc.z;
-    const float a = cov3ds[i * 6 + 0];
-    const float b = cov3ds[i * 6 + 1];
-    const float c = cov3ds[i * 6 + 2];
-    const float d = cov3ds[i * 6 + 3];
-    const float e = cov3ds[i * 6 + 4];
-    const float f = cov3ds[i * 6 + 5];
+    const float s = scales[i];
+    const float ss = s * s;
 
     const float limx = 1.3f * tan_fovx;
     const float limy = 1.3f * tan_fovy;
     x = min(limx, max(-limx, x / z)) * z;
     y = min(limy, max(-limy, y / z)) * z;
-
 
     float z2 = z * z;
 
@@ -473,9 +487,9 @@ __global__ void computeCov2D(
         0.0f, focal_y / z, -(focal_y * y) / z2};
 
     Matrix<3, 3> Sigma = {
-        a, b, c,
-        b, d, e,
-        c, e, f};
+        ss, 0, 0,
+        0, ss, 0,
+        0, 0, ss};
 
     Matrix<2, 3> M = J * R;
 
@@ -487,42 +501,31 @@ __global__ void computeCov2D(
                  Sigma_prime(0, 1),
                  Sigma_prime(1, 1) + 0.3f};
 
-    if (dcov2d_dcov3ds != nullptr && dcov2d_dpcs != nullptr)
+    if (dcov2d_dscales != nullptr && dcov2d_dpcs != nullptr)
     {
         // backward.pdf (B.3a)
-        Matrix<3, 6> dcov2d_dcov3d = {M(0, 0) * M(0, 0),
-                                      2 * M(0, 0) * M(0, 1),
-                                      2 * M(0, 0) * M(0, 2),
-                                      M(0, 1) * M(0, 1),
-                                      2 * M(0, 1) * M(0, 2),
-                                      M(0, 2) * M(0, 2),
-                                      M(0, 0) * M(1, 0),
-                                      M(0, 0) * M(1, 1) + M(0, 1) * M(1, 0),
-                                      M(0, 0) * M(1, 2) + M(0, 2) * M(1, 0),
-                                      M(0, 1) * M(1, 1),
-                                      M(0, 1) * M(1, 2) + M(0, 2) * M(1, 1),
-                                      M(0, 2) * M(1, 2),
-                                      M(1, 0) * M(1, 0),
-                                      2 * M(1, 0) * M(1, 1),
-                                      2 * M(1, 0) * M(1, 2),
-                                      M(1, 1) * M(1, 1),
-                                      2 * M(1, 1) * M(1, 2),
-                                      M(1, 2) * M(1, 2)};
+        Matrix<3, 1> dcov2d_dscale = {(M(0, 0) * M(0, 0) + M(0, 1) * M(0, 1) + M(0, 2) * M(0, 2)) * 2 * s,
+                          (M(0, 0) * M(1, 0) + M(0, 1) * M(1, 1) + M(0, 2) * M(1, 2)) * 2 * s,
+                          (M(1, 0) * M(1, 0) + M(1, 1) * M(1, 1) + M(1, 2) * M(1, 2)) * 2 * s};
 
-        Matrix<3, 6> dcov2d_dm = {2 * a * M(0, 0) + 2 * b * M(0, 1) + 2 * c * M(0, 2),
-                                  2 * b * M(0, 0) + 2 * d * M(0, 1) + 2 * e * M(0, 2),
-                                  2 * c * M(0, 0) + 2 * e * M(0, 1) + 2 * f * M(0, 2),
-                                  0, 0, 0,
-                                  a * M(1, 0) + b * M(1, 1) + c * M(1, 2),
-                                  b * M(1, 0) + d * M(1, 1) + e * M(1, 2),
-                                  c * M(1, 0) + e * M(1, 1) + f * M(1, 2),
-                                  a * M(0, 0) + b * M(0, 1) + c * M(0, 2),
-                                  b * M(0, 0) + d * M(0, 1) + e * M(0, 2),
-                                  c * M(0, 0) + e * M(0, 1) + f * M(0, 2),
-                                  0, 0, 0,
-                                  2 * a * M(1, 0) + 2 * b * M(1, 1) + 2 * c * M(1, 2),
-                                  2 * b * M(1, 0) + 2 * d * M(1, 1) + 2 * e * M(1, 2),
-                                  2 * c * M(1, 0) + 2 * e * M(1, 1) + 2 * f * M(1, 2)};
+        Matrix<3, 6> dcov2d_dm = {2 * ss * M(0, 0),
+                                  2 * ss * M(0, 1),
+                                  2 * ss * M(0, 2),
+                                  0,
+                                  0,
+                                  0,
+                                  ss * M(1, 0),
+                                  ss * M(1, 1),
+                                  ss * M(1, 2),
+                                  ss * M(0, 0),
+                                  ss * M(0, 1),
+                                  ss * M(0, 2),
+                                  0,
+                                  0,
+                                  0,
+                                  2 * ss * M(1, 0),
+                                  2 * ss * M(1, 1),
+                                  2 * ss * M(1, 2)};
 
         const float z2_inv = 1.f / (z * z);
         const float z3_inv = z2_inv / z;
@@ -542,10 +545,10 @@ __global__ void computeCov2D(
         {
             dcov2d_dpcs[offset_dpc + j] = dcov2d_dpc(j);
         }
-        const int offset_dcov3d = i * 18;
-        for (int j = 0; j < 18; j++)
+        const int offset_dscale = i * 3;
+        for (int j = 0; j < 3; j++)
         {
-            dcov2d_dcov3ds[offset_dcov3d + j] = dcov2d_dcov3d(j);
+            dcov2d_dscales[offset_dscale + j] = dcov2d_dscale(j);
         }
     }
 }

@@ -67,7 +67,7 @@ __global__ void inverseCov2D(
 __global__ void computeCov3D(
     int32_t gs_num,
     const float4 *__restrict__ rots,
-    const float3 *__restrict__ scales,
+    const float *__restrict__ scales,
     const float *__restrict__ depths,
     float *__restrict__ cov3ds,
     float *__restrict__ dcov3d_drots = nullptr,
@@ -75,7 +75,7 @@ __global__ void computeCov3D(
 
 __global__ void computeCov2D(
     int32_t gs_num,
-    const float *__restrict__ cov3ds,
+    const float *__restrict__ scales,
     const float3 *__restrict__ pcs,
     const float *__restrict__ Rcw,
     const float *__restrict__ depths,

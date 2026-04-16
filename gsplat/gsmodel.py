@@ -13,35 +13,45 @@ class GSFunction(torch.autograd.Function):
         scales,
         rots,
         us,
-        cam,
+        Rcw,
+        tcw,
+        fx,
+        fy,
+        cx,
+        cy,
+        cam_height,
+        cam_width,
     ):
+        
         # more detail view forward.pdf
-        # step1. Transform pw to camera frame,
-        # and project it to iamge.
+        # step1. Transform pw to camera frame, and project it to image.
         us, pcs, depths, du_dpcs = gsc.project(
-            pws, cam.Rcw, cam.tcw, cam.fx, cam.fy, cam.cx, cam.cy, True)
+            pws, Rcw, tcw, fx, fy, cx, cy, True)
 
-        # step2. Calcuate the 3d Gaussian.
+        # step2. Calculate the 3d Gaussian.
         cov3ds, dcov3d_drots, dcov3d_dscales = gsc.computeCov3D(
             rots, scales, depths, True)
 
-        # step3. Calcuate the 2d Gaussian.
+        # step3. Calculate the 2d Gaussian.
         cov2ds, dcov2d_dcov3ds, dcov2d_dpcs = gsc.computeCov2D(
-            cov3ds, pcs, cam.Rcw, depths, cam.fx, cam.fy, cam.width, cam.height, True)
+            cov3ds, pcs, Rcw, depths, fx, fy, cam_width, cam_height, True)
 
         # step4. get color info
-        colors, dcolor_dshs, dcolor_dpws = gsc.sh2Color(shs, pws, cam.twc, True)
+        twc = -torch.linalg.inv(Rcw) @ tcw
+        colors, dcolor_dshs, dcolor_dpws = gsc.sh2Color(shs, pws, twc, True)
 
         # step5. Blend the 2d Gaussian to image
         cinv2ds, areas, dcinv2d_dcov2ds = gsc.inverseCov2D(cov2ds, depths, True)
         image, contrib, final_tau, patch_range_per_tile, gsid_per_patch =\
-            gsc.splat(cam.height, cam.width,
+            gsc.splat(cam_height, cam_width,
                       us, cinv2ds, alphas, depths, colors, areas)
 
         # Store the static parameters in the context
-        ctx.cam = cam
+        ctx.Rcw = Rcw
+        ctx.cam_height = cam_height
+        ctx.cam_width = cam_width
         # Keep relevant tensors for backward
-        ctx.save_for_backward(us, cinv2ds, alphas,
+        ctx.save_for_backward(pws, us, cinv2ds, alphas,
                               depths, colors, contrib, final_tau,
                               patch_range_per_tile, gsid_per_patch,
                               dcinv2d_dcov2ds, dcov2d_dcov3ds,
@@ -52,8 +62,10 @@ class GSFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, dloss_dgammas, _):
         # Retrieve the saved tensors and static parameters
-        cam = ctx.cam
-        us, cinv2ds, alphas, \
+        Rcw = ctx.Rcw
+        cam_height = ctx.cam_height
+        cam_width = ctx.cam_width
+        pws, us, cinv2ds, alphas, \
             depths, colors, contrib, final_tau,\
             patch_range_per_tile, gsid_per_patch,\
             dcinv2d_dcov2ds, dcov2d_dcov3ds,\
@@ -64,11 +76,11 @@ class GSFunction(torch.autograd.Function):
 
         # section.5
         dloss_dus, dloss_dcinv2ds, dloss_dalphas, dloss_dcolors =\
-            gsc.splatB(cam.height, cam.width, us, cinv2ds, alphas,
+            gsc.splatB(cam_height, cam_width, us, cinv2ds, alphas,
                        depths, colors, contrib, final_tau,
                        patch_range_per_tile, gsid_per_patch, dloss_dgammas)
 
-        dpc_dpws = cam.Rcw
+        dpc_dpws = Rcw
         dloss_dcov2ds = dloss_dcinv2ds @ dcinv2d_dcov2ds
         # backward.pdf equation (3)
         dloss_drots = dloss_dcov2ds @ dcov2d_dcov3ds @ dcov3d_drots
@@ -84,13 +96,26 @@ class GSFunction(torch.autograd.Function):
             dloss_dcolors @ dcolor_dpws + \
             dloss_dcov2ds @ dcov2d_dpcs @ dpc_dpws
 
+        # Compute gradients for camera parameters
+        # dloss_dpcs comes from multiple sources
+        dloss_dpcs = (dloss_dus @ du_dpcs + 
+                      dloss_dcov2ds @ dcov2d_dpcs)
+        
+        # pcs = Rcw @ pws + tcw
+        # So: dloss_dRcw and dloss_dtcw
+        dloss_dRcw = dloss_dpcs.unsqueeze(-1) @ pws.unsqueeze(1)  # (N, 3, 1) @ (N, 1, 3) = (N, 3, 3)
+        dloss_dRcw = dloss_dRcw.sum(0)  # Sum over all gaussians
+        
+        dloss_dtcw = dloss_dpcs.sum(0)  # (3,)
+
         return dloss_dpws.squeeze(),\
             dloss_dshs,\
             dloss_dalphas.squeeze().unsqueeze(1),\
             dloss_dscales.squeeze(),\
             dloss_drots.squeeze(),\
             dloss_dus.squeeze(),\
-            None
+            dloss_dRcw, dloss_dtcw,\
+            None, None, None, None, None, None
 
 
 def get_training_params(gs):
@@ -131,6 +156,9 @@ def get_training_params(gs):
 
 def update_params(optimizer, params, new_params):
     for group in optimizer.param_groups:
+        # Skip camera parameters (they don't get updated/pruned like Gaussians)
+        if 'name' not in group or group['name'] not in new_params:
+            continue
         param_new = new_params[group["name"]]
         state = optimizer.state.get(group['params'][0], None)
         if state is not None:
@@ -151,6 +179,9 @@ def update_params(optimizer, params, new_params):
 
 def prune_params(optimizer, params, mask):
     for group in optimizer.param_groups:
+        # Skip camera parameters (they don't get pruned like Gaussians)
+        if 'name' not in group or group['name'] not in params:
+            continue
         state = optimizer.state.get(group['params'][0], None)
         if state is not None:
             state["exp_avg"] = state["exp_avg"][mask]
@@ -191,8 +222,18 @@ class GSModel(torch.nn.Module):
             alphas_raw,
             scales_raw,
             rots_raw,
-            cam):
+            cam,
+            cam_params=None,
+            cam_idx=None):
         self.cam = cam
+        
+        # Get camera parameters (with gradients if optimizing)
+        if cam_params is not None and cam_idx is not None:
+            Rcw, tcw, fx, fy, cx, cy = cam_params.get_camera_params(cam_idx)
+        else:
+            Rcw, tcw = cam.Rcw, cam.tcw
+            fx, fy, cx, cy = cam.fx, cam.fy, cam.cx, cam.cy
+        
         # us is not involved in the forward,
         # but in order to obtain the dloss_dus, we need to pass it to GSModel.
         self.us = torch.zeros([pws.shape[0], 2], dtype=torch.float32,
@@ -207,7 +248,9 @@ class GSModel(torch.nn.Module):
         shs = get_shs(low_shs, high_shs)
 
         # apply GSfunction (forward)
-        image, self.mask = GSFunction.apply(pws, shs, alphas, scales, rots, self.us, cam)
+        image, self.mask = GSFunction.apply(
+            pws, shs, alphas, scales, rots, self.us,
+            Rcw, tcw, fx, fy, cx, cy, cam.height, cam.width)
 
         return image
 
